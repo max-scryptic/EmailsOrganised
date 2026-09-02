@@ -1,11 +1,18 @@
-# Base SaaS Template
+# EmailsOrganised
 
-A reusable foundation for future SaaS projects built with Next.js App Router,
-Tailwind CSS v4, TypeScript, and shadcn/ui.
+Built with Next.js App Router, Tailwind CSS v4, TypeScript, and shadcn/ui,
+starting from an in-house SaaS template.
 
-The template intentionally focuses on product UI and conventions rather than a
-marketing site. Auth and billing are UI-only so each new project can choose the
-right provider without deleting backend assumptions.
+The starting point focuses on product UI and conventions rather than a
+marketing site. Auth and billing arrive UI-only, so this project can pick its
+providers without unpicking backend assumptions first. The rest of this file
+documents what came with the template and how to wire each piece up.
+
+## Agent setup
+
+`AGENTS.md` holds the repo conventions and is read by both Codex and Claude
+Code (`CLAUDE.md` just imports it). `scripts/codex-setup.sh` is the setup
+script for the Codex environment — it runs `npm ci` and seeds `.env.local`.
 
 ## Included
 
@@ -230,7 +237,7 @@ npm run build
 
 ## Rebranding
 
-For a new SaaS project, start by changing:
+Still carrying the template's identity. To make it EmailsOrganised, change:
 
 - `metadata` in `src/app/layout.tsx`
 - Brand name in `appConfig` and sample data in `src/lib/template-data.ts`

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Compass } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { appConfig } from "@/lib/template-data";
 
 export default function NotFound() {
   return (
@@ -14,7 +15,7 @@ export default function NotFound() {
           <div className="space-y-1">
             <h1 className="text-xl font-semibold">Page not found</h1>
             <p className="text-sm text-muted-foreground">
-              This route is not part of the template yet.
+              This route is not part of {appConfig.name} yet.
             </p>
           </div>
           <Button asChild>

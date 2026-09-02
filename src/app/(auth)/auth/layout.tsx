@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { BrandLockup } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 
 export default function AuthLayout({ children }: LayoutProps<"/auth">) {
@@ -12,6 +13,9 @@ export default function AuthLayout({ children }: LayoutProps<"/auth">) {
             Back to dashboard
           </Link>
         </Button>
+        <Link href="/" className="w-fit">
+          <BrandLockup />
+        </Link>
         {children}
       </div>
     </main>

@@ -1,14 +1,21 @@
 import type { Metadata } from "next";
 import { Providers } from "@/components/providers";
+import { appConfig } from "@/lib/template-data";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Base SaaS Template",
-    template: "%s | Base SaaS Template",
+    default: appConfig.name,
+    template: `%s | ${appConfig.name}`,
   },
-  description:
-    "A reusable Next.js, Tailwind, and shadcn/ui foundation for SaaS products.",
+  description: appConfig.description,
+  applicationName: appConfig.name,
+  openGraph: {
+    title: appConfig.name,
+    description: appConfig.description,
+    siteName: appConfig.name,
+    type: "website",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

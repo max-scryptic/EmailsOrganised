@@ -235,11 +235,34 @@ npm run lint
 npm run build
 ```
 
-## Rebranding
+## Brand
 
-Still carrying the template's identity. To make it EmailsOrganised, change:
+The product name lives in one place — `appConfig` in
+`src/lib/template-data.ts` — and every surface reads it from there: page
+metadata, the sidebar, auth screens, empty and error copy, and the Stripe
+`appInfo` label. Rename the product by editing `appConfig`.
 
-- `metadata` in `src/app/layout.tsx`
-- Brand name in `appConfig` and sample data in `src/lib/template-data.ts`
-- Brand logo in `src/components/app-branding.tsx`
-- Semantic tokens in `src/app/globals.css`
+The logo is an orange tile with a white envelope, drawn three times from the
+same geometry:
+
+- `src/components/brand-logo.tsx` — `BrandMark` and `BrandLockup` for product
+  UI. Both paint from the `--brand` / `--brand-foreground` tokens, so they
+  follow light and dark mode.
+- `src/app/icon.svg` — the browser tab icon, picked up by the Next.js `icon`
+  file convention.
+- `public/logo.svg` — the same artwork as a static asset for anything outside
+  React (emails, docs, an OG image).
+
+Editing the mark means editing all three: the SVG files carry literal hex
+because they render outside the token system.
+
+`--brand` is the single source for the orange. `--primary`, `--ring`, and
+`--sidebar-primary` all resolve to it, so buttons, links, focus rings, badges,
+switches, and the chart placeholder carry the logo colour without any component
+naming it directly. Text on top of the orange uses `--primary-foreground`, a
+warm near-black — white on this orange is 2.1:1, dark text is 8.4:1. The
+envelope inside the mark is the exception and stays white
+(`--brand-foreground`), where it is artwork rather than text.
+
+QA both themes at `/kitchen-sink`, where the Primitives tab renders the mark at
+three sizes next to the lockup.

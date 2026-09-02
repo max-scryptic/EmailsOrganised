@@ -21,7 +21,7 @@ type PasswordInput = {
   currentPassword?: string;
 };
 
-const MOCK_SESSION_KEY = "base-repo-template-session";
+const MOCK_SESSION_KEY = "emailsorganised-session";
 
 function delay(ms = 450) {
   return new Promise((resolve) => setTimeout(resolve, ms));

@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -25,6 +26,12 @@ type AppShellProps = {
   title: string;
   description?: string;
   actions?: React.ReactNode;
+  breadcrumbs?: BreadcrumbEntry[];
+};
+
+type BreadcrumbEntry = {
+  title: string;
+  href?: string;
 };
 
 export function AppShell({
@@ -32,6 +39,7 @@ export function AppShell({
   title,
   description,
   actions,
+  breadcrumbs,
 }: AppShellProps) {
   return (
     <SidebarProvider>
@@ -44,7 +52,7 @@ export function AppShell({
               orientation="vertical"
               className="mr-2 data-vertical:h-4 data-vertical:self-auto"
             />
-            <AppBreadcrumb title={title} />
+            <AppBreadcrumb breadcrumbs={breadcrumbs ?? [{ title }]} />
             <div className="ml-auto hidden h-10 min-w-56 max-w-sm flex-1 items-center gap-2 rounded-md border bg-muted/40 px-3 transition-[height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-8 lg:flex">
               <Search className="size-4 shrink-0 text-muted-foreground" />
               <Input
@@ -82,19 +90,28 @@ export function AppShell({
   );
 }
 
-function AppBreadcrumb({ title }: { title: string }) {
+function AppBreadcrumb({ breadcrumbs }: { breadcrumbs: BreadcrumbEntry[] }) {
   return (
     <Breadcrumb>
       <BreadcrumbList>
-        <BreadcrumbItem>
-          <BreadcrumbLink asChild>
-            <Link href="/">App</Link>
-          </BreadcrumbLink>
-        </BreadcrumbItem>
-        <BreadcrumbSeparator />
-        <BreadcrumbItem>
-          <BreadcrumbPage>{title}</BreadcrumbPage>
-        </BreadcrumbItem>
+        {breadcrumbs.map((breadcrumb, index) => {
+          const isCurrent = index === breadcrumbs.length - 1;
+
+          return (
+            <Fragment key={`${breadcrumb.title}-${index}`}>
+              <BreadcrumbItem>
+                {isCurrent || !breadcrumb.href ? (
+                  <BreadcrumbPage>{breadcrumb.title}</BreadcrumbPage>
+                ) : (
+                  <BreadcrumbLink asChild>
+                    <Link href={breadcrumb.href}>{breadcrumb.title}</Link>
+                  </BreadcrumbLink>
+                )}
+              </BreadcrumbItem>
+              {!isCurrent ? <BreadcrumbSeparator /> : null}
+            </Fragment>
+          );
+        })}
       </BreadcrumbList>
     </Breadcrumb>
   );

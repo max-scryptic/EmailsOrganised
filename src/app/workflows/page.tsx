@@ -1,4 +1,4 @@
-import { Plus, Send } from "lucide-react";
+import { Play, Plus } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { WorkflowBuilder } from "@/components/workflows/workflow-builder";
 import { Button } from "@/components/ui/button";
@@ -9,12 +9,12 @@ export default function WorkflowsPage() {
   return (
     <AppShell
       title="Workflows"
-      description={`${appConfig.name} turns incoming email into classified, routed work.`}
+      description={`Build the mailbox routines ${appConfig.name} can classify, route, draft, and review.`}
       actions={
         <>
           <Button type="button" variant="outline">
-            <Send className="size-4" />
-            Test sample
+            <Play className="size-4" />
+            Run checks
           </Button>
           <Button type="button">
             <Plus className="size-4" />

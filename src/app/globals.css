@@ -62,7 +62,7 @@
   /* The envelope inside the mark stays white in both themes, and so does
      anything else painted on `--brand` — see `--primary-foreground`. */
   --brand-foreground: oklch(0.985 0 0);
-  --background: oklch(1 0 0);
+  --background: oklch(0.985 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -92,7 +92,7 @@
   --warning: oklch(0.74 0.15 75);
   --warning-foreground: oklch(0.18 0 0);
   --radius: 0.125rem;
-  --sidebar: oklch(0.985 0 0);
+  --sidebar: var(--card);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: var(--brand);
   --sidebar-primary-foreground: var(--brand-foreground);

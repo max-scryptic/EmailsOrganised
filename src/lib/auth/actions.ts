@@ -2,17 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { getAppUrl } from "@/lib/app-url";
+import { safeNextParam } from "@/lib/auth/next-param";
 import { GOOGLE_SCOPE_STRING } from "@/lib/auth/scopes";
 import { createClient } from "@/lib/supabase/server";
-
-/** Only allow relative in-app paths back from sign-in, never an open redirect. */
-function safeNext(next: string | undefined) {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) {
-    return "/";
-  }
-
-  return next;
-}
 
 /**
  * Starts the Google OAuth flow.
@@ -23,7 +15,7 @@ function safeNext(next: string | undefined) {
  * only and background mailbox access breaks the moment the user closes the tab.
  */
 export async function signInWithGoogle(formData: FormData) {
-  const next = safeNext(formData.get("next")?.toString());
+  const next = safeNextParam(formData.get("next")?.toString());
   const appUrl = await getAppUrl();
   const supabase = await createClient();
 

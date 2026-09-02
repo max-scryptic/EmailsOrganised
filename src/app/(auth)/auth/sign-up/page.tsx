@@ -3,13 +3,13 @@ import { AuthCard } from "@/components/auth/auth-card";
 import { safeNextParam } from "@/lib/auth/next-param";
 
 export const metadata: Metadata = {
-  title: "Sign in",
+  title: "Create an account",
 };
 
-export default async function SignInPage({
+export default async function SignUpPage({
   searchParams,
-}: PageProps<"/auth/sign-in">) {
+}: PageProps<"/auth/sign-up">) {
   const params = await searchParams;
 
-  return <AuthCard mode="sign-in" next={safeNextParam(params.next)} />;
+  return <AuthCard mode="sign-up" next={safeNextParam(params.next)} />;
 }

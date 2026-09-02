@@ -16,9 +16,16 @@ import { refreshSession, withAuthCookies } from "@/lib/supabase/proxy-session";
 /** Routes reachable while signed out. Everything else requires a session. */
 const publicRoutes = [
   "/auth/sign-in",
+  "/auth/sign-up",
   "/auth/callback",
   "/auth/auth-code-error",
+  // The policies are linked from the sign-up consent notice and from Google's
+  // OAuth consent screen, so they have to render to a signed-out visitor.
+  "/legal",
 ];
+
+/** The two entry points a signed-in user has no reason to see. */
+const authEntryRoutes = ["/auth/sign-in", "/auth/sign-up"];
 
 function isPublicRoute(pathname: string) {
   return publicRoutes.some(
@@ -48,7 +55,7 @@ export async function proxy(request: NextRequest) {
     return withAuthCookies(response, NextResponse.redirect(signIn));
   }
 
-  if (user && pathname === "/auth/sign-in") {
+  if (user && authEntryRoutes.includes(pathname)) {
     const home = request.nextUrl.clone();
     home.pathname = "/";
     home.search = "";

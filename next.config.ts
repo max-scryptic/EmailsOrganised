@@ -5,8 +5,10 @@ const nextConfig: NextConfig = {
   async redirects() {
     // Google SSO is the only way in, so the template's password flows are gone.
     // Anything still linking to them lands on sign-in rather than a 404.
+    // `/auth/sign-up` is deliberately not in this list: sign-up is a real page
+    // again, because visitors look for the word even when the flow behind it is
+    // the same single OAuth call.
     return [
-      "/auth/sign-up",
       "/auth/forgot-password",
       "/auth/reset-password",
       "/auth/change-password",

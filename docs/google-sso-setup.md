@@ -40,7 +40,9 @@ dedicated to EmailsOrganised:
    - App name, support email, logo, developer contact
    - **Authorised domains**: your production domain, and `supabase.co`
    - Links to a published privacy policy and terms of service — Google will not
-     verify the app without them
+     verify the app without them. The app serves both at `/legal/privacy` and
+     `/legal/terms`; paste those production URLs here. The copy is an
+     engineering draft and still needs a legal review before verification.
 3. **Credentials → Create credentials → OAuth client ID → Web application**:
    - **Authorised JavaScript origins**: `http://localhost:3000`, your production origin
    - **Authorised redirect URI**: `https://<project-ref>.supabase.co/auth/v1/callback`

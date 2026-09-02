@@ -83,6 +83,11 @@ EmailsOrganised. Do not assume a backend exists.
   — it should move to Supabase alongside `public.users`.
 - Marketing pages are intentionally not included. Add them after the app
   surface is clear.
+- `/legal/terms` and `/legal/privacy` exist because sign-up and Google's OAuth
+  consent screen both have to link to them. The copy describes what the app
+  really does but is an engineering draft, not lawyer-reviewed — the pages say
+  so on their face. Route paths and the contact address live in
+  `src/lib/legal.ts`; change them there, not inline.
 - Sample content in `src/lib/template-data.ts` (customers, metrics, invoices,
   plans) is still the template's, not EmailsOrganised's. Treat it as
   placeholder. `appConfig` is the exception — it carries the real brand.

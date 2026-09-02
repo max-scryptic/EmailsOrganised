@@ -40,7 +40,8 @@ place setup logic lives so the sandbox and a laptop agree.
   `src/components/brand-logo.tsx`, and read the product name from `appConfig`
   rather than typing "EmailsOrganised" into copy. `--brand` is the brand
   orange and `--primary` resolves to it — keep using `primary` in components,
-  and pair it with `primary-foreground` (a warm near-black) rather than white.
+  and pair it with `primary-foreground`, which is white: anything sitting on
+  the brand orange is white, never dark.
 - Keep shadcn primitives in `src/components/ui` as owned source. Compose
   product-level components outside that folder.
 - Use the app shell, form field wrapper, table, state components, and confirm

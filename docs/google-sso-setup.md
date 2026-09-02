@@ -14,10 +14,17 @@ Section 4 is the long pole and should be started early — see the warning there
 1. Create a project in the **EmailsOrganised** organisation.
 2. Apply `supabase/migrations/20260902000000_users_and_google_credentials.sql`
    — via `supabase db push`, or by pasting it into the SQL editor.
-3. From **Project Settings → Data API**, copy into `.env.local`:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY` (server-only, never `NEXT_PUBLIC_`)
+3. From **Project Settings → API Keys**, copy into `.env.local`:
+   - `NEXT_PUBLIC_SUPABASE_URL` — `https://<project-ref>.supabase.co`
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` — the `sb_publishable_...` key
+   - `SUPABASE_SECRET_KEY` — the `sb_secret_...` key, revealed on click
+
+   The secret key bypasses RLS. Keep it server-side and never give it a
+   `NEXT_PUBLIC_` prefix, which would inline it into the browser bundle.
+
+   Supabase's older JWT-based keys still work if a project has them:
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are read as
+   fallbacks, so either generation of key is fine.
 4. Under **Authentication → URL Configuration**, set:
    - Site URL: `https://<production-domain>`
    - Redirect URLs: `http://localhost:3000/**` and `https://<production-domain>/**`

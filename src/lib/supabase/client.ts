@@ -3,7 +3,7 @@
 import { createBrowserClient } from "@supabase/ssr";
 import {
   assertSupabaseConfigured,
-  supabaseAnonKey,
+  supabasePublishableKey,
   supabaseUrl,
 } from "@/lib/supabase/config";
 
@@ -18,5 +18,5 @@ import {
 export function createClient() {
   assertSupabaseConfigured();
 
-  return createBrowserClient(supabaseUrl, supabaseAnonKey);
+  return createBrowserClient(supabaseUrl, supabasePublishableKey);
 }

@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase/config";
+import { supabasePublishableKey, supabaseUrl } from "@/lib/supabase/config";
 
 /**
  * Refreshes the Supabase session for an incoming request and returns both the
@@ -14,7 +14,7 @@ import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase/config";
 export async function refreshSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
-  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+  const supabase = createServerClient(supabaseUrl, supabasePublishableKey, {
     cookies: {
       getAll() {
         return request.cookies.getAll();

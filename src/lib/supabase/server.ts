@@ -5,7 +5,7 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import {
   assertSupabaseConfigured,
-  supabaseAnonKey,
+  supabasePublishableKey,
   supabaseUrl,
 } from "@/lib/supabase/config";
 
@@ -23,7 +23,7 @@ export async function createClient() {
 
   const cookieStore = await cookies();
 
-  return createServerClient(supabaseUrl, supabaseAnonKey, {
+  return createServerClient(supabaseUrl, supabasePublishableKey, {
     cookies: {
       getAll() {
         return cookieStore.getAll();
@@ -50,16 +50,19 @@ export async function createClient() {
  * themselves: stamping `last_seen_at` and storing Google refresh tokens.
  */
 export function createAdminClient() {
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Supabase now issues `sb_secret_...` keys and treats the JWT-based
+  // service_role key as legacy. Either works; neither may be NEXT_PUBLIC_.
+  const secretKey =
+    process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!supabaseUrl || !serviceRoleKey) {
+  if (!supabaseUrl || !secretKey) {
     throw new Error(
-      "SUPABASE_SERVICE_ROLE_KEY is required for privileged writes. " +
+      "SUPABASE_SECRET_KEY is required for privileged writes. " +
         "See docs/google-sso-setup.md.",
     );
   }
 
-  return createSupabaseClient(supabaseUrl, serviceRoleKey, {
+  return createSupabaseClient(supabaseUrl, secretKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 }

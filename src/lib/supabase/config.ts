@@ -8,16 +8,27 @@
  */
 
 export const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-export const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+/**
+ * The client-safe key. Supabase now issues `sb_publishable_...` keys and treats
+ * the JWT-based `anon` key as legacy, so both names are accepted and the newer
+ * one wins. Next.js inlines `NEXT_PUBLIC_*` at build time, which is why both
+ * are written as literal `process.env.X` references rather than looked up.
+ */
+export const supabasePublishableKey =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "";
+
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabasePublishableKey);
 
 /** Throws with an actionable message instead of a generic Supabase SDK error. */
 export function assertSupabaseConfigured() {
   if (!isSupabaseConfigured) {
     throw new Error(
       "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and " +
-        "NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local — see docs/google-sso-setup.md.",
+        "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY in .env.local — see " +
+        "docs/google-sso-setup.md.",
     );
   }
 }

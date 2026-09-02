@@ -36,6 +36,11 @@ place setup logic lives so the sandbox and a laptop agree.
   radius, and typography decisions.
 - Do not use raw hex colors in product UI. Add semantic tokens first when a
   new brand or status color is needed.
+- Render the logo through `BrandMark` / `BrandLockup` in
+  `src/components/brand-logo.tsx`, and read the product name from `appConfig`
+  rather than typing "EmailsOrganised" into copy. `--brand` is the brand
+  orange and `--primary` resolves to it — keep using `primary` in components,
+  and pair it with `primary-foreground` (a warm near-black) rather than white.
 - Keep shadcn primitives in `src/components/ui` as owned source. Compose
   product-level components outside that folder.
 - Use the app shell, form field wrapper, table, state components, and confirm
@@ -78,6 +83,7 @@ EmailsOrganised. Do not assume a backend exists.
   — it should move to Supabase alongside `public.users`.
 - Marketing pages are intentionally not included. Add them after the app
   surface is clear.
-- Sample content in `src/lib/template-data.ts` is still the template's, not
-  EmailsOrganised's. Treat it as placeholder.
+- Sample content in `src/lib/template-data.ts` (customers, metrics, invoices,
+  plans) is still the template's, not EmailsOrganised's. Treat it as
+  placeholder. `appConfig` is the exception — it carries the real brand.
 - Use `/kitchen-sink` to QA token changes in both light and dark mode.

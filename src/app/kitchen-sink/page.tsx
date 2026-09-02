@@ -1,5 +1,6 @@
 import { Inbox, Settings, ShieldAlert, UserPlus } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { BrandLockup, BrandMark } from "@/components/brand-logo";
 import { EmptyState } from "@/components/states/empty-state";
 import { ErrorState } from "@/components/states/error-state";
 import { LoadingState } from "@/components/states/loading-state";
@@ -45,6 +46,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { appConfig } from "@/lib/template-data";
 
 export default function KitchenSinkPage() {
   return (
@@ -59,6 +61,21 @@ export default function KitchenSinkPage() {
           <TabsTrigger value="states">States</TabsTrigger>
         </TabsList>
         <TabsContent value="primitives" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Brand</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-wrap items-center gap-6">
+              <BrandMark className="size-14" />
+              <BrandMark />
+              <BrandMark className="size-5" />
+              <Separator
+                orientation="vertical"
+                className="hidden h-10 sm:block"
+              />
+              <BrandLockup />
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle>Buttons and badges</CardTitle>
@@ -133,7 +150,7 @@ export default function KitchenSinkPage() {
             <CardContent className="grid gap-5 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="sink-name">Name</Label>
-                <Input id="sink-name" defaultValue="Base SaaS" />
+                <Input id="sink-name" defaultValue={appConfig.name} />
               </div>
               <div className="space-y-2">
                 <Label>Plan</Label>

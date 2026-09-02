@@ -49,7 +49,7 @@ export function AppShell({
               <Search className="size-4 shrink-0 text-muted-foreground" />
               <Input
                 className="h-full border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
-                placeholder="Search customers, invoices, settings..."
+                placeholder="Search customers, workflows, settings..."
               />
             </div>
             <div className="ml-auto flex items-center gap-2 lg:ml-0">

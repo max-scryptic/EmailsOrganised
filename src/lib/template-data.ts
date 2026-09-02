@@ -1,7 +1,8 @@
 import { CreditCard, Home, ReceiptText, UserRound } from "lucide-react";
 
 export const appConfig = {
-  name: "Base SaaS",
+  name: "EmailsOrganised",
+  description: "Inbox triage that keeps every team's email organised.",
 };
 
 export const appNavItems = [{ title: "Dashboard", href: "/", icon: Home }];

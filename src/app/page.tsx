@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { metrics } from "@/lib/template-data";
+import { appConfig, metrics } from "@/lib/template-data";
 
 const revenueBars = [38, 52, 48, 66, 58, 76, 72, 88, 81, 93, 86, 98];
 
@@ -16,7 +16,7 @@ export default function Home() {
   return (
     <AppShell
       title="Dashboard"
-      description="A reusable SaaS dashboard shell with metrics, customer table, and standard action placement."
+      description={`${appConfig.name} at a glance: revenue, customers, and the actions the team runs most.`}
       actions={
         <>
           <Button type="button" variant="outline">
@@ -58,7 +58,7 @@ export default function Home() {
               {revenueBars.map((height, index) => (
                 <div
                   key={index}
-                  className="flex flex-1 items-end rounded-sm bg-primary/15"
+                  className="flex h-full flex-1 items-end rounded-sm bg-primary/15"
                 >
                   <div
                     className="w-full rounded-sm bg-primary"
@@ -71,9 +71,9 @@ export default function Home() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Template checklist</CardTitle>
+            <CardTitle>Foundations</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Baseline product states every new SaaS should inherit.
+              Baseline product states {appConfig.name} ships with.
             </p>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">

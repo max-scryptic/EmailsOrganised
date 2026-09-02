@@ -53,7 +53,7 @@ export function AppShell({
               className="mr-2 data-vertical:h-4 data-vertical:self-auto"
             />
             <AppBreadcrumb breadcrumbs={breadcrumbs ?? [{ title }]} />
-            <div className="ml-auto hidden h-10 min-w-56 max-w-sm flex-1 items-center gap-2 rounded-md border bg-muted/40 px-3 transition-[height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-8 lg:flex">
+            <div className="ml-auto hidden h-10 min-w-56 max-w-sm flex-1 items-center gap-2 rounded-md border bg-card px-3 transition-[height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-8 lg:flex">
               <Search className="size-4 shrink-0 text-muted-foreground" />
               <Input
                 className="h-full border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"

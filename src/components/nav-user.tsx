@@ -26,6 +26,7 @@ import {
   SettingsIcon,
   SparklesIcon,
 } from "lucide-react"
+import { signOut } from "@/lib/auth/actions"
 
 export function NavUser({
   user,
@@ -92,10 +93,14 @@ export function NavUser({
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <LogOutIcon />
-              Log out
-            </DropdownMenuItem>
+            <form action={signOut}>
+              <DropdownMenuItem asChild>
+                <button type="submit" className="w-full">
+                  <LogOutIcon />
+                  Log out
+                </button>
+              </DropdownMenuItem>
+            </form>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>

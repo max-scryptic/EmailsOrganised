@@ -19,7 +19,8 @@ echo "==> Installing dependencies (npm ci)"
 npm ci
 
 # The app is designed to boot with no environment file at all: billing falls
-# back to the mock provider and auth is UI-only. Seeding .env.local from the
+# back to the mock provider and route guarding is disabled. Seeding .env.local
+# from the
 # example is still worth doing so the real variable names are discoverable, and
 # it is safe — the example ships NEXT_PUBLIC_BILLING_PROVIDER=mock and empty
 # Stripe keys, so nothing tries to reach the network.

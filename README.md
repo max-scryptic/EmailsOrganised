@@ -43,7 +43,8 @@ npm install
 npm run dev
 ```
 
-No environment file is needed to start: auth and billing fall back to mocks.
+No environment file is needed to start: billing falls back to a mock provider
+and route guarding is disabled until Supabase is configured.
 Copy `.env.example` to `.env.local` when wiring a real provider.
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
@@ -54,33 +55,39 @@ Useful routes:
 - `/plans`
 - `/settings`
 - `/auth/sign-in`
-- `/auth/sign-up`
-- `/auth/forgot-password`
-- `/auth/reset-password`
-- `/auth/change-password`
-- `/auth/verify`
 - `/kitchen-sink`
 
-## Auth Adapter
+## Auth
 
-Auth screens submit through `src/lib/auth/auth-adapter.ts`. The adapter is
-mocked for now so the template can show complete loading, validation, success,
-and error states without choosing a backend too early.
+Sign-in is Google SSO through Supabase Auth, and it is the only way in. The
+template's password, reset, and verification screens have been removed;
+`next.config.ts` redirects their old paths to `/auth/sign-in`.
 
-The methods are intentionally shaped around Supabase Auth:
+The same consent grants mailbox access (`gmail.modify` — read, draft, send), so
+one Google authorization covers both identifying the user and doing the work
+the product exists to do.
 
-```ts
-supabase.auth.signInWithPassword({ email, password })
-supabase.auth.signUp({ email, password, options: { emailRedirectTo } })
-supabase.auth.resetPasswordForEmail(email, { redirectTo })
-supabase.auth.updateUser({ password })
-supabase.auth.updateUser({ password, current_password })
-```
+| Path | Role |
+| --- | --- |
+| `src/lib/auth/scopes.ts` | Which Google scopes the consent screen asks for. |
+| `src/lib/auth/actions.ts` | `signInWithGoogle` and `signOut` server actions. |
+| `src/lib/auth/session.ts` | The Data Access Layer. `getSessionUser()` / `requireUser()`. |
+| `src/app/(auth)/auth/callback/route.ts` | OAuth callback; captures Google refresh tokens. |
+| `src/proxy.ts` | Session refresh plus an optimistic signed-out redirect. |
+| `src/lib/supabase/` | Browser, server, service-role, and Proxy clients. |
+| `src/lib/google/token-store.ts` | Stores and refreshes Google mailbox tokens. |
+| `supabase/migrations/` | `public.users` and `public.google_credentials`. |
 
-When a project chooses Supabase, install pinned versions of `@supabase/supabase-js`
-and `@supabase/ssr`, keep the service-role key out of browser code, configure
-the dashboard redirect URLs for `/auth/reset-password`, and move mutations into
-server actions or framework-native Supabase clients.
+Authorization is enforced in `session.ts`, not in Proxy. Proxy runs on
+prefetches and only reads the session cookie, so it is a UX shortcut; every
+server component or action that touches user data calls `requireUser()`.
+
+Setting up the Supabase project, the Google Cloud OAuth client, and the
+verification Google requires for Gmail scopes is documented in
+[`docs/google-sso-setup.md`](docs/google-sso-setup.md).
+
+With no `.env.local` the app still boots — Proxy stops guarding routes and
+`/auth/sign-in` renders a configuration notice instead of a broken button.
 
 ## Billing
 

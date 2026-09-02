@@ -24,7 +24,7 @@ npm run build  # next build --webpack
 ```
 
 The app boots with no environment file: billing falls back to a mock provider
-and auth is UI-only, so `npm run dev` works on a clean checkout.
+and route guarding is disabled, so `npm run dev` works on a clean checkout.
 `scripts/codex-setup.sh` installs dependencies and seeds `.env.local` — it is
 what the Codex environment's setup script runs, and it must stay the single
 place setup logic lives so the sandbox and a laptop agree.
@@ -45,21 +45,37 @@ place setup logic lives so the sandbox and a laptop agree.
 - Destructive actions should go through `useConfirmDialog` or
   `AlertDialog`, not a generic dialog.
 
+## Auth
+
+Auth is Supabase Auth with Google as the only provider. There are no password
+flows — do not add one without a decision to reverse that.
+
+- Ask "who is this?" through `requireUser()` / `getSessionUser()` in
+  `src/lib/auth/session.ts`. Never read auth cookies or call
+  `supabase.auth.getUser()` directly in a page or action.
+- `src/proxy.ts` refreshes the session and redirects signed-out visitors. It is
+  an optimistic UX shortcut, not the authorization boundary — `session.ts` is.
+- The service-role client (`createAdminClient`) bypasses RLS. It is for the two
+  writes a user is deliberately not allowed to make themselves, and it lives
+  behind `import "server-only"` modules.
+- Google refresh tokens go through `src/lib/google/token-store.ts` and nowhere
+  else. Supabase hands them over exactly once, in the OAuth callback.
+- Setup that lives outside the repo — Supabase project, Google Cloud OAuth
+  client, Gmail scope verification — is in `docs/google-sso-setup.md`.
+
 ## Not Wired Up Yet
 
 These are inherited from the template and are still open decisions for
 EmailsOrganised. Do not assume a backend exists.
 
-- Auth is UI-only by design. Wire it to Clerk, Supabase, Auth.js, or another
-  provider.
 - Billing ships two providers behind one interface, selected by
   `NEXT_PUBLIC_BILLING_PROVIDER`: a mock that needs no keys, and Stripe.
   Components import `billingAdapter` and the types in `src/lib/billing/types.ts`
   — never a provider SDK. Server-only billing modules start with
   `import "server-only"`.
-- The identity and persistence seams (`src/lib/billing/customer.ts` and
-  `src/lib/billing/store.ts`) are the two files this project is expected to
-  replace. Keep them small and provider-agnostic.
+- `src/lib/billing/customer.ts` now resolves the real signed-in user.
+  `src/lib/billing/store.ts` is still in-memory and is the next seam to replace
+  — it should move to Supabase alongside `public.users`.
 - Marketing pages are intentionally not included. Add them after the app
   surface is clear.
 - Sample content in `src/lib/template-data.ts` is still the template's, not

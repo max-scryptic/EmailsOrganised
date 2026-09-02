@@ -1,12 +1,12 @@
 import "server-only";
 
-import { currentUser } from "@/lib/template-data";
+import { getSessionUser } from "@/lib/auth/session";
 
 /**
  * The auth ↔ billing seam.
  *
  * Every server-side billing call starts by asking "who is this?". Keeping that
- * question in one function means wiring a real auth provider touches one file
+ * question in one function means changing auth providers touches one file
  * rather than every route handler.
  */
 
@@ -24,24 +24,16 @@ export class UnauthenticatedBillingError extends Error {
   }
 }
 
-/**
- * Returns the template user so the flow is clickable before auth exists.
- *
- * With Supabase, this becomes:
- *
- * ```ts
- * const supabase = await createServerClient();
- * const { data } = await supabase.auth.getUser();
- * if (!data.user) throw new UnauthenticatedBillingError();
- * return { userId: data.user.id, email: data.user.email!, name: ... };
- * ```
- *
- * With Clerk it is `auth()` plus `currentUser()`; with Auth.js, `auth()`.
- */
 export async function resolveBillingIdentity(): Promise<BillingIdentity> {
+  const user = await getSessionUser();
+
+  if (!user) {
+    throw new UnauthenticatedBillingError();
+  }
+
   return {
-    userId: "template-user",
-    email: currentUser.email,
-    name: currentUser.name,
+    userId: user.id,
+    email: user.email,
+    name: user.name,
   };
 }

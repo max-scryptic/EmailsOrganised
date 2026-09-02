@@ -5,7 +5,8 @@ import * as React from "react"
 import { AppBranding } from "@/components/app-branding"
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
-import { appNavItems, currentUser } from "@/lib/template-data"
+import { useSessionUser } from "@/components/session-provider"
+import { appNavItems } from "@/lib/template-data"
 import {
   Sidebar,
   SidebarContent,
@@ -21,6 +22,8 @@ const navMain = appNavItems.map((item) => ({
 }))
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const user = useSessionUser()
+
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
@@ -29,9 +32,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         <NavMain items={navMain} />
       </SidebarContent>
-      <SidebarFooter>
-        <NavUser user={currentUser} />
-      </SidebarFooter>
+      <SidebarFooter>{user ? <NavUser user={user} /> : null}</SidebarFooter>
       <SidebarRail />
     </Sidebar>
   )

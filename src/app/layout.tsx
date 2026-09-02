@@ -1,21 +1,27 @@
 import type { Metadata } from "next";
 import { Providers } from "@/components/providers";
+import { SessionProvider } from "@/components/session-provider";
+import { getSessionUser } from "@/lib/auth/session";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Base SaaS Template",
-    template: "%s | Base SaaS Template",
+    default: "EmailsOrganised",
+    template: "%s | EmailsOrganised",
   },
   description:
-    "A reusable Next.js, Tailwind, and shadcn/ui foundation for SaaS products.",
+    "Organise your inbox: read, draft, and send from one connected Google account.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const user = await getSessionUser();
+
   return (
     <html lang="en" className="h-full antialiased" suppressHydrationWarning>
       <body className="min-h-full flex flex-col">
-        <Providers>{children}</Providers>
+        <Providers>
+          <SessionProvider user={user}>{children}</SessionProvider>
+        </Providers>
       </body>
     </html>
   );

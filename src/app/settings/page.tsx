@@ -20,8 +20,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { formatRenewal, statusLabel } from "@/lib/billing/format";
 import { getSubscription } from "@/lib/billing/server";
+import { requireUser } from "@/lib/auth/session";
 import {
-  currentUser,
   invoices,
   paymentMethod,
   plans,
@@ -29,7 +29,10 @@ import {
 } from "@/lib/template-data";
 
 export default async function SettingsPage() {
-  const subscription = await getSubscription();
+  const [user, subscription] = await Promise.all([
+    requireUser(),
+    getSubscription(),
+  ]);
   const currentPlan = plans.find((plan) => plan.id === subscription.planId);
 
   return (
@@ -71,15 +74,38 @@ export default async function SettingsPage() {
             <CardContent className="grid gap-5 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="name">Name</Label>
-                <Input id="name" defaultValue={currentUser.name} />
+                <Input id="name" defaultValue={user.name} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  defaultValue={currentUser.email}
-                />
+                <Input id="email" type="email" defaultValue={user.email} readOnly />
+                <p className="text-xs text-muted-foreground">
+                  Managed by the Google account you sign in with.
+                </p>
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>Mailbox</Label>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Badge variant={user.gmailConnected ? "outline" : "destructive"}>
+                    {user.gmailConnected ? "Connected" : "Not connected"}
+                  </Badge>
+                  {user.gmailConnected ? (
+                    <span>
+                      We can read, draft, and send on your behalf. Revoke any
+                      time from your Google account.
+                    </span>
+                  ) : (
+                    <span>
+                      Sign in again to grant mailbox access.{" "}
+                      <Link
+                        href="/auth/sign-in"
+                        className="underline underline-offset-4 hover:text-foreground"
+                      >
+                        Reconnect
+                      </Link>
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="bio">Bio</Label>

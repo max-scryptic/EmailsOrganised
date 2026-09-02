@@ -92,7 +92,7 @@
   --warning: oklch(0.74 0.15 75);
   --warning-foreground: oklch(0.18 0 0);
   --radius: 0.125rem;
-  --sidebar: oklch(0.985 0 0);
+  --sidebar: var(--card);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: var(--brand);
   --sidebar-primary-foreground: var(--brand-foreground);

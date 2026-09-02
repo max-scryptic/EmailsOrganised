@@ -1,4 +1,4 @@
-import { Mail, ShieldCheck, TriangleAlert } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { GoogleSignInButton } from "@/components/forms/google-sign-in-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -28,7 +28,7 @@ const modeCopy: Record<
   AuthMode,
   {
     title: string;
-    description: string;
+    description: string | null;
     action: string;
     swapPrompt: string;
     swapLabel: string;
@@ -38,8 +38,7 @@ const modeCopy: Record<
 > = {
   "sign-in": {
     title: `Sign in to ${appConfig.name}`,
-    description:
-      "One account, one sign-in. Your Google account both identifies you and connects the mailbox we organise.",
+    description: null,
     action: "Continue with Google",
     swapPrompt: `New to ${appConfig.name}?`,
     swapLabel: "Create an account",
@@ -48,8 +47,7 @@ const modeCopy: Record<
   },
   "sign-up": {
     title: `Create your ${appConfig.name} account`,
-    description:
-      "Sign up with the Google account whose mailbox you want organised. That same account is how you sign in from then on.",
+    description: null,
     action: "Sign up with Google",
     swapPrompt: "Already have an account?",
     swapLabel: "Sign in",
@@ -72,7 +70,9 @@ export function AuthCard({ mode, next }: { mode: AuthMode; next: string }) {
     <Card className="w-full max-w-md">
       <CardHeader className="space-y-2">
         <CardTitle>{copy.title}</CardTitle>
-        <p className="text-sm text-muted-foreground">{copy.description}</p>
+        {copy.description ? (
+          <p className="text-sm text-muted-foreground">{copy.description}</p>
+        ) : null}
       </CardHeader>
       <CardContent className="space-y-4">
         {isSupabaseConfigured ? null : (
@@ -113,23 +113,6 @@ export function AuthCard({ mode, next }: { mode: AuthMode; next: string }) {
             </p>
           ) : null}
         </div>
-
-        <ul className="space-y-3 text-sm text-muted-foreground">
-          <li className="flex gap-3">
-            <Mail className="mt-0.5 size-4 shrink-0" />
-            <span>
-              We ask for permission to read, draft, and send mail on your
-              behalf. Nothing is sent without you asking for it.
-            </span>
-          </li>
-          <li className="flex gap-3">
-            <ShieldCheck className="mt-0.5 size-4 shrink-0" />
-            <span>
-              We never see your Google password, and you can revoke access at
-              any time from your Google account settings.
-            </span>
-          </li>
-        </ul>
 
         <Separator />
 

@@ -1,11 +1,14 @@
-import { CreditCard, Home, ReceiptText, UserRound } from "lucide-react";
+import { CreditCard, Home, ReceiptText, UserRound, Workflow } from "lucide-react";
 
 export const appConfig = {
   name: "EmailsOrganised",
   description: "Inbox triage that keeps every team's email organised.",
 };
 
-export const appNavItems = [{ title: "Dashboard", href: "/", icon: Home }];
+export const appNavItems = [
+  { title: "Dashboard", href: "/", icon: Home },
+  { title: "Workflows", href: "/workflows", icon: Workflow },
+];
 
 export const settingsSections = [
   { title: "User", value: "user", icon: UserRound },

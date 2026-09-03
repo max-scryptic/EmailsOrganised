@@ -1,4 +1,10 @@
-import { CreditCard, Home, ReceiptText, UserRound, Workflow } from "lucide-react";
+import {
+  CreditCard,
+  Home,
+  ReceiptText,
+  UserRound,
+  Workflow,
+} from "lucide-react";
 
 export const appConfig = {
   name: "EmailsOrganised",

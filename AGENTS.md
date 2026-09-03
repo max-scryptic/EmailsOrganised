@@ -72,7 +72,7 @@ flows — do not add one without a decision to reverse that.
 ## Not Wired Up Yet
 
 These are inherited from the template and are still open decisions for
-EmailsOrganised. Do not assume a backend exists.
+EmailsOrganised.
 
 - Billing ships two providers behind one interface, selected by
   `NEXT_PUBLIC_BILLING_PROVIDER`: a mock that needs no keys, and Stripe.

@@ -1,29 +1,18 @@
-import { Play, Plus } from "lucide-react";
-import { AppShell } from "@/components/app-shell";
-import { WorkflowBuilder } from "@/components/workflows/workflow-builder";
-import { Button } from "@/components/ui/button";
+import { WorkflowWorkspace } from "@/components/workflows/workflow-workspace";
 import { appConfig } from "@/lib/template-data";
+import { listWorkflows } from "@/lib/workflows";
 import { ceoWorkflowDraft } from "@/lib/workflow-data";
 
-export default function WorkflowsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function WorkflowsPage() {
+  const workflows = await listWorkflows();
+
   return (
-    <AppShell
-      title="Workflows"
-      description={`Build the mailbox routines ${appConfig.name} can classify, route, draft, and review.`}
-      actions={
-        <>
-          <Button type="button" variant="outline">
-            <Play className="size-4" />
-            Run checks
-          </Button>
-          <Button type="button">
-            <Plus className="size-4" />
-            New workflow
-          </Button>
-        </>
-      }
-    >
-      <WorkflowBuilder initialDraft={ceoWorkflowDraft} />
-    </AppShell>
+    <WorkflowWorkspace
+      appName={appConfig.name}
+      initialDraft={ceoWorkflowDraft}
+      initialWorkflows={workflows}
+    />
   );
 }

@@ -35,6 +35,12 @@ export type WorkflowDraft = {
   outcomes: WorkflowOutcome[];
 };
 
+export type SavedWorkflow = WorkflowDraft & {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export const actionLabels: Record<WorkflowActionType, string> = {
   forward: "Forward email",
   draft_reply: "Draft reply",

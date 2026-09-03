@@ -6,8 +6,10 @@ import {
   ArrowDown,
   ArrowRight,
   Bot,
+  CheckCircle2,
   Forward,
   Inbox,
+  Loader2,
   MailCheck,
   Plus,
   Save,
@@ -15,7 +17,12 @@ import {
   Sparkles,
   Tag,
   Trash2,
+  TriangleAlert,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { deleteWorkflow, saveWorkflow } from "@/app/workflows/actions";
+import { useConfirmDialog } from "@/components/use-confirm-dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +48,7 @@ import { cn } from "@/lib/utils";
 import {
   actionLabels,
   createWorkflowAction,
+  type SavedWorkflow,
   type WorkflowAction,
   type WorkflowActionType,
   type WorkflowDraft,
@@ -68,20 +76,76 @@ type SelectedModule =
 
 type WorkflowBuilderProps = {
   initialDraft: WorkflowDraft;
+  initialWorkflows: SavedWorkflow[];
+  newWorkflowRequest?: number;
 };
 
-export function WorkflowBuilder({ initialDraft }: WorkflowBuilderProps) {
-  const [workflowName, setWorkflowName] = React.useState(initialDraft.name);
-  const [ownerRole, setOwnerRole] = React.useState(initialDraft.ownerRole);
-  const [trigger, setTrigger] = React.useState(initialDraft.trigger);
-  const [classifierPrompt, setClassifierPrompt] = React.useState(
-    initialDraft.classifierPrompt
+type WorkflowResult =
+  | {
+      status: "success" | "error";
+      title: string;
+      description: string;
+    }
+  | null;
+
+export function WorkflowBuilder({
+  initialDraft,
+  initialWorkflows,
+  newWorkflowRequest = 0,
+}: WorkflowBuilderProps) {
+  const router = useRouter();
+  const { confirm, ConfirmDialog } = useConfirmDialog();
+  const [isPending, startTransition] = React.useTransition();
+  const [workflows, setWorkflows] = React.useState(initialWorkflows);
+  const [activeWorkflowId, setActiveWorkflowId] = React.useState<string | null>(
+    initialWorkflows[0]?.id ?? null
   );
-  const [outcomes, setOutcomes] = React.useState(initialDraft.outcomes);
+  const [workflowName, setWorkflowName] = React.useState(
+    initialWorkflows[0]?.name ?? initialDraft.name
+  );
+  const [ownerRole, setOwnerRole] = React.useState(
+    initialWorkflows[0]?.ownerRole ?? initialDraft.ownerRole
+  );
+  const [trigger, setTrigger] = React.useState(
+    initialWorkflows[0]?.trigger ?? initialDraft.trigger
+  );
+  const [classifierPrompt, setClassifierPrompt] = React.useState(
+    initialWorkflows[0]?.classifierPrompt ?? initialDraft.classifierPrompt
+  );
+  const [outcomes, setOutcomes] = React.useState(
+    initialWorkflows[0]?.outcomes ?? initialDraft.outcomes
+  );
   const [selectedModule, setSelectedModule] = React.useState<SelectedModule>({
     type: "workflow",
   });
   const [lastSavedAt, setLastSavedAt] = React.useState<string | null>(null);
+  const [result, setResult] = React.useState<WorkflowResult>(null);
+  const lastNewWorkflowRequestRef = React.useRef(newWorkflowRequest);
+
+  const loadWorkflow = React.useCallback((workflow: WorkflowDraft) => {
+    setWorkflowName(workflow.name);
+    setOwnerRole(workflow.ownerRole);
+    setTrigger(workflow.trigger);
+    setClassifierPrompt(workflow.classifierPrompt);
+    setOutcomes(workflow.outcomes);
+    setSelectedModule({ type: "workflow" });
+    setResult(null);
+  }, []);
+
+  const createNewWorkflow = React.useCallback(() => {
+    setActiveWorkflowId(null);
+    loadWorkflow(initialDraft);
+    setLastSavedAt(null);
+  }, [initialDraft, loadWorkflow]);
+
+  React.useEffect(() => {
+    if (newWorkflowRequest === lastNewWorkflowRequestRef.current) {
+      return;
+    }
+
+    lastNewWorkflowRequestRef.current = newWorkflowRequest;
+    createNewWorkflow();
+  }, [createNewWorkflow, newWorkflowRequest]);
 
   const selectedOutcome =
     "outcomeId" in selectedModule
@@ -168,18 +232,107 @@ export function WorkflowBuilder({ initialDraft }: WorkflowBuilderProps) {
     setSelectedModule({ type: "outcome", outcomeId });
   }
 
+  function currentDraft(): WorkflowDraft {
+    return {
+      name: workflowName,
+      ownerRole,
+      trigger,
+      classifierPrompt,
+      outcomes,
+    };
+  }
+
   function saveDraft() {
-    setLastSavedAt(
-      new Intl.DateTimeFormat(undefined, {
-        hour: "numeric",
-        minute: "2-digit",
-      }).format(new Date())
-    );
+    startTransition(() => {
+      void (async () => {
+        const response = await saveWorkflow({
+          id: activeWorkflowId ?? undefined,
+          ...currentDraft(),
+        });
+
+        setResult(response);
+
+        if (response.status === "success" && response.workflow) {
+          const savedWorkflow = response.workflow;
+
+          setActiveWorkflowId(savedWorkflow.id);
+          setLastSavedAt(formatWorkflowTimestamp(savedWorkflow.updatedAt));
+          setWorkflows((current) => {
+            const withoutSaved = current.filter(
+              (workflow) => workflow.id !== savedWorkflow.id
+            );
+
+            return [savedWorkflow, ...withoutSaved];
+          });
+          router.refresh();
+        }
+      })();
+    });
+  }
+
+  async function requestDeleteWorkflow() {
+    if (!activeWorkflowId) {
+      createNewWorkflow();
+      return;
+    }
+
+    const confirmed = await confirm({
+      title: "Delete workflow?",
+      description:
+        "This removes the workflow from the database. You cannot undo this.",
+      confirmLabel: "Delete workflow",
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    const workflowId = activeWorkflowId;
+
+    startTransition(() => {
+      void (async () => {
+        const response = await deleteWorkflow(workflowId);
+
+        setResult(response);
+
+        if (response.status === "success") {
+          const remaining = workflows.filter(
+            (workflow) => workflow.id !== workflowId
+          );
+          const nextWorkflow = remaining[0];
+
+          setWorkflows(remaining);
+
+          if (nextWorkflow) {
+            setActiveWorkflowId(nextWorkflow.id);
+            loadWorkflow(nextWorkflow);
+            setLastSavedAt(formatWorkflowTimestamp(nextWorkflow.updatedAt));
+          } else {
+            createNewWorkflow();
+          }
+
+          router.refresh();
+        }
+      })();
+    });
   }
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+    <>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
       <div className="space-y-4">
+        {result ? (
+          <Alert variant={result.status === "error" ? "destructive" : "default"}>
+            {result.status === "error" ? (
+              <TriangleAlert className="size-4" />
+            ) : (
+              <CheckCircle2 className="size-4" />
+            )}
+            <AlertTitle>{result.title}</AlertTitle>
+            <AlertDescription>{result.description}</AlertDescription>
+          </Alert>
+        ) : null}
+
         <Card>
           <CardHeader>
             <CardTitle>Flow builder</CardTitle>
@@ -276,6 +429,19 @@ export function WorkflowBuilder({ initialDraft }: WorkflowBuilderProps) {
       </div>
 
       <aside className="space-y-4">
+        <WorkflowLibrary
+          activeWorkflowId={activeWorkflowId}
+          workflows={workflows}
+          onCreate={createNewWorkflow}
+          onDelete={requestDeleteWorkflow}
+          onSelect={(workflow) => {
+            setActiveWorkflowId(workflow.id);
+            loadWorkflow(workflow);
+            setLastSavedAt(formatWorkflowTimestamp(workflow.updatedAt));
+          }}
+          isPending={isPending}
+        />
+
         <Card>
           <CardHeader>
             <CardTitle>Module settings</CardTitle>
@@ -324,9 +490,18 @@ export function WorkflowBuilder({ initialDraft }: WorkflowBuilderProps) {
               />
             ) : null}
             <Separator />
-            <Button type="button" className="w-full" onClick={saveDraft}>
-              <Save className="size-4" />
-              Save workflow
+            <Button
+              type="button"
+              className="w-full"
+              onClick={saveDraft}
+              disabled={isPending}
+            >
+              {isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Save className="size-4" />
+              )}
+              {activeWorkflowId ? "Save changes" : "Save workflow"}
             </Button>
             {lastSavedAt ? (
               <p className="text-xs text-muted-foreground">
@@ -336,8 +511,95 @@ export function WorkflowBuilder({ initialDraft }: WorkflowBuilderProps) {
           </CardContent>
         </Card>
       </aside>
-    </div>
+      </div>
+      <ConfirmDialog />
+    </>
   );
+}
+
+function WorkflowLibrary({
+  activeWorkflowId,
+  workflows,
+  onCreate,
+  onDelete,
+  onSelect,
+  isPending,
+}: {
+  activeWorkflowId: string | null;
+  workflows: SavedWorkflow[];
+  onCreate: () => void;
+  onDelete: () => void;
+  onSelect: (workflow: SavedWorkflow) => void;
+  isPending: boolean;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Saved workflows</CardTitle>
+        <CardAction>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onCreate}
+              disabled={isPending}
+            >
+              <Plus className="size-4" />
+              New
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={onDelete}
+              disabled={isPending}
+              aria-label={activeWorkflowId ? "Delete workflow" : "Clear draft"}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          </div>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {workflows.length ? (
+          workflows.map((workflow) => (
+            <button
+              key={workflow.id}
+              type="button"
+              onClick={() => onSelect(workflow)}
+              className={cn(
+                "flex min-h-16 w-full items-start gap-3 rounded-md border bg-background p-3 text-left transition hover:bg-muted/60",
+                activeWorkflowId === workflow.id && "border-primary bg-primary/10"
+              )}
+            >
+              <Inbox className="mt-0.5 size-4 shrink-0 text-primary" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">
+                  {workflow.name}
+                </span>
+                <span className="mt-1 block truncate text-xs text-muted-foreground">
+                  Updated {formatWorkflowTimestamp(workflow.updatedAt)}
+                </span>
+              </span>
+              <Badge variant="secondary">{workflow.outcomes.length}</Badge>
+            </button>
+          ))
+        ) : (
+          <div className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+            No saved workflows yet.
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function formatWorkflowTimestamp(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 function OutcomeBranch({

@@ -1,5 +1,12 @@
 import type { NextConfig } from "next";
 
+const authRedirectSources = [
+  "/auth/forgot-password",
+  "/auth/reset-password",
+  "/auth/change-password",
+  "/auth/verify",
+];
+
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["localhost", "127.0.0.1"],
   async redirects() {
@@ -9,15 +16,17 @@ const nextConfig: NextConfig = {
     // again, because visitors look for the word even when the flow behind it is
     // the same single OAuth call.
     return [
-      "/auth/forgot-password",
-      "/auth/reset-password",
-      "/auth/change-password",
-      "/auth/verify",
-    ].map((source) => ({
-      source,
-      destination: "/auth/sign-in",
-      permanent: false,
-    }));
+      {
+        source: "/workflows",
+        destination: "/",
+        permanent: false,
+      },
+      ...authRedirectSources.map((source) => ({
+        source,
+        destination: "/auth/sign-in",
+        permanent: false,
+      })),
+    ];
   },
 };
 

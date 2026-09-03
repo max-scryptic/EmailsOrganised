@@ -15,6 +15,7 @@ export function WorkflowList({ workflows }: { workflows: SavedWorkflow[] }) {
         icon={Workflow}
         title="No workflows yet"
         description="Create your first workflow to describe the email it should catch and what should happen next."
+        action={{ label: "New workflow", href: "/workflows/new" }}
       />
     );
   }

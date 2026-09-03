@@ -69,10 +69,16 @@ type SelectedModule =
 
 type WorkflowBuilderProps = {
   initialDraft: WorkflowDraft;
+  /** "new" starts from a blank draft and asks for a name before saving. */
+  mode?: "edit" | "new";
 };
 
-export function WorkflowBuilder({ initialDraft }: WorkflowBuilderProps) {
+export function WorkflowBuilder({
+  initialDraft,
+  mode = "edit",
+}: WorkflowBuilderProps) {
   const [workflowName, setWorkflowName] = React.useState(initialDraft.name);
+  const [detail, setDetail] = React.useState(initialDraft.detail);
   const [ownerRole, setOwnerRole] = React.useState(initialDraft.ownerRole);
   const [trigger, setTrigger] = React.useState(initialDraft.trigger);
   const [classifierPrompt, setClassifierPrompt] = React.useState(
@@ -108,6 +114,11 @@ export function WorkflowBuilder({ initialDraft }: WorkflowBuilderProps) {
       ),
     [outcomes]
   );
+
+  const basicsReady = Boolean(workflowName.trim()) && Boolean(detail.trim());
+  const actionsReady =
+    outcomes.length > 0 &&
+    outcomes.every((outcome) => outcome.actions.every(actionIsReady));
 
   function updateOutcome(
     id: string,
@@ -231,6 +242,24 @@ export function WorkflowBuilder({ initialDraft }: WorkflowBuilderProps) {
                 </Button>
               </div>
 
+              {outcomes.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 rounded-md border border-dashed px-6 py-10 text-center">
+                  <GitBranch className="size-5 text-muted-foreground" />
+                  <div className="space-y-1">
+                    <p className="font-medium">No branches yet</p>
+                    <p className="max-w-sm text-sm text-muted-foreground">
+                      A branch is one thing the filter can decide an email is.
+                      Add one, describe the mail it should catch, then choose
+                      what happens to it.
+                    </p>
+                  </div>
+                  <Button type="button" onClick={addOutcome}>
+                    <Plus className="size-4" />
+                    Add first branch
+                  </Button>
+                </div>
+              ) : null}
+
               <div className="grid gap-3">
                 {outcomes.map((outcome) => (
                   <OutcomeBranch
@@ -262,18 +291,14 @@ export function WorkflowBuilder({ initialDraft }: WorkflowBuilderProps) {
           <CardHeader>
             <CardTitle>Ready Check</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 text-sm md:grid-cols-3">
+          <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <ReadinessRow label="Basics" ready={basicsReady} />
             <ReadinessRow label="Trigger" ready={Boolean(trigger.trim())} />
             <ReadinessRow
               label="Classifier"
               ready={Boolean(classifierPrompt.trim()) && exampleCount > 0}
             />
-            <ReadinessRow
-              label="Actions"
-              ready={outcomes.every((outcome) =>
-                outcome.actions.every(actionIsReady)
-              )}
-            />
+            <ReadinessRow label="Actions" ready={actionsReady} />
           </CardContent>
         </Card>
       </div>
@@ -290,8 +315,10 @@ export function WorkflowBuilder({ initialDraft }: WorkflowBuilderProps) {
             {selectedModule.type === "workflow" ? (
               <WorkflowSettings
                 workflowName={workflowName}
+                detail={detail}
                 ownerRole={ownerRole}
                 onWorkflowNameChange={setWorkflowName}
+                onDetailChange={setDetail}
                 onOwnerRoleChange={setOwnerRole}
               />
             ) : null}
@@ -327,11 +354,23 @@ export function WorkflowBuilder({ initialDraft }: WorkflowBuilderProps) {
               />
             ) : null}
             <Separator />
-            <Button type="button" className="w-full" onClick={saveDraft}>
+            <Button
+              type="button"
+              className="w-full"
+              disabled={!basicsReady}
+              onClick={saveDraft}
+            >
               <Save className="size-4" />
-              Save workflow
+              {mode === "new" && !lastSavedAt
+                ? "Create workflow"
+                : "Save workflow"}
             </Button>
-            {lastSavedAt ? (
+            {!basicsReady ? (
+              <p className="text-xs text-muted-foreground">
+                Give the workflow a name and a one-line detail in Settings
+                before saving it.
+              </p>
+            ) : lastSavedAt ? (
               <p className="text-xs text-muted-foreground">
                 Draft saved at {lastSavedAt}.
               </p>
@@ -431,13 +470,17 @@ function OutcomeBranch({
 
 function WorkflowSettings({
   workflowName,
+  detail,
   ownerRole,
   onWorkflowNameChange,
+  onDetailChange,
   onOwnerRoleChange,
 }: {
   workflowName: string;
+  detail: string;
   ownerRole: string;
   onWorkflowNameChange: (value: string) => void;
+  onDetailChange: (value: string) => void;
   onOwnerRoleChange: (value: string) => void;
 }) {
   return (
@@ -447,14 +490,30 @@ function WorkflowSettings({
         <Input
           id="workflow-name"
           value={workflowName}
+          placeholder="CEO inbox triage"
           onChange={(event) => onWorkflowNameChange(event.target.value)}
         />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="workflow-detail">Detail</Label>
+        <Textarea
+          id="workflow-detail"
+          value={detail}
+          placeholder="Routes investor, finance, and escalation mail out of the inbox before it needs a read."
+          onChange={(event) => onDetailChange(event.target.value)}
+          className="min-h-24"
+        />
+        <p className="text-xs text-muted-foreground">
+          One line describing what this workflow does. It is what the workflows
+          list shows next to the name.
+        </p>
       </div>
       <div className="space-y-2">
         <Label htmlFor="owner-role">Owner</Label>
         <Input
           id="owner-role"
           value={ownerRole}
+          placeholder="Everyone"
           onChange={(event) => onOwnerRoleChange(event.target.value)}
         />
       </div>

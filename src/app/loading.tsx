@@ -1,5 +1,5 @@
-import { DashboardSkeleton } from "@/components/states/page-skeletons";
+import { WorkflowsSkeleton } from "@/components/states/page-skeletons";
 
 export default function Loading() {
-  return <DashboardSkeleton />;
+  return <WorkflowsSkeleton />;
 }

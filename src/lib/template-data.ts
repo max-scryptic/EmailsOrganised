@@ -1,6 +1,5 @@
 import {
   CreditCard,
-  Home,
   ReceiptText,
   UserRound,
   Workflow,
@@ -12,8 +11,7 @@ export const appConfig = {
 };
 
 export const appNavItems = [
-  { title: "Dashboard", href: "/", icon: Home },
-  { title: "Workflows", href: "/workflows", icon: Workflow },
+  { title: "Workflows", href: "/", icon: Workflow },
 ];
 
 export const settingsSections = [

@@ -8,8 +8,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { appConfig } from "@/lib/template-data";
 
-const chartBars = [38, 52, 48, 66, 58, 76, 72, 88, 81, 93, 86, 98];
-
 function ActionSkeletons({ count = 2 }: { count?: number }) {
   return (
     <>
@@ -35,107 +33,6 @@ function MetricCardsSkeleton({ count = 4 }: { count?: number }) {
         </Card>
       ))}
     </section>
-  );
-}
-
-function TableSkeleton({
-  rows = 5,
-  columns = 5,
-}: {
-  rows?: number;
-  columns?: number;
-}) {
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Skeleton className="h-9 w-full sm:w-64" />
-        <div className="flex gap-2">
-          <Skeleton className="h-9 w-24" />
-          <Skeleton className="h-9 w-24" />
-        </div>
-      </div>
-      <div className="overflow-hidden rounded-md border">
-        <div className="grid grid-cols-[48px_1.4fr_0.8fr_0.8fr_0.7fr_48px] gap-4 border-b bg-muted/30 p-4">
-          {Array.from({ length: columns + 1 }).map((_, index) => (
-            <Skeleton key={index} className="h-4 w-full" />
-          ))}
-        </div>
-        {Array.from({ length: rows }).map((_, rowIndex) => (
-          <div
-            key={rowIndex}
-            className="grid grid-cols-[48px_1.4fr_0.8fr_0.8fr_0.7fr_48px] gap-4 border-b p-4 last:border-b-0"
-          >
-            {Array.from({ length: columns + 1 }).map((_, columnIndex) => (
-              <Skeleton
-                key={columnIndex}
-                className={columnIndex === 1 ? "h-5 w-full" : "h-5 w-3/4"}
-              />
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export function DashboardSkeleton() {
-  return (
-    <AppShell
-      title="Dashboard"
-      description={`${appConfig.name} at a glance: revenue, customers, and the actions the team runs most.`}
-      actions={<ActionSkeletons />}
-    >
-      <MetricCardsSkeleton />
-      <section className="grid gap-4 xl:grid-cols-[1fr_420px]">
-        <Card>
-          <CardHeader className="gap-2">
-            <Skeleton className="h-6 w-28" />
-            <Skeleton className="h-4 w-72 max-w-full" />
-          </CardHeader>
-          <CardContent>
-            <div className="flex h-72 items-end gap-2 rounded-md border bg-muted/30 p-4">
-              {chartBars.map((height, index) => (
-                <div
-                  key={index}
-                  className="flex h-full flex-1 items-end rounded-sm bg-muted"
-                >
-                  <Skeleton
-                    className="w-full rounded-sm bg-primary/25"
-                    style={{ height: `${height}%` }}
-                  />
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="gap-2">
-            <Skeleton className="h-6 w-32" />
-            <Skeleton className="h-4 w-64 max-w-full" />
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between rounded-md border px-3 py-2"
-              >
-                <Skeleton className="h-4 w-44" />
-                <Skeleton className="h-4 w-12" />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </section>
-      <Card>
-        <CardHeader className="gap-2">
-          <Skeleton className="h-6 w-28" />
-          <Skeleton className="h-4 w-96 max-w-full" />
-        </CardHeader>
-        <CardContent>
-          <TableSkeleton />
-        </CardContent>
-      </Card>
-    </AppShell>
   );
 }
 

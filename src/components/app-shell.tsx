@@ -4,6 +4,7 @@ import { Fragment } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
+import { useSidebarState } from "@/components/sidebar-state-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Breadcrumb,
@@ -41,8 +42,15 @@ export function AppShell({
   actions,
   breadcrumbs,
 }: AppShellProps) {
+  // This shell remounts on every navigation, so the open/collapsed state is
+  // controlled from the root layout instead of being held by the provider here.
+  const sidebarState = useSidebarState();
+
   return (
-    <SidebarProvider>
+    <SidebarProvider
+      open={sidebarState?.open}
+      onOpenChange={sidebarState?.setOpen}
+    >
       <AppSidebar />
       <SidebarInset>
         <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-2 border-b bg-background/95 backdrop-blur transition-[width,height] ease-linear supports-[backdrop-filter]:bg-background/80 group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">

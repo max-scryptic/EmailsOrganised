@@ -29,6 +29,8 @@ export type WorkflowOutcome = {
 
 export type WorkflowDraft = {
   name: string;
+  /** One-line summary of what the workflow does, shown in the workflows list. */
+  detail: string;
   ownerRole: string;
   trigger: string;
   classifierPrompt: string;
@@ -38,14 +40,12 @@ export type WorkflowDraft = {
 export type WorkflowStatus = "live" | "paused" | "draft";
 
 /**
- * A workflow as it appears in the workflows list. `detail` is the one-line
- * summary the table shows next to the name; `draft` is what the builder edits
- * on the detail page.
+ * A workflow as it appears in the workflows list. `draft` is everything the
+ * builder edits on the detail page, including the name and detail line.
  */
 export type SavedWorkflow = {
   id: string;
   status: WorkflowStatus;
-  detail: string;
   updatedAt: string;
   draft: WorkflowDraft;
 };
@@ -86,10 +86,27 @@ export function createWorkflowAction(
   };
 }
 
+/** The one email event every workflow starts from. */
+export const defaultWorkflowTrigger = "Email arrives in primary inbox";
+
+/** The blank slate the builder opens with on `/workflows/new`. */
+export function createEmptyWorkflowDraft(): WorkflowDraft {
+  return {
+    name: "",
+    detail: "",
+    ownerRole: "",
+    trigger: defaultWorkflowTrigger,
+    classifierPrompt: "",
+    outcomes: [],
+  };
+}
+
 export const ceoWorkflowDraft: WorkflowDraft = {
   name: "CEO inbox triage",
+  detail:
+    "Routes investor, finance, sales, and escalation mail out of the CEO inbox before it needs a read.",
   ownerRole: "CEO",
-  trigger: "Email arrives in primary inbox",
+  trigger: defaultWorkflowTrigger,
   classifierPrompt:
     "Filter each email by urgency, relationship, and whether it needs the CEO personally.",
   outcomes: [
@@ -172,6 +189,8 @@ export const ceoWorkflowDraft: WorkflowDraft = {
 
 export const supportTriageDraft: WorkflowDraft = {
   name: "Support inbox triage",
+  detail:
+    "Splits the shared support mailbox into bugs, how-to questions, and billing, and drafts the easy replies.",
   ownerRole: "Support lead",
   trigger: "Email arrives in support@ shared mailbox",
   classifierPrompt:
@@ -238,8 +257,10 @@ export const supportTriageDraft: WorkflowDraft = {
 
 export const newsletterCleanupDraft: WorkflowDraft = {
   name: "Newsletter cleanup",
+  detail:
+    "Keeps followed newsletters in the inbox and archives the rest of the bulk mail.",
   ownerRole: "Everyone",
-  trigger: "Email arrives in primary inbox",
+  trigger: defaultWorkflowTrigger,
   classifierPrompt:
     "Identify bulk mail — newsletters, product announcements, and marketing sequences — and keep only what the reader has said they follow.",
   outcomes: [
@@ -286,24 +307,18 @@ export const savedWorkflows: SavedWorkflow[] = [
   {
     id: "ceo-inbox-triage",
     status: "live",
-    detail:
-      "Routes investor, finance, sales, and escalation mail out of the CEO inbox before it needs a read.",
     updatedAt: "2026-08-28",
     draft: ceoWorkflowDraft,
   },
   {
     id: "support-inbox-triage",
     status: "live",
-    detail:
-      "Splits the shared support mailbox into bugs, how-to questions, and billing, and drafts the easy replies.",
     updatedAt: "2026-08-21",
     draft: supportTriageDraft,
   },
   {
     id: "newsletter-cleanup",
     status: "draft",
-    detail:
-      "Keeps followed newsletters in the inbox and archives the rest of the bulk mail.",
     updatedAt: "2026-08-14",
     draft: newsletterCleanupDraft,
   },

@@ -28,7 +28,7 @@ export default async function WorkflowDetailPage({
   return (
     <AppShell
       title={workflow.draft.name}
-      description={workflow.detail}
+      description={workflow.draft.detail}
       breadcrumbs={[
         { title: "Workflows", href: "/workflows" },
         { title: workflow.draft.name },

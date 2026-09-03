@@ -38,7 +38,7 @@ export type WorkflowDraft = {
 export const actionLabels: Record<WorkflowActionType, string> = {
   forward: "Forward email",
   draft_reply: "Draft reply",
-  apply_label: "Apply label",
+  apply_label: "Tag email",
   archive: "Archive",
 };
 
@@ -70,7 +70,7 @@ export const ceoWorkflowDraft: WorkflowDraft = {
   ownerRole: "CEO",
   trigger: "Email arrives in primary inbox",
   classifierPrompt:
-    "Classify each email by urgency, relationship, and whether it needs the CEO personally.",
+    "Filter each email by urgency, relationship, and whether it needs the CEO personally.",
   outcomes: [
     {
       id: "investor",

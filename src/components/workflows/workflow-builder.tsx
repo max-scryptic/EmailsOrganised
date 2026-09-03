@@ -5,8 +5,9 @@ import {
   Archive,
   ArrowDown,
   ArrowRight,
-  Bot,
+  Filter,
   Forward,
+  GitBranch,
   Inbox,
   MailCheck,
   Plus,
@@ -197,31 +198,33 @@ export function WorkflowBuilder({ initialDraft }: WorkflowBuilderProps) {
             </CardAction>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center">
+            <div className="mx-auto flex w-full max-w-2xl flex-col items-center">
               <FlowModuleButton
                 title="Email arrives"
                 detail={trigger}
                 icon={Inbox}
                 selected={selectedModule.type === "trigger"}
                 onClick={() => setSelectedModule({ type: "trigger" })}
+                className="max-w-md"
               />
-              <ArrowRight className="mx-auto hidden size-5 text-muted-foreground lg:block" />
+              <FlowConnector label="new email" />
               <FlowModuleButton
-                title="Classify with AI"
+                title="Filter incoming email"
                 detail={`${outcomes.length} outcomes, ${exampleCount} examples`}
-                icon={Bot}
+                icon={Filter}
                 selected={selectedModule.type === "classifier"}
                 onClick={() => setSelectedModule({ type: "classifier" })}
+                className="max-w-md"
               />
             </div>
 
             <div className="flex justify-center">
-              <ArrowDown className="size-5 text-muted-foreground" />
+              <BranchSplit />
             </div>
 
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <div className="font-medium">Classification branches</div>
+                <div className="font-medium">Filter branches</div>
                 <Button type="button" variant="outline" onClick={addOutcome}>
                   <Plus className="size-4" />
                   Add branch
@@ -461,7 +464,6 @@ function WorkflowSettings({
 
 function TriggerSettings({
   trigger,
-  onTriggerChange,
 }: {
   trigger: string;
   onTriggerChange: (value: string) => void;
@@ -469,11 +471,10 @@ function TriggerSettings({
   return (
     <div className="space-y-2">
       <Label htmlFor="trigger">Trigger</Label>
-      <Input
-        id="trigger"
-        value={trigger}
-        onChange={(event) => onTriggerChange(event.target.value)}
-      />
+      <Input id="trigger" value={trigger} disabled readOnly />
+      <p className="text-xs text-muted-foreground">
+        Every workflow starts from this fixed email event.
+      </p>
     </div>
   );
 }
@@ -487,7 +488,7 @@ function ClassifierSettings({
 }) {
   return (
     <div className="space-y-2">
-      <Label htmlFor="classifier-prompt">AI grounding</Label>
+      <Label htmlFor="classifier-prompt">Filter instructions</Label>
       <Textarea
         id="classifier-prompt"
         value={classifierPrompt}
@@ -830,12 +831,14 @@ function FlowModuleButton({
   icon: Icon,
   selected,
   onClick,
+  className,
 }: {
   title: string;
   detail: string;
   icon: React.ComponentType<{ className?: string }>;
   selected: boolean;
   onClick: () => void;
+  className?: string;
 }) {
   return (
     <button
@@ -843,7 +846,8 @@ function FlowModuleButton({
       onClick={onClick}
       className={cn(
         "flex min-h-24 w-full items-start gap-3 rounded-md border bg-background p-4 text-left transition hover:bg-muted/60",
-        selected && "border-primary bg-primary/10"
+        selected && "border-primary bg-primary/10",
+        className
       )}
     >
       <Icon className="mt-0.5 size-5 shrink-0 text-primary" />
@@ -854,6 +858,30 @@ function FlowModuleButton({
         </span>
       </span>
     </button>
+  );
+}
+
+function FlowConnector({ label }: { label: string }) {
+  return (
+    <div className="flex h-16 flex-col items-center justify-center">
+      <div className="h-8 w-px bg-border" />
+      <span className="rounded-md border bg-background px-2 py-1 text-xs text-muted-foreground">
+        {label}
+      </span>
+      <div className="h-8 w-px bg-border" />
+    </div>
+  );
+}
+
+function BranchSplit() {
+  return (
+    <div className="flex h-14 flex-col items-center justify-center">
+      <div className="h-5 w-px bg-border" />
+      <span className="flex size-8 items-center justify-center rounded-md border bg-background text-primary">
+        <GitBranch className="size-4" />
+      </span>
+      <ArrowDown className="mt-1 size-4 text-muted-foreground" />
+    </div>
   );
 }
 
@@ -895,7 +923,7 @@ function moduleLabel(module: SelectedModule) {
   }
 
   if (module.type === "classifier") {
-    return "Classifier";
+    return "Filter";
   }
 
   if (module.type === "outcome") {

@@ -4,11 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
-  CardAction,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { WorkflowEditor } from "@/components/workflows/workflow-editor";
 import { appConfig } from "@/lib/template-data";
 
 const workflowMetrics = [
@@ -45,17 +45,11 @@ const workflows = [
   },
 ];
 
-const pipelineStages = [
-  "Classify incoming message",
-  "Apply mailbox labels",
-  "Draft, file, or escalate",
-];
-
 export default function WorkflowsPage() {
   return (
     <AppShell
       title="Workflows"
-      description={`Automations for the mailbox routines ${appConfig.name} can run, review, and improve over time.`}
+      description={`Build modular mailbox automations for the routines ${appConfig.name} can run, review, and improve over time.`}
       actions={
         <>
           <Button type="button" variant="outline">
@@ -87,12 +81,14 @@ export default function WorkflowsPage() {
         ))}
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1fr_360px]">
+      <WorkflowEditor />
+
+      <section>
         <Card>
           <CardHeader>
             <CardTitle>Mailbox workflows</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Track the automations currently shaping inbox triage.
+              Track the automations already shaping inbox triage.
             </p>
           </CardHeader>
           <CardContent className="divide-y rounded-md border">
@@ -125,28 +121,6 @@ export default function WorkflowsPage() {
                   Review
                   <ArrowRight className="size-4" />
                 </Button>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Default pipeline</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              The core flow every workflow follows before sending anything.
-            </p>
-            <CardAction>
-              <Badge variant="outline">Review first</Badge>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {pipelineStages.map((stage, index) => (
-              <div key={stage} className="flex items-center gap-3">
-                <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-xs font-medium text-primary">
-                  {index + 1}
-                </div>
-                <div className="text-sm font-medium">{stage}</div>
               </div>
             ))}
           </CardContent>

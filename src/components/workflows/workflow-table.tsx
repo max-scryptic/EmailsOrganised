@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Trash2 } from "lucide-react";
+import { useConfirmDialog } from "@/components/use-confirm-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -17,6 +19,7 @@ import {
   type WorkflowStatus,
   workflowStatusLabels,
 } from "@/lib/workflow-data";
+import { deleteWorkflow } from "@/lib/workflow-store";
 
 const statusVariant: Record<WorkflowStatus, "default" | "secondary" | "outline"> =
   {
@@ -31,7 +34,13 @@ const updatedAtFormatter = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
 });
 
-function WorkflowRow({ workflow }: { workflow: SavedWorkflow }) {
+function WorkflowRow({
+  workflow,
+  onDelete,
+}: {
+  workflow: SavedWorkflow;
+  onDelete: () => void;
+}) {
   const router = useRouter();
   const href = `/workflows/${workflow.id}`;
 
@@ -80,11 +89,38 @@ function WorkflowRow({ workflow }: { workflow: SavedWorkflow }) {
       <TableCell className="px-4 py-3 align-top">
         <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
       </TableCell>
+      <TableCell className="px-2 py-3 align-top">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={`Delete ${workflow.draft.name}`}
+          className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          onClick={onDelete}
+        >
+          <Trash2 className="size-4" />
+        </Button>
+      </TableCell>
     </TableRow>
   );
 }
 
 export function WorkflowTable({ workflows }: { workflows: SavedWorkflow[] }) {
+  const { confirm, ConfirmDialog } = useConfirmDialog();
+
+  async function confirmDelete(workflow: SavedWorkflow) {
+    const confirmed = await confirm({
+      title: `Delete ${workflow.draft.name}?`,
+      description:
+        "The workflow stops running and its classifier, outcomes, and actions are removed. This cannot be undone.",
+      confirmLabel: "Delete workflow",
+    });
+
+    if (confirmed) {
+      deleteWorkflow(workflow.id);
+    }
+  }
+
   return (
     <div className="overflow-hidden rounded-md border">
       <Table>
@@ -97,14 +133,22 @@ export function WorkflowTable({ workflows }: { workflows: SavedWorkflow[] }) {
             <TableHead className="w-12 px-4">
               <span className="sr-only">Open</span>
             </TableHead>
+            <TableHead className="w-12 px-2">
+              <span className="sr-only">Actions</span>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {workflows.map((workflow) => (
-            <WorkflowRow key={workflow.id} workflow={workflow} />
+            <WorkflowRow
+              key={workflow.id}
+              workflow={workflow}
+              onDelete={() => confirmDelete(workflow)}
+            />
           ))}
         </TableBody>
       </Table>
+      <ConfirmDialog />
     </div>
   );
 }

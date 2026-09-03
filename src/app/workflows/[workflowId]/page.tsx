@@ -1,9 +1,8 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { Play } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { WorkflowBuilder } from "@/components/workflows/workflow-builder";
-import { Button } from "@/components/ui/button";
+import { WorkflowDetail } from "@/components/workflows/workflow-detail";
+import { WorkflowDetailActions } from "@/components/workflows/workflow-detail-actions";
 import { getSavedWorkflow } from "@/lib/workflow-data";
 
 export async function generateMetadata({
@@ -33,14 +32,9 @@ export default async function WorkflowDetailPage({
         { title: "Workflows", href: "/workflows" },
         { title: workflow.draft.name },
       ]}
-      actions={
-        <Button type="button" variant="outline">
-          <Play className="size-4" />
-          Run checks
-        </Button>
-      }
+      actions={<WorkflowDetailActions workflow={workflow} />}
     >
-      <WorkflowBuilder initialDraft={workflow.draft} />
+      <WorkflowDetail workflow={workflow} />
     </AppShell>
   );
 }

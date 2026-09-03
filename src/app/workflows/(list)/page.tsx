@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { Plus, Workflow } from "lucide-react";
+import { Plus } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { EmptyState } from "@/components/states/empty-state";
-import { WorkflowTable } from "@/components/workflows/workflow-table";
+import { WorkflowList } from "@/components/workflows/workflow-list";
 import { Button } from "@/components/ui/button";
 import { appConfig } from "@/lib/template-data";
 import { savedWorkflows } from "@/lib/workflow-data";
@@ -21,16 +20,7 @@ export default function WorkflowsPage() {
         </Button>
       }
     >
-      {savedWorkflows.length > 0 ? (
-        <WorkflowTable workflows={savedWorkflows} />
-      ) : (
-        <EmptyState
-          icon={Workflow}
-          title="No workflows yet"
-          description="Create your first workflow to describe the email it should catch and what should happen next."
-          action={{ label: "New workflow", href: "/workflows/new" }}
-        />
-      )}
+      <WorkflowList workflows={savedWorkflows} />
     </AppShell>
   );
 }

@@ -58,7 +58,7 @@ export function WorkflowTable({ workflows }: { workflows: SavedWorkflow[] }) {
                 </div>
               </TableCell>
               <TableCell className="max-w-md px-4 py-3 align-top text-muted-foreground whitespace-normal">
-                {workflow.detail}
+                {workflow.draft.detail}
               </TableCell>
               <TableCell className="px-4 py-3 align-top">
                 <Badge variant={statusVariant[workflow.status]}>

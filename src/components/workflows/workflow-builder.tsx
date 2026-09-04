@@ -164,7 +164,9 @@ export function WorkflowBuilder({
   const dragState = React.useRef<DragState | null>(null);
   const [workflowName, setWorkflowName] = React.useState(initialDraft.name);
   const [detail, setDetail] = React.useState(initialDraft.detail);
-  const [ownerRole, setOwnerRole] = React.useState(initialDraft.ownerRole);
+  // No longer edited in the builder header — kept so saving a draft round-trips
+  // whatever owner the workflow already has.
+  const ownerRole = initialDraft.ownerRole;
   const [trigger, setTrigger] = React.useState(initialDraft.trigger);
   const [classifierPrompt, setClassifierPrompt] = React.useState(
     initialDraft.classifierPrompt
@@ -656,16 +658,6 @@ export function WorkflowBuilder({
             multiline
             className="max-w-2xl text-sm text-muted-foreground"
           />
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <span className="pl-1">Owner</span>
-            <InlineEditableText
-              value={ownerRole}
-              onChange={setOwnerRole}
-              label="workflow owner"
-              placeholder="Everyone"
-              className="text-xs"
-            />
-          </div>
         </div>
         <div className="flex shrink-0 flex-col gap-1 lg:items-end">
           <div className="flex flex-wrap items-center gap-2">

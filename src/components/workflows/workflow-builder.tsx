@@ -23,6 +23,12 @@ import {
 import { useRouter } from "next/navigation";
 import { saveWorkflow } from "@/app/workflows/actions";
 import { InlineEditableText } from "@/components/workflows/inline-editable-text";
+import { NodeDataPanel } from "@/components/workflows/node-data-panel";
+import {
+  VariableInsertProvider,
+  VariableInput,
+  VariableTextarea,
+} from "@/components/workflows/variable-fields";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,7 +43,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { useConfirmDialog } from "@/components/use-confirm-dialog";
 import { cn } from "@/lib/utils";
 import {
@@ -50,6 +55,12 @@ import {
   type WorkflowOutcome,
   type WorkflowStatus,
 } from "@/lib/workflow-data";
+import {
+  chainNodeOutputTitle,
+  chainOutputFields,
+  type NodeOutputGroup,
+  type VariableChainNode,
+} from "@/lib/workflow-variables";
 
 const actionIcons = {
   forward: Forward,
@@ -111,6 +122,8 @@ type FlowCanvasNode = {
   ready: boolean;
   outcomeId?: string;
   actionId?: string;
+  /** Set on action nodes: which outputs the node publishes downstream. */
+  actionType?: WorkflowActionType;
 };
 
 type CanvasEdge = {
@@ -300,6 +313,31 @@ export function WorkflowBuilder({
         (node) => moduleKey(node.module) === moduleKey(selectedModule)
       ) ?? null,
     [canvasNodes, selectedModule]
+  );
+  // Each node has exactly one node feeding it, so the run that reaches the
+  // selected node — and with it the data that node can read — is the path back
+  // up the edges to the trigger.
+  const parentByNode = React.useMemo(() => {
+    const parents = new Map<string, string>();
+
+    canvasEdges.forEach((edge) => {
+      if (!parents.has(edge.to)) {
+        parents.set(edge.to, edge.from);
+      }
+    });
+
+    return parents;
+  }, [canvasEdges]);
+  const nodeData = React.useMemo(
+    () =>
+      selectedNode
+        ? nodeDataGroups({
+            node: selectedNode,
+            nodes: canvasNodeMap,
+            parents: parentByNode,
+          })
+        : { upstream: [], own: null },
+    [canvasNodeMap, parentByNode, selectedNode]
   );
   const inspectorPosition = selectedNode
     ? floatingPanelPosition({
@@ -1221,33 +1259,49 @@ export function WorkflowBuilder({
               onDelete={() => void deleteModule(selectedModule)}
               onClose={() => setSelectedModule(null)}
             >
-              {selectedModule.type === "trigger" ? (
-                <TriggerSettings trigger={trigger} onTriggerChange={setTrigger} />
-              ) : null}
-              {selectedModule.type === "classifier" ? (
-                <ClassifierSettings
-                  classifierPrompt={classifierPrompt}
-                  onClassifierPromptChange={setClassifierPrompt}
-                />
-              ) : null}
-              {selectedModule.type === "outcome" && selectedOutcome ? (
-                <OutcomeSettings
-                  outcome={selectedOutcome}
-                  onChange={(updater) =>
-                    updateOutcome(selectedOutcome.id, updater)
-                  }
-                />
-              ) : null}
-              {selectedModule.type === "action" &&
-              selectedOutcome &&
-              selectedAction ? (
-                <ActionSettings
-                  action={selectedAction}
-                  onChange={(updater) =>
-                    updateAction(selectedOutcome.id, selectedAction.id, updater)
-                  }
-                />
-              ) : null}
+              {/* Keyed so switching nodes forgets which field was last focused. */}
+              <VariableInsertProvider key={moduleKey(selectedModule)}>
+                <div className="space-y-4">
+                  {selectedModule.type === "trigger" ? (
+                    <TriggerSettings
+                      trigger={trigger}
+                      onTriggerChange={setTrigger}
+                    />
+                  ) : null}
+                  {selectedModule.type === "classifier" ? (
+                    <ClassifierSettings
+                      classifierPrompt={classifierPrompt}
+                      onClassifierPromptChange={setClassifierPrompt}
+                    />
+                  ) : null}
+                  {selectedModule.type === "outcome" && selectedOutcome ? (
+                    <OutcomeSettings
+                      outcome={selectedOutcome}
+                      onChange={(updater) =>
+                        updateOutcome(selectedOutcome.id, updater)
+                      }
+                    />
+                  ) : null}
+                  {selectedModule.type === "action" &&
+                  selectedOutcome &&
+                  selectedAction ? (
+                    <ActionSettings
+                      action={selectedAction}
+                      onChange={(updater) =>
+                        updateAction(
+                          selectedOutcome.id,
+                          selectedAction.id,
+                          updater
+                        )
+                      }
+                    />
+                  ) : null}
+                  <NodeDataPanel
+                    upstream={nodeData.upstream}
+                    own={nodeData.own}
+                  />
+                </div>
+              </VariableInsertProvider>
             </NodeInspector>
           ) : null}
         </div>
@@ -1937,6 +1991,7 @@ function createCanvasNodes({
         ready: actionIsReady(action),
         outcomeId: outcome.id,
         actionId: action.id,
+        actionType: action.type,
       });
     });
   });
@@ -1959,6 +2014,71 @@ function createCanvasEdges(outcomes: WorkflowOutcome[]) {
   });
 
   return edges;
+}
+
+/**
+ * What the selected node's data panel shows: the outputs of every node the run
+ * passed through to get here, plus the outputs this node adds for the nodes
+ * after it.
+ */
+function nodeDataGroups({
+  node,
+  nodes,
+  parents,
+}: {
+  node: FlowCanvasNode;
+  nodes: Map<string, FlowCanvasNode>;
+  parents: Map<string, string>;
+}): { upstream: NodeOutputGroup[]; own: NodeOutputGroup | null } {
+  const chain: FlowCanvasNode[] = [];
+  const seen = new Set<string>();
+  let current: FlowCanvasNode | undefined = node;
+
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id);
+    chain.unshift(current);
+
+    const parentId = parents.get(current.id);
+
+    current = parentId ? nodes.get(parentId) : undefined;
+  }
+
+  const steps = chain.flatMap((chainNode) => {
+    const variableNode = variableChainNode(chainNode);
+
+    return variableNode ? [{ node: chainNode, variableNode }] : [];
+  });
+  const fieldsByNode = chainOutputFields(steps.map((step) => step.variableNode));
+  const groups: NodeOutputGroup[] = steps.map((step) => ({
+    nodeId: step.node.id,
+    title: chainNodeOutputTitle(step.variableNode),
+    kindLabel: moduleLabel(step.node.module),
+    fields: fieldsByNode.get(step.node.id) ?? [],
+  }));
+  const last = groups.at(-1);
+  const own =
+    last && last.nodeId === node.id && last.fields.length > 0 ? last : null;
+
+  return {
+    upstream: groups
+      .filter((group) => group.nodeId !== node.id)
+      .filter((group) => group.fields.length > 0),
+    own,
+  };
+}
+
+function variableChainNode(node: FlowCanvasNode): VariableChainNode | null {
+  if (node.kind === "outcome") {
+    return { id: node.id, kind: "outcome", outcomeName: node.title };
+  }
+
+  if (node.kind === "action") {
+    return node.actionType
+      ? { id: node.id, kind: "action", actionType: node.actionType }
+      : null;
+  }
+
+  return { id: node.id, kind: node.kind };
 }
 
 function clampCanvasPosition(position: CanvasNodePosition, kind: CanvasNodeKind) {
@@ -2223,10 +2343,11 @@ function ClassifierSettings({
   return (
     <div className="space-y-2">
       <Label htmlFor="classifier-prompt">Filter instructions</Label>
-      <Textarea
+      <VariableTextarea
         id="classifier-prompt"
+        fieldLabel="Filter instructions"
         value={classifierPrompt}
-        onChange={(event) => onClassifierPromptChange(event.target.value)}
+        onValueChange={onClassifierPromptChange}
         className="min-h-36"
       />
     </div>
@@ -2257,13 +2378,14 @@ function OutcomeSettings({
       </div>
       <div className="space-y-2">
         <Label htmlFor="outcome-description">Classification rule</Label>
-        <Textarea
+        <VariableTextarea
           id="outcome-description"
+          fieldLabel="Classification rule"
           value={outcome.description}
-          onChange={(event) =>
+          onValueChange={(value) =>
             onChange((current) => ({
               ...current,
-              description: event.target.value,
+              description: value,
             }))
           }
           className="min-h-24"
@@ -2271,13 +2393,14 @@ function OutcomeSettings({
       </div>
       <div className="space-y-2">
         <Label htmlFor="outcome-examples">Examples</Label>
-        <Textarea
+        <VariableTextarea
           id="outcome-examples"
+          fieldLabel="Examples"
           value={outcome.examples}
-          onChange={(event) =>
+          onValueChange={(value) =>
             onChange((current) => ({
               ...current,
-              examples: event.target.value,
+              examples: value,
             }))
           }
           className="min-h-32"
@@ -2345,26 +2468,28 @@ function ApplyLabelFields({ action, actionId, onChange }: ActionFieldProps) {
     <div className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor={`${actionId}-label`}>Tag</Label>
-        <Input
+        <VariableInput
           id={`${actionId}-label`}
+          fieldLabel="Tag"
           value={action.labelName}
-          onChange={(event) =>
+          onValueChange={(value) =>
             onChange((current) => ({
               ...current,
-              labelName: event.target.value,
+              labelName: value,
             }))
           }
         />
       </div>
       <div className="space-y-2">
         <Label htmlFor={`${actionId}-label-note`}>Note</Label>
-        <Input
+        <VariableInput
           id={`${actionId}-label-note`}
+          fieldLabel="Note"
           value={action.note}
-          onChange={(event) =>
+          onValueChange={(value) =>
             onChange((current) => ({
               ...current,
-              note: event.target.value,
+              note: value,
             }))
           }
         />
@@ -2378,40 +2503,45 @@ function ForwardFields({ action, actionId, onChange }: ActionFieldProps) {
     <div className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor={`${actionId}-forward-to`}>Forward to</Label>
-        <Input
+        <VariableInput
           id={`${actionId}-forward-to`}
-          type="email"
+          fieldLabel="Forward to"
+          // Not `type="email"`: the address can be a variable from an earlier
+          // step, such as the sender's reply-to.
+          inputMode="email"
           value={action.forwardTo}
-          onChange={(event) =>
+          onValueChange={(value) =>
             onChange((current) => ({
               ...current,
-              forwardTo: event.target.value,
+              forwardTo: value,
             }))
           }
         />
       </div>
       <div className="space-y-2">
         <Label htmlFor={`${actionId}-subject-prefix`}>Subject prefix</Label>
-        <Input
+        <VariableInput
           id={`${actionId}-subject-prefix`}
+          fieldLabel="Subject prefix"
           value={action.subjectPrefix}
-          onChange={(event) =>
+          onValueChange={(value) =>
             onChange((current) => ({
               ...current,
-              subjectPrefix: event.target.value,
+              subjectPrefix: value,
             }))
           }
         />
       </div>
       <div className="space-y-2">
         <Label htmlFor={`${actionId}-forward-note`}>Forward note</Label>
-        <Textarea
+        <VariableTextarea
           id={`${actionId}-forward-note`}
+          fieldLabel="Forward note"
           value={action.note}
-          onChange={(event) =>
+          onValueChange={(value) =>
             onChange((current) => ({
               ...current,
-              note: event.target.value,
+              note: value,
             }))
           }
           className="min-h-24"
@@ -2419,13 +2549,14 @@ function ForwardFields({ action, actionId, onChange }: ActionFieldProps) {
       </div>
       <div className="space-y-2">
         <Label htmlFor={`${actionId}-signature`}>Signature</Label>
-        <Textarea
+        <VariableTextarea
           id={`${actionId}-signature`}
+          fieldLabel="Signature"
           value={action.signature}
-          onChange={(event) =>
+          onValueChange={(value) =>
             onChange((current) => ({
               ...current,
-              signature: event.target.value,
+              signature: value,
             }))
           }
           className="min-h-20"
@@ -2460,13 +2591,14 @@ function DraftReplyFields({ action, actionId, onChange }: ActionFieldProps) {
     <div className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor={`${actionId}-tone`}>Tone</Label>
-        <Input
+        <VariableInput
           id={`${actionId}-tone`}
+          fieldLabel="Tone"
           value={action.draftTone}
-          onChange={(event) =>
+          onValueChange={(value) =>
             onChange((current) => ({
               ...current,
-              draftTone: event.target.value,
+              draftTone: value,
             }))
           }
         />
@@ -2475,13 +2607,14 @@ function DraftReplyFields({ action, actionId, onChange }: ActionFieldProps) {
         <Label htmlFor={`${actionId}-draft-instructions`}>
           Draft instructions
         </Label>
-        <Textarea
+        <VariableTextarea
           id={`${actionId}-draft-instructions`}
+          fieldLabel="Draft instructions"
           value={action.draftInstructions}
-          onChange={(event) =>
+          onValueChange={(value) =>
             onChange((current) => ({
               ...current,
-              draftInstructions: event.target.value,
+              draftInstructions: value,
             }))
           }
           className="min-h-28"
@@ -2489,13 +2622,14 @@ function DraftReplyFields({ action, actionId, onChange }: ActionFieldProps) {
       </div>
       <div className="space-y-2">
         <Label htmlFor={`${actionId}-draft-signature`}>Signature</Label>
-        <Textarea
+        <VariableTextarea
           id={`${actionId}-draft-signature`}
+          fieldLabel="Signature"
           value={action.signature}
-          onChange={(event) =>
+          onValueChange={(value) =>
             onChange((current) => ({
               ...current,
-              signature: event.target.value,
+              signature: value,
             }))
           }
           className="min-h-20"
@@ -2520,13 +2654,14 @@ function ArchiveFields({ action, actionId, onChange }: ActionFieldProps) {
     <div className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor={`${actionId}-archive-note`}>Archive note</Label>
-        <Input
+        <VariableInput
           id={`${actionId}-archive-note`}
+          fieldLabel="Archive note"
           value={action.note}
-          onChange={(event) =>
+          onValueChange={(value) =>
             onChange((current) => ({
               ...current,
-              note: event.target.value,
+              note: value,
             }))
           }
         />

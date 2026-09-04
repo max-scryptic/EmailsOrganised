@@ -12,8 +12,6 @@ import {
   Inbox,
   Loader2,
   MailCheck,
-  MousePointer2,
-  Move,
   Plus,
   Save,
   Sparkles,
@@ -931,24 +929,6 @@ export function WorkflowBuilder({
               ready={Boolean(classifierPrompt.trim()) && exampleCount > 0}
             />
             <ReadinessChip label="Actions" ready={actionsReady} />
-          </div>
-
-          <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="bg-background/95 shadow-sm"
-              onClick={() => setPan({ x: 8, y: 8 })}
-              aria-label="Reset board position"
-              title="Reset board position"
-            >
-              <Move className="size-4" />
-            </Button>
-            <span className="pointer-events-none flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 text-xs text-muted-foreground shadow-sm">
-              <MousePointer2 className="size-3.5" />
-              {connectingFrom ? "Choose a target node" : "Board ready"}
-            </span>
           </div>
 
           <NodePalette

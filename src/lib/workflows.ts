@@ -8,7 +8,10 @@ import type {
   WorkflowDraft,
   WorkflowStatus,
 } from "@/lib/workflow-data";
-import { workflowDraftSchema } from "@/lib/workflow-validation";
+import {
+  workflowDraftSchema,
+  workflowIdSchema,
+} from "@/lib/workflow-validation";
 
 type WorkflowRow = {
   id: string;
@@ -68,6 +71,15 @@ export async function getWorkflow(id: string): Promise<SavedWorkflow | null> {
     return null;
   }
 
+  // Ids come straight off the URL. Anything that is not a uuid can never match
+  // a row, and handing it to Postgres raises a type error the page would
+  // surface as a crash instead of a 404.
+  const parsedId = workflowIdSchema.safeParse(id);
+
+  if (!parsedId.success) {
+    return null;
+  }
+
   const user = await requireUser();
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -75,7 +87,7 @@ export async function getWorkflow(id: string): Promise<SavedWorkflow | null> {
     .select(
       "id, name, detail, status, owner_role, trigger, classifier_prompt, outcomes, created_at, updated_at"
     )
-    .eq("id", id)
+    .eq("id", parsedId.data)
     .eq("user_id", user.id)
     .maybeSingle();
 

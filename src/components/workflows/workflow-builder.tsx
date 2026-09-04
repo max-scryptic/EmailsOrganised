@@ -248,8 +248,6 @@ export function WorkflowBuilder({
     React.useState<SelectedModule | null>(null);
   const [isPaletteOpen, setIsPaletteOpen] = React.useState(false);
   const [lastSavedAt, setLastSavedAt] = React.useState<string | null>(null);
-  const showWorkflowGraph =
-    mode === "edit" || outcomes.length > 0 || Boolean(classifierPrompt.trim());
   const [result, setResult] = React.useState<WorkflowResult>(null);
 
   const selectedOutcome =
@@ -285,24 +283,16 @@ export function WorkflowBuilder({
         outcomes,
         exampleCount,
         nodePositions,
-        showWorkflowGraph,
       }),
-    [
-      classifierPrompt,
-      exampleCount,
-      nodePositions,
-      outcomes,
-      showWorkflowGraph,
-      trigger,
-    ]
+    [classifierPrompt, exampleCount, nodePositions, outcomes, trigger]
   );
   const canvasNodeMap = React.useMemo(
     () => new Map(canvasNodes.map((node) => [node.id, node])),
     [canvasNodes]
   );
   const canvasEdges = React.useMemo(
-    () => createCanvasEdges(outcomes, showWorkflowGraph),
-    [outcomes, showWorkflowGraph]
+    () => createCanvasEdges(outcomes),
+    [outcomes]
   );
   const selectedNode = React.useMemo(
     () =>
@@ -324,7 +314,7 @@ export function WorkflowBuilder({
     ? canvasNodeMap.get(connectMenuNodeId) ?? null
     : null;
   const connectMenuOptions = connectMenuNode
-    ? nodeMenuOptions(connectMenuNode, showWorkflowGraph)
+    ? nodeMenuOptions(connectMenuNode)
     : [];
   const connectMenuPosition = connectMenuNode
     ? floatingPanelPosition({
@@ -373,6 +363,10 @@ export function WorkflowBuilder({
     );
   }
 
+  /**
+   * Adds the classification node and nothing else — its actions are the next
+   * thing you pick, not something chosen for you.
+   */
   function addOutcome(position?: CanvasNodePosition) {
     const nextIndex = outcomes.length;
     const nextOutcome: WorkflowOutcome = {
@@ -380,7 +374,7 @@ export function WorkflowBuilder({
       name: "New classification",
       description: "",
       examples: "",
-      actions: [createWorkflowAction("forward")],
+      actions: [],
     };
     const outcomePosition = clampCanvasPosition(
       position ?? {
@@ -389,19 +383,10 @@ export function WorkflowBuilder({
       },
       "outcome"
     );
-    const actionPosition = clampCanvasPosition(
-      {
-        x: outcomePosition.x + 330,
-        y: outcomePosition.y + 10,
-      },
-      "action"
-    );
-    const firstAction = nextOutcome.actions[0];
 
     setNodePositions((current) => ({
       ...current,
       [nextOutcome.id]: outcomePosition,
-      [firstAction.id]: actionPosition,
     }));
     setOutcomes((current) => [...current, nextOutcome]);
     setSelectedModule({ type: "outcome", outcomeId: nextOutcome.id });
@@ -797,16 +782,6 @@ export function WorkflowBuilder({
       sourceNode,
       kind,
       occupied: canvasNodes,
-      // Before the graph exists the classifier is not on the board yet, but it
-      // appears the moment a classification is added — so keep its slot clear.
-      reserved: showWorkflowGraph
-        ? []
-        : [
-            {
-              kind: "classifier" as CanvasNodeKind,
-              position: nodePositions.classifier ?? { x: 382, y: 390 },
-            },
-          ],
     });
 
     setConnectMenuNodeId(null);
@@ -1174,7 +1149,7 @@ export function WorkflowBuilder({
                 )}
                 onPointerDown={(event) => handleNodePointerDown(event, node)}
                 onSelect={() => handleNodeClick(node)}
-                canAddNext={nodeMenuOptions(node, showWorkflowGraph).length > 0}
+                canAddNext={nodeMenuOptions(node).length > 0}
                 menuOpen={connectMenuNodeId === node.id}
                 onToggleMenu={() => {
                   setConnectingFrom(null);
@@ -1884,14 +1859,12 @@ function createCanvasNodes({
   outcomes,
   exampleCount,
   nodePositions,
-  showWorkflowGraph,
 }: {
   trigger: string;
   classifierPrompt: string;
   outcomes: WorkflowOutcome[];
   exampleCount: number;
   nodePositions: CanvasPositions;
-  showWorkflowGraph: boolean;
 }) {
   const nodes: FlowCanvasNode[] = [
     {
@@ -1907,10 +1880,8 @@ function createCanvasNodes({
     },
   ];
 
-  if (!showWorkflowGraph) {
-    return nodes;
-  }
-
+  // Trigger → classifier is the fixed spine of every workflow, so it is on the
+  // board from the start rather than arriving with the first classification.
   nodes.push({
     id: "classifier",
     kind: "classifier",
@@ -1973,14 +1944,7 @@ function createCanvasNodes({
   return nodes;
 }
 
-function createCanvasEdges(
-  outcomes: WorkflowOutcome[],
-  showWorkflowGraph: boolean
-) {
-  if (!showWorkflowGraph) {
-    return [];
-  }
-
+function createCanvasEdges(outcomes: WorkflowOutcome[]) {
   const edges: CanvasEdge[] = [{ from: "trigger", to: "classifier" }];
 
   outcomes.forEach((outcome) => {
@@ -2129,14 +2093,11 @@ function useMeasuredHeight(defaultHeight: number) {
  * action, so
  * the handle offers exactly the nodes that can legally come next.
  */
-function nodeMenuOptions(
-  node: FlowCanvasNode,
-  showWorkflowGraph: boolean
-): PaletteWidgetType[] {
+function nodeMenuOptions(node: FlowCanvasNode): PaletteWidgetType[] {
   if (node.kind === "trigger") {
-    // Once the graph exists the trigger always feeds the classifier, and that
-    // link is fixed — there is nothing to add in between.
-    return showWorkflowGraph ? [] : ["outcome"];
+    // The trigger always feeds the classifier, and that link is fixed — there
+    // is nothing to add in between.
+    return [];
   }
 
   if (node.kind === "classifier") {

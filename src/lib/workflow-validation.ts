@@ -29,7 +29,9 @@ export const workflowOutcomeSchema = z.object({
   name: z.string(),
   description: z.string(),
   examples: z.string(),
-  actions: z.array(workflowActionSchema).min(1),
+  // A draft is saved as it is built, so a classification whose actions have not
+  // been picked yet is valid to store.
+  actions: z.array(workflowActionSchema),
 });
 
 export const workflowDraftSchema = z.object({

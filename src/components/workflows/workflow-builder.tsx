@@ -10,6 +10,7 @@ import {
   GitBranch,
   Grip,
   Inbox,
+  Link2,
   Loader2,
   MailCheck,
   MousePointer2,
@@ -72,6 +73,12 @@ const inspectorWidth = 320;
 const inspectorGap = 16;
 const inspectorMargin = 12;
 const defaultInspectorHeight = 360;
+/** The add-node menu the output handle opens, floated the same way. */
+const connectMenuWidth = 264;
+const defaultConnectMenuHeight = 340;
+/** Gap the auto-placed node leaves after the node it was added from. */
+const autoPlaceGap = 78;
+const autoPlaceStep = 148;
 const nodeHeights = {
   trigger: 112,
   classifier: 112,
@@ -171,25 +178,27 @@ export function WorkflowBuilder({
   const { confirm, ConfirmDialog } = useConfirmDialog();
   const inspectorRef = React.useRef<HTMLDivElement | null>(null);
   const [boardSize, setBoardSize] = React.useState({ width: 0, height: 0 });
-  const [inspectorHeight, setInspectorHeight] = React.useState(
-    defaultInspectorHeight
+  // Both floating panels measure themselves so the placement maths knows how
+  // much room they actually need.
+  const { height: inspectorHeight, measure: measureInspector } =
+    useMeasuredHeight(defaultInspectorHeight);
+  const { height: connectMenuHeight, measure: measureConnectMenu } =
+    useMeasuredHeight(defaultConnectMenuHeight);
+  // The inspector is also moved directly during a node drag, so it keeps a ref
+  // alongside the measurement.
+  const inspectorNodeRef = React.useCallback(
+    (node: HTMLDivElement) => {
+      inspectorRef.current = node;
+
+      const stopMeasuring = measureInspector(node);
+
+      return () => {
+        stopMeasuring();
+        inspectorRef.current = null;
+      };
+    },
+    [measureInspector]
   );
-  // Measures the inspector as it mounts and resizes so the placement maths
-  // knows how much room the panel actually needs.
-  const inspectorNodeRef = React.useCallback((node: HTMLDivElement) => {
-    inspectorRef.current = node;
-
-    const observer = new ResizeObserver(([entry]) => {
-      setInspectorHeight(entry.contentRect.height);
-    });
-
-    observer.observe(node);
-
-    return () => {
-      observer.disconnect();
-      inspectorRef.current = null;
-    };
-  }, []);
   const [workflowName, setWorkflowName] = React.useState(initialDraft.name);
   const [detail, setDetail] = React.useState(initialDraft.detail);
   // No longer edited in the builder header — kept so saving a draft round-trips
@@ -206,6 +215,13 @@ export function WorkflowBuilder({
   const [pan, setPan] = React.useState<CanvasNodePosition>({ x: 8, y: 8 });
   const [connectingFrom, setConnectingFrom] =
     React.useState<FlowCanvasNode | null>(null);
+  /**
+   * The node whose output handle opened the add-node menu. Held by id so the
+   * menu follows the node as it moves rather than freezing an old position.
+   */
+  const [connectMenuNodeId, setConnectMenuNodeId] = React.useState<
+    string | null
+  >(null);
   const [selectedModule, setSelectedModule] =
     React.useState<SelectedModule | null>(null);
   const [isPaletteOpen, setIsPaletteOpen] = React.useState(false);
@@ -274,11 +290,27 @@ export function WorkflowBuilder({
     [canvasNodes, selectedModule]
   );
   const inspectorPosition = selectedNode
-    ? inspectorScreenPosition({
+    ? floatingPanelPosition({
         nodePosition: selectedNode.position,
         pan,
         board: boardSize,
-        inspectorHeight,
+        panelWidth: inspectorWidth,
+        panelHeight: inspectorHeight,
+      })
+    : null;
+  const connectMenuNode = connectMenuNodeId
+    ? canvasNodeMap.get(connectMenuNodeId) ?? null
+    : null;
+  const connectMenuOptions = connectMenuNode
+    ? nodeMenuOptions(connectMenuNode, showWorkflowGraph)
+    : [];
+  const connectMenuPosition = connectMenuNode
+    ? floatingPanelPosition({
+        nodePosition: connectMenuNode.position,
+        pan,
+        board: boardSize,
+        panelWidth: connectMenuWidth,
+        panelHeight: connectMenuHeight,
       })
     : null;
 
@@ -354,16 +386,20 @@ export function WorkflowBuilder({
     setSelectedModule({ type: "outcome", outcomeId: nextOutcome.id });
   }
 
+  /**
+   * `insertIndex` is where the action lands in its branch's sequence, which is
+   * also where it lands in the drawn chain. Left out, it goes on the end.
+   */
   function addAction(
     outcomeId: string,
     type: WorkflowActionType,
-    position?: CanvasNodePosition
+    options: { position?: CanvasNodePosition; insertIndex?: number } = {}
   ) {
     const nextAction = createWorkflowAction(type);
     const outcome = outcomes.find((current) => current.id === outcomeId);
     const outcomePosition = nodePositions[outcomeId] ?? { x: 640, y: 96 };
     const actionPosition = clampCanvasPosition(
-      position ?? {
+      options.position ?? {
         x: outcomePosition.x + 330 + (outcome?.actions.length ?? 0) * 286,
         y: outcomePosition.y + 10,
       },
@@ -374,10 +410,17 @@ export function WorkflowBuilder({
       ...current,
       [nextAction.id]: actionPosition,
     }));
-    updateOutcome(outcomeId, (outcome) => ({
-      ...outcome,
-      actions: [...outcome.actions, nextAction],
-    }));
+    updateOutcome(outcomeId, (outcome) => {
+      const nextActions = [...outcome.actions];
+      const index = Math.min(
+        Math.max(options.insertIndex ?? nextActions.length, 0),
+        nextActions.length
+      );
+
+      nextActions.splice(index, 0, nextAction);
+
+      return { ...outcome, actions: nextActions };
+    });
     setSelectedModule({
       type: "action",
       outcomeId,
@@ -409,6 +452,7 @@ export function WorkflowBuilder({
       return next;
     });
     setConnectingFrom(null);
+    setConnectMenuNodeId(null);
     setSelectedModule(null);
   }
 
@@ -430,6 +474,7 @@ export function WorkflowBuilder({
       return next;
     });
     setConnectingFrom(null);
+    setConnectMenuNodeId(null);
     setSelectedModule(null);
   }
 
@@ -515,6 +560,45 @@ export function WorkflowBuilder({
 
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedModule]);
+
+  // The add-node menu closes on Escape or on a click anywhere outside it. Its
+  // own handle is exempt so clicking the handle again toggles it shut.
+  React.useEffect(() => {
+    if (!connectMenuNodeId) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      if (
+        target.closest("[data-connect-menu]") ||
+        target.closest("[data-connect-handle]")
+      ) {
+        return;
+      }
+
+      setConnectMenuNodeId(null);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setConnectMenuNodeId(null);
+      }
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [connectMenuNodeId]);
 
   function currentDraft(): WorkflowDraft {
     return {
@@ -637,8 +721,102 @@ export function WorkflowBuilder({
     const outcomeId = selectedOutcomeIdForWidgetDrop(point);
 
     if (outcomeId) {
-      addAction(outcomeId, widgetType, position);
+      addAction(outcomeId, widgetType, { position });
     }
+  }
+
+  /**
+   * Slides the board just far enough to bring a node into view, leaving room
+   * on the right for the inspector that opens beside it.
+   */
+  function revealPosition(position: CanvasNodePosition, kind: CanvasNodeKind) {
+    const margin = 24;
+
+    if (boardSize.width === 0 || boardSize.height === 0) {
+      return;
+    }
+
+    setPan((current) => {
+      const rightEdge = Math.max(
+        nodeWidth + margin,
+        boardSize.width - margin - inspectorWidth - inspectorGap
+      );
+      let { x, y } = current;
+
+      if (position.x + x + nodeWidth > rightEdge) {
+        x = rightEdge - position.x - nodeWidth;
+      }
+
+      if (position.x + x < margin) {
+        x = margin - position.x;
+      }
+
+      if (position.y + y + nodeHeights[kind] > boardSize.height - margin) {
+        y = boardSize.height - margin - nodeHeights[kind] - position.y;
+      }
+
+      if (position.y + y < margin) {
+        y = margin - position.y;
+      }
+
+      return x === current.x && y === current.y ? current : { x, y };
+    });
+  }
+
+  /**
+   * Adds the picked node straight after the node whose handle opened the menu,
+   * so the new node arrives already wired into that branch's sequence.
+   */
+  function addNodeAfter(
+    sourceNode: FlowCanvasNode,
+    widgetType: PaletteWidgetType
+  ) {
+    const kind: CanvasNodeKind = widgetType === "outcome" ? "outcome" : "action";
+    const position = placeNodeAfter({
+      sourceNode,
+      kind,
+      occupied: canvasNodes,
+      // Before the graph exists the classifier is not on the board yet, but it
+      // appears the moment a branch is added — so keep its slot clear.
+      reserved: showWorkflowGraph
+        ? []
+        : [
+            {
+              kind: "classifier" as CanvasNodeKind,
+              position: nodePositions.classifier ?? { x: 382, y: 390 },
+            },
+          ],
+    });
+
+    setConnectMenuNodeId(null);
+    revealPosition(position, kind);
+
+    if (widgetType === "outcome") {
+      addOutcome(position);
+      return;
+    }
+
+    if (sourceNode.kind === "outcome") {
+      // First in the branch: the new node sits between the branch and whatever
+      // used to be its first action.
+      addAction(sourceNode.id, widgetType, { position, insertIndex: 0 });
+      return;
+    }
+
+    if (sourceNode.kind !== "action" || !sourceNode.outcomeId) {
+      return;
+    }
+
+    const outcome = outcomes.find(
+      (current) => current.id === sourceNode.outcomeId
+    );
+    const sourceIndex =
+      outcome?.actions.findIndex((action) => action.id === sourceNode.id) ?? -1;
+
+    addAction(sourceNode.outcomeId, widgetType, {
+      position,
+      insertIndex: sourceIndex === -1 ? undefined : sourceIndex + 1,
+    });
   }
 
   function handleCanvasDrop(event: React.DragEvent<HTMLDivElement>) {
@@ -667,6 +845,7 @@ export function WorkflowBuilder({
       startPan: pan,
     };
     setConnectingFrom(null);
+    setConnectMenuNodeId(null);
     // Clicking the board itself is how you dismiss the node inspector.
     setSelectedModule(null);
   }
@@ -692,6 +871,7 @@ export function WorkflowBuilder({
       frame: 0,
       nextPosition: node.position,
     };
+    setConnectMenuNodeId(null);
     setSelectedModule(node.module);
   }
 
@@ -741,11 +921,12 @@ export function WorkflowBuilder({
     }
 
     inspector.style.transform = canvasPositionTransform(
-      inspectorScreenPosition({
+      floatingPanelPosition({
         nodePosition: position,
         pan,
         board: boardSize,
-        inspectorHeight,
+        panelWidth: inspectorWidth,
+        panelHeight: inspectorHeight,
       })
     );
   }
@@ -917,7 +1098,17 @@ export function WorkflowBuilder({
                 )}
                 onPointerDown={(event) => handleNodePointerDown(event, node)}
                 onSelect={() => setSelectedModule(node.module)}
-                onStartConnection={() => setConnectingFrom(node)}
+                canAddNext={nodeMenuOptions(node, showWorkflowGraph).length > 0}
+                menuOpen={connectMenuNodeId === node.id}
+                onToggleMenu={() => {
+                  setConnectingFrom(null);
+                  setConnectMenuNodeId((current) =>
+                    current === node.id ? null : node.id
+                  );
+                  // One panel at a time: the menu takes the spot the
+                  // inspector would float in.
+                  setSelectedModule(null);
+                }}
                 onCompleteConnection={() => handleConnectionTarget(node)}
               />
             ))}
@@ -968,6 +1159,29 @@ export function WorkflowBuilder({
               }
             }}
           />
+
+          {connectMenuNode &&
+          connectMenuPosition &&
+          connectMenuOptions.length > 0 ? (
+            <NodeConnectMenu
+              ref={measureConnectMenu}
+              sourceTitle={connectMenuNode.title}
+              options={connectMenuOptions}
+              canConnectExisting={canStartConnection(connectMenuNode)}
+              position={connectMenuPosition}
+              maxHeight={Math.max(
+                200,
+                (boardSize.height || defaultConnectMenuHeight) -
+                  inspectorMargin * 2
+              )}
+              onPick={(widgetType) => addNodeAfter(connectMenuNode, widgetType)}
+              onConnectExisting={() => {
+                setConnectingFrom(connectMenuNode);
+                setConnectMenuNodeId(null);
+              }}
+              onClose={() => setConnectMenuNodeId(null)}
+            />
+          ) : null}
 
           {selectedModule && inspectorPosition ? (
             <NodeInspector
@@ -1118,24 +1332,34 @@ function PaletteItem({
   widgetType,
   disabled = false,
   disabledHint,
+  draggable = true,
+  role,
   onAdd,
 }: {
   title: string;
   detail: string;
   icon: React.ComponentType<{ className?: string }>;
-  widgetType: PaletteWidgetType;
+  widgetType?: PaletteWidgetType;
   disabled?: boolean;
   disabledHint?: string;
+  /** The connect menu reuses this row but has nowhere to drop a drag. */
+  draggable?: boolean;
+  role?: string;
   onAdd: () => void;
 }) {
   return (
     <button
       type="button"
-      draggable={!disabled}
+      role={role}
+      draggable={draggable && !disabled}
       disabled={disabled}
       title={disabled ? disabledHint : undefined}
       onClick={onAdd}
       onDragStart={(event) => {
+        if (!draggable || !widgetType) {
+          return;
+        }
+
         event.dataTransfer.setData("application/x-workflow-widget", widgetType);
         event.dataTransfer.effectAllowed = "copy";
       }}
@@ -1150,8 +1374,103 @@ function PaletteItem({
           {detail}
         </span>
       </span>
-      <Grip className="size-4 shrink-0 text-muted-foreground" />
+      {draggable ? (
+        <Grip className="size-4 shrink-0 text-muted-foreground" />
+      ) : null}
     </button>
+  );
+}
+
+/**
+ * The list a node's output handle opens. Picking from it adds the node and
+ * wires it in straight after the node the menu belongs to.
+ */
+function NodeConnectMenu({
+  ref,
+  sourceTitle,
+  options,
+  canConnectExisting,
+  position,
+  maxHeight,
+  onPick,
+  onConnectExisting,
+  onClose,
+}: {
+  ref: React.Ref<HTMLDivElement>;
+  sourceTitle: string;
+  options: PaletteWidgetType[];
+  canConnectExisting: boolean;
+  /** Board-relative pixels, already flipped and clamped to stay on screen. */
+  position: CanvasNodePosition;
+  maxHeight: number;
+  onPick: (widgetType: PaletteWidgetType) => void;
+  onConnectExisting: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      ref={ref}
+      role="menu"
+      data-connect-menu
+      aria-label={`Add a node after ${sourceTitle}`}
+      className="absolute left-0 top-0 z-40 flex max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-lg border bg-card shadow-xl duration-150 animate-in fade-in-0 zoom-in-95"
+      style={{
+        width: connectMenuWidth,
+        maxHeight,
+        transform: canvasPositionTransform(position),
+      }}
+    >
+      <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">Add next node</p>
+          <p className="truncate text-xs text-muted-foreground">
+            After {sourceTitle}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-7 shrink-0"
+          onClick={onClose}
+          aria-label="Close the node list"
+        >
+          <X className="size-4" />
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
+        {options.map((option) => {
+          const Icon = option === "outcome" ? GitBranch : actionIcons[option];
+
+          return (
+            <PaletteItem
+              key={option}
+              role="menuitem"
+              title={option === "outcome" ? "Branch" : actionLabels[option]}
+              detail={
+                option === "outcome" ? "Classification outcome" : "Action node"
+              }
+              icon={Icon}
+              draggable={false}
+              onAdd={() => onPick(option)}
+            />
+          );
+        })}
+        {canConnectExisting ? (
+          <PaletteItem
+            role="menuitem"
+            title="Connect an existing node"
+            detail="Pick a node already on the board"
+            icon={Link2}
+            draggable={false}
+            onAdd={onConnectExisting}
+          />
+        ) : null}
+      </div>
+      <p className="border-t px-3 py-2 text-xs text-muted-foreground">
+        The new node is connected next in the sequence.
+      </p>
+    </div>
   );
 }
 
@@ -1236,18 +1555,23 @@ function CanvasNode({
   selected,
   connecting,
   canReceiveConnection,
+  canAddNext,
+  menuOpen,
   onPointerDown,
   onSelect,
-  onStartConnection,
+  onToggleMenu,
   onCompleteConnection,
 }: {
   node: FlowCanvasNode;
   selected: boolean;
   connecting: boolean;
   canReceiveConnection: boolean;
+  /** False when nothing can follow this node, which hides the plus entirely. */
+  canAddNext: boolean;
+  menuOpen: boolean;
   onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
   onSelect: () => void;
-  onStartConnection: () => void;
+  onToggleMenu: () => void;
   onCompleteConnection: () => void;
 }) {
   const Icon = node.icon;
@@ -1257,6 +1581,9 @@ function CanvasNode({
     <div
       role="button"
       tabIndex={0}
+      // Named explicitly so the handles nested inside it do not end up in the
+      // node's own accessible name.
+      aria-label={`${moduleLabel(node.module)}: ${node.title}`}
       onClick={onSelect}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -1281,12 +1608,13 @@ function CanvasNode({
       {node.kind !== "trigger" ? (
         <button
           type="button"
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
             onCompleteConnection();
           }}
           className={cn(
-            "absolute left-0 top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border bg-background transition",
+            "absolute left-0 top-1/2 z-10 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border bg-background transition",
             canReceiveConnection
               ? "border-primary ring-4 ring-primary/15"
               : "border-border"
@@ -1296,21 +1624,41 @@ function CanvasNode({
         />
       ) : null}
 
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onStartConnection();
-        }}
-        className={cn(
-          "absolute right-0 top-1/2 size-4 translate-x-1/2 -translate-y-1/2 rounded-full border bg-background transition",
-          connecting ? "border-primary ring-4 ring-primary/15" : "border-border"
-        )}
-        aria-label={`Start connection from ${node.title}`}
-        title={`Start connection from ${node.title}`}
-      >
-        <span className="sr-only">Connect</span>
-      </button>
+      {canAddNext ? (
+        <button
+          type="button"
+          data-connect-handle
+          data-open={menuOpen}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          // The handle is its own control: pressing it must not start a node
+          // drag or select the node underneath.
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleMenu();
+          }}
+          className={cn(
+            "group/handle absolute right-0 top-1/2 z-10 flex size-4 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full border bg-background text-primary transition-all",
+            "hover:size-6 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-md",
+            "focus-visible:size-6 focus-visible:border-primary focus-visible:bg-primary focus-visible:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "data-[open=true]:size-6 data-[open=true]:border-primary data-[open=true]:bg-primary data-[open=true]:text-primary-foreground data-[open=true]:shadow-md",
+            connecting && !menuOpen && "border-primary ring-4 ring-primary/15"
+          )}
+          aria-label={`Add a node after ${node.title}`}
+          title={`Add a node after ${node.title}`}
+        >
+          <Plus
+            aria-hidden="true"
+            className={cn(
+              "size-3.5 scale-0 opacity-0 transition-transform duration-150",
+              "group-hover/handle:scale-100 group-hover/handle:opacity-100",
+              "group-focus-visible/handle:scale-100 group-focus-visible/handle:opacity-100",
+              "group-data-[open=true]/handle:scale-100 group-data-[open=true]/handle:opacity-100"
+            )}
+          />
+        </button>
+      ) : null}
 
       <div className="flex items-start gap-3">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
@@ -1624,31 +1972,33 @@ function isTextEntryTarget(target: EventTarget | null) {
 }
 
 /**
- * Places the inspector beside its node in board pixels: to the right when it
- * fits, flipped to the left when it does not, then nudged back inside the
+ * Places a floating panel beside its node in board pixels: to the right when
+ * it fits, flipped to the left when it does not, then nudged back inside the
  * board so it is never half off the edge.
  */
-function inspectorScreenPosition({
+function floatingPanelPosition({
   nodePosition,
   pan,
   board,
-  inspectorHeight,
+  panelWidth,
+  panelHeight,
 }: {
   nodePosition: CanvasNodePosition;
   pan: CanvasNodePosition;
   board: { width: number; height: number };
-  inspectorHeight: number;
+  panelWidth: number;
+  panelHeight: number;
 }): CanvasNodePosition {
   const nodeLeft = nodePosition.x + pan.x;
   const nodeTop = nodePosition.y + pan.y;
   const rightX = nodeLeft + nodeWidth + inspectorGap;
-  const leftX = nodeLeft - inspectorGap - inspectorWidth;
+  const leftX = nodeLeft - inspectorGap - panelWidth;
 
   let x = rightX;
 
   if (
     board.width > 0 &&
-    rightX + inspectorWidth > board.width - inspectorMargin &&
+    rightX + panelWidth > board.width - inspectorMargin &&
     leftX >= inspectorMargin
   ) {
     x = leftX;
@@ -1657,7 +2007,7 @@ function inspectorScreenPosition({
   if (board.width > 0) {
     const maxX = Math.max(
       inspectorMargin,
-      board.width - inspectorWidth - inspectorMargin
+      board.width - panelWidth - inspectorMargin
     );
 
     x = Math.min(Math.max(x, inspectorMargin), maxX);
@@ -1668,13 +2018,123 @@ function inspectorScreenPosition({
   if (board.height > 0) {
     const maxY = Math.max(
       inspectorMargin,
-      board.height - inspectorHeight - inspectorMargin
+      board.height - panelHeight - inspectorMargin
     );
 
     y = Math.min(Math.max(y, inspectorMargin), maxY);
   }
 
   return { x, y };
+}
+
+/**
+ * Measures a floating panel as it mounts and resizes, so the placement maths
+ * knows how much room the panel actually needs.
+ */
+function useMeasuredHeight(defaultHeight: number) {
+  const [height, setHeight] = React.useState(defaultHeight);
+  const measure = React.useCallback((node: HTMLDivElement) => {
+    const observer = new ResizeObserver(([entry]) => {
+      setHeight(entry.contentRect.height);
+    });
+
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, []);
+
+  return { height, measure };
+}
+
+/**
+ * What can follow a node in the flow. Branches only ever hang off the
+ * classifier, and actions only ever hang off a branch or another action, so
+ * the handle offers exactly the nodes that can legally come next.
+ */
+function nodeMenuOptions(
+  node: FlowCanvasNode,
+  showWorkflowGraph: boolean
+): PaletteWidgetType[] {
+  if (node.kind === "trigger") {
+    // Once the graph exists the trigger always feeds the classifier, and that
+    // link is fixed — there is nothing to add in between.
+    return showWorkflowGraph ? [] : ["outcome"];
+  }
+
+  if (node.kind === "classifier") {
+    return ["outcome"];
+  }
+
+  return actionTypes;
+}
+
+/** Only branches and actions can be re-parented by hand. */
+function canStartConnection(node: FlowCanvasNode) {
+  return node.kind === "outcome" || node.kind === "action";
+}
+
+/**
+ * Drops the new node to the right of the one it was added from, stepping it
+ * out of the way of anything already sitting there.
+ */
+function placeNodeAfter({
+  sourceNode,
+  kind,
+  occupied,
+  reserved = [],
+}: {
+  sourceNode: FlowCanvasNode;
+  kind: CanvasNodeKind;
+  occupied: FlowCanvasNode[];
+  reserved?: { kind: CanvasNodeKind; position: CanvasNodePosition }[];
+}) {
+  const taken = [
+    ...occupied
+      .filter((node) => node.id !== sourceNode.id)
+      .map((node) => ({ kind: node.kind, position: node.position })),
+    ...reserved,
+  ];
+  const base = {
+    x: sourceNode.position.x + nodeWidth + autoPlaceGap,
+    y:
+      sourceNode.position.y +
+      (nodeHeights[sourceNode.kind] - nodeHeights[kind]) / 2,
+  };
+  // Straight across first, then alternating below and above it.
+  const offsets = [0, 1, -1, 2, -2, 3, -3, 4, -4];
+
+  for (const offset of offsets) {
+    const candidate = clampCanvasPosition(
+      { x: base.x, y: base.y + offset * autoPlaceStep },
+      kind
+    );
+
+    if (
+      !taken.some((other) =>
+        nodesOverlap(candidate, kind, other.position, other.kind)
+      )
+    ) {
+      return candidate;
+    }
+  }
+
+  return clampCanvasPosition(base, kind);
+}
+
+function nodesOverlap(
+  a: CanvasNodePosition,
+  aKind: CanvasNodeKind,
+  b: CanvasNodePosition,
+  bKind: CanvasNodeKind
+) {
+  const gap = 16;
+
+  return (
+    a.x < b.x + nodeWidth + gap &&
+    a.x + nodeWidth + gap > b.x &&
+    a.y < b.y + nodeHeights[bKind] + gap &&
+    a.y + nodeHeights[aKind] + gap > b.y
+  );
 }
 
 function moduleTitle(

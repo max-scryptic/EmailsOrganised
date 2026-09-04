@@ -5,8 +5,19 @@ import { useRouter } from "next/navigation";
 import { Loader2, Play, Trash2 } from "lucide-react";
 import { deleteWorkflow } from "@/app/workflows/actions";
 import { useConfirmDialog } from "@/components/use-confirm-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import type { SavedWorkflow } from "@/lib/workflow-data";
+
+type DeleteError = { title: string; description: string } | null;
 
 export function WorkflowDetailActions({
   workflow,
@@ -15,6 +26,7 @@ export function WorkflowDetailActions({
 }) {
   const router = useRouter();
   const { confirm, ConfirmDialog } = useConfirmDialog();
+  const [error, setError] = React.useState<DeleteError>(null);
   const [isPending, startTransition] = React.useTransition();
 
   async function confirmDelete() {
@@ -26,6 +38,7 @@ export function WorkflowDetailActions({
     });
 
     if (confirmed) {
+      setError(null);
       startTransition(() => {
         void (async () => {
           const result = await deleteWorkflow(workflow.id);
@@ -33,6 +46,11 @@ export function WorkflowDetailActions({
           if (result.status === "success") {
             // The detail page is gone now -- do not leave it in the back stack.
             router.replace("/workflows");
+          } else {
+            // These actions render into the page header, which has no room for
+            // an inline alert -- and staying silent here is what made a failed
+            // delete look like a dead button.
+            setError({ title: result.title, description: result.description });
           }
         })();
       });
@@ -60,6 +78,24 @@ export function WorkflowDetailActions({
         Delete workflow
       </Button>
       <ConfirmDialog />
+      <AlertDialog
+        open={Boolean(error)}
+        onOpenChange={(open) => !open && setError(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{error?.title}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {error?.description}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setError(null)}>
+              Close
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

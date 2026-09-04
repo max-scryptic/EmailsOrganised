@@ -12,6 +12,7 @@ import {
   Link2,
   Loader2,
   MailCheck,
+  Minus,
   Plus,
   Save,
   Sparkles,
@@ -81,6 +82,18 @@ const canvasWidth = 1520;
 const canvasHeight = 980;
 const nodeWidth = 248;
 /**
+ * How far the board can be scaled. The floor keeps a node's label readable;
+ * the ceiling is about as close as you can get before the grid stops helping.
+ */
+const minZoom = 0.4;
+const maxZoom = 2;
+/** One press of a zoom button. Multiplicative, so the steps feel even. */
+const zoomButtonStep = 1.2;
+/** Zoom is a float, so the buttons compare against the limits with slack. */
+const zoomEpsilon = 0.001;
+/** The board's background grid, in board pixels. */
+const canvasGridSize = 28;
+/**
  * The inspector floats beside the node it belongs to, so it needs fixed dims.
  * It is two columns: upstream data on the left, everything about the selected
  * node on the right. A node with nothing before it drops the left column and
@@ -116,6 +129,15 @@ type CanvasNodeKind = "trigger" | "classifier" | "outcome" | "action";
 type CanvasNodePosition = {
   x: number;
   y: number;
+};
+
+/**
+ * Where the board is looking: how far it has been panned, in board-container
+ * pixels, and how far it has been scaled. Pan and zoom travel together because
+ * zooming around a point moves both at once.
+ */
+type CanvasView = CanvasNodePosition & {
+  zoom: number;
 };
 
 type CanvasPositions = Record<string, CanvasNodePosition>;
@@ -257,7 +279,7 @@ export function WorkflowBuilder({
   const [nodePositions, setNodePositions] = React.useState<CanvasPositions>(
     () => createInitialNodePositions(initialDraft.outcomes)
   );
-  const [pan, setPan] = React.useState<CanvasNodePosition>({ x: 8, y: 8 });
+  const [view, setView] = React.useState<CanvasView>({ x: 8, y: 8, zoom: 1 });
   const [connectingFrom, setConnectingFrom] =
     React.useState<FlowCanvasNode | null>(null);
   /**
@@ -361,7 +383,7 @@ export function WorkflowBuilder({
   const inspectorPosition = selectedNode
     ? floatingPanelPosition({
         nodePosition: selectedNode.position,
-        pan,
+        view,
         board: boardSize,
         panelWidth: inspectorPanelWidth,
         panelHeight: inspectorHeight,
@@ -376,7 +398,7 @@ export function WorkflowBuilder({
   const connectMenuPosition = connectMenuNode
     ? floatingPanelPosition({
         nodePosition: connectMenuNode.position,
-        pan,
+        view,
         board: boardSize,
         panelWidth: connectMenuWidth,
         panelHeight: connectMenuHeight,
@@ -410,6 +432,76 @@ export function WorkflowBuilder({
 
     return () => observer.disconnect();
   }, []);
+
+  /**
+   * Trackpad gestures over the board. A pinch reaches the browser as a wheel
+   * event with `ctrlKey` set, so that is what zooms; a plain two-finger scroll
+   * pans, the way it does in every other board tool.
+   *
+   * Listening natively rather than through `onWheel` because React attaches
+   * wheel listeners passively, and both gestures have to call
+   * `preventDefault()` — the pinch to stop the browser zooming the page, the
+   * scroll to stop it rubber-banding.
+   */
+  React.useEffect(() => {
+    const board = canvasRef.current;
+
+    if (!board) {
+      return;
+    }
+
+    // An arrow rather than a declaration so `board` stays narrowed inside it.
+    const handleWheel = (event: WheelEvent) => {
+      const target = event.target;
+
+      // The floating panels scroll their own content — the board must not
+      // steal the gesture out from under them.
+      if (
+        target instanceof Element &&
+        target.closest("[data-canvas-overlay]")
+      ) {
+        return;
+      }
+
+      const delta = wheelDelta(event);
+
+      event.preventDefault();
+
+      if (event.ctrlKey || event.metaKey) {
+        const bounds = board.getBoundingClientRect();
+        const focal = {
+          x: event.clientX - bounds.left,
+          y: event.clientY - bounds.top,
+        };
+
+        setView((current) =>
+          zoomView(current, focal, current.zoom * wheelZoomFactor(delta.y))
+        );
+        return;
+      }
+
+      setView((current) => ({
+        ...current,
+        x: current.x - delta.x,
+        y: current.y - delta.y,
+      }));
+    };
+
+    board.addEventListener("wheel", handleWheel, { passive: false });
+
+    return () => board.removeEventListener("wheel", handleWheel);
+  }, []);
+
+  /** The zoom buttons have no pointer to anchor to, so they hold the middle. */
+  function zoomFromButton(nextZoom: (current: number) => number) {
+    setView((current) =>
+      zoomView(
+        current,
+        { x: boardSize.width / 2, y: boardSize.height / 2 },
+        nextZoom(current.zoom)
+      )
+    );
+  }
 
   function updateOutcome(
     id: string,
@@ -742,8 +834,8 @@ export function WorkflowBuilder({
     }
 
     return {
-      x: clientX - bounds.left - pan.x,
-      y: clientY - bounds.top - pan.y,
+      x: (clientX - bounds.left - view.x) / view.zoom,
+      y: (clientY - bounds.top - view.y) / view.zoom,
     };
   }
 
@@ -799,30 +891,36 @@ export function WorkflowBuilder({
       return;
     }
 
-    setPan((current) => {
+    setView((current) => {
+      // The node's footprint on screen, which shrinks and grows with the zoom
+      // even though the panel beside it does not.
+      const left = position.x * current.zoom;
+      const top = position.y * current.zoom;
+      const width = nodeWidth * current.zoom;
+      const height = nodeHeights[kind] * current.zoom;
       const rightEdge = Math.max(
-        nodeWidth + margin,
+        width + margin,
         boardSize.width - margin - inspectorWidth - inspectorGap
       );
       let { x, y } = current;
 
-      if (position.x + x + nodeWidth > rightEdge) {
-        x = rightEdge - position.x - nodeWidth;
+      if (left + x + width > rightEdge) {
+        x = rightEdge - left - width;
       }
 
-      if (position.x + x < margin) {
-        x = margin - position.x;
+      if (left + x < margin) {
+        x = margin - left;
       }
 
-      if (position.y + y + nodeHeights[kind] > boardSize.height - margin) {
-        y = boardSize.height - margin - nodeHeights[kind] - position.y;
+      if (top + y + height > boardSize.height - margin) {
+        y = boardSize.height - margin - height - top;
       }
 
-      if (position.y + y < margin) {
-        y = margin - position.y;
+      if (top + y < margin) {
+        y = margin - top;
       }
 
-      return x === current.x && y === current.y ? current : { x, y };
+      return x === current.x && y === current.y ? current : { ...current, x, y };
     });
   }
 
@@ -895,7 +993,7 @@ export function WorkflowBuilder({
       type: "pan",
       startClientX: event.clientX,
       startClientY: event.clientY,
-      startPan: pan,
+      startPan: view,
     };
     setConnectingFrom(null);
     setConnectMenuNodeId(null);
@@ -955,10 +1053,11 @@ export function WorkflowBuilder({
     }
 
     if (drag.type === "pan") {
-      setPan({
+      setView((current) => ({
+        ...current,
         x: drag.startPan.x + event.clientX - drag.startClientX,
         y: drag.startPan.y + event.clientY - drag.startClientY,
-      });
+      }));
       return;
     }
 
@@ -977,10 +1076,12 @@ export function WorkflowBuilder({
       drag.element.dataset.dragging = "true";
     }
 
+    // The pointer moves in screen pixels; the node lives in board pixels, and
+    // the two only line up at 100%.
     drag.nextPosition = clampCanvasPosition(
       {
-        x: drag.startPosition.x + deltaX,
-        y: drag.startPosition.y + deltaY,
+        x: drag.startPosition.x + deltaX / view.zoom,
+        y: drag.startPosition.y + deltaY / view.zoom,
       },
       drag.nodeKind
     );
@@ -1040,7 +1141,7 @@ export function WorkflowBuilder({
     inspector.style.transform = canvasPositionTransform(
       floatingPanelPosition({
         nodePosition: position,
-        pan,
+        view,
         board: boardSize,
         panelWidth: inspectorPanelWidth,
         panelHeight: inspectorHeight,
@@ -1177,8 +1278,15 @@ export function WorkflowBuilder({
             // A container so the floating panels lay themselves out against the
             // board's own width, not the viewport's.
             "@container relative min-h-0 flex-1 overflow-hidden bg-background",
-            "bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-[size:28px_28px]"
+            "bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)]"
           )}
+          style={{
+            // The grid is the board's ruler, so it takes the zoom with it —
+            // otherwise the nodes grow and the squares under them do not.
+            backgroundSize: `${canvasGridSize * view.zoom}px ${
+              canvasGridSize * view.zoom
+            }px`,
+          }}
           onDragOver={(event) => event.preventDefault()}
           onDrop={handleCanvasDrop}
           onPointerMove={handleCanvasPointerMove}
@@ -1190,7 +1298,10 @@ export function WorkflowBuilder({
             style={{
               width: canvasWidth,
               height: canvasHeight,
-              transform: canvasPositionTransform(pan),
+              transform: canvasViewTransform(view),
+              // Scaling from the corner keeps board pixels a plain multiple of
+              // the zoom, which is what every measurement here assumes.
+              transformOrigin: "0 0",
             }}
             onPointerDown={handleCanvasPointerDown}
           >
@@ -1225,6 +1336,15 @@ export function WorkflowBuilder({
               />
             ))}
           </div>
+
+          <ZoomControls
+            zoom={view.zoom}
+            onZoomIn={() => zoomFromButton((current) => current * zoomButtonStep)}
+            onZoomOut={() =>
+              zoomFromButton((current) => current / zoomButtonStep)
+            }
+            onReset={() => zoomFromButton(() => 1)}
+          />
 
           <NodePalette
             open={isPaletteOpen}
@@ -1354,6 +1474,71 @@ function formatWorkflowTimestamp(value: string) {
 }
 
 /**
+ * The board's zoom readout, in the corner opposite the add-node button. The
+ * gesture is the primary control — pinch the trackpad — so these are a small
+ * floating toolbar rather than anything that competes with the board.
+ *
+ * The percentage doubles as the reset: clicking it puts the board back to 100%.
+ */
+function ZoomControls({
+  zoom,
+  onZoomIn,
+  onZoomOut,
+  onReset,
+}: {
+  zoom: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onReset: () => void;
+}) {
+  const percent = Math.round(zoom * 100);
+
+  return (
+    <div
+      data-canvas-overlay
+      className="absolute right-3 top-3 z-30 flex items-center gap-0.5 rounded-lg border bg-card p-1 shadow-lg"
+    >
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="size-7"
+        onClick={onZoomOut}
+        disabled={zoom <= minZoom + zoomEpsilon}
+        aria-label="Zoom out"
+        title="Zoom out"
+      >
+        <Minus className="size-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-7 min-w-14 px-2 text-xs tabular-nums"
+        onClick={onReset}
+        disabled={percent === 100}
+        aria-label={`Zoom is ${percent} percent. Reset to 100 percent.`}
+        title="Reset zoom to 100%"
+      >
+        {percent}%
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="size-7"
+        onClick={onZoomIn}
+        disabled={zoom >= maxZoom - zoomEpsilon}
+        aria-label="Zoom in"
+        title="Zoom in"
+      >
+        <Plus className="size-4" />
+      </Button>
+    </div>
+  );
+}
+
+/**
  * The board's own add-node control: a button in the bottom-right corner that
  * expands into the list of nodes you can click or drag onto the board.
  */
@@ -1373,11 +1558,15 @@ function NodePalette({
   return (
     <div
       // Spans the board's height so a tall list scrolls instead of being
-      // clipped, but only the panel and the button take clicks.
-      className="pointer-events-none absolute inset-y-3 right-3 z-30 flex max-w-[calc(100%-1.5rem)] flex-col items-end justify-end gap-2"
+      // clipped, but only the panel and the button take clicks. It starts
+      // below the zoom controls rather than growing up into them.
+      className="pointer-events-none absolute bottom-3 right-3 top-16 z-30 flex max-w-[calc(100%-1.5rem)] flex-col items-end justify-end gap-2"
     >
       {open ? (
-        <div className="pointer-events-auto min-h-0 w-64 max-w-full overflow-y-auto rounded-lg border bg-card p-2 shadow-lg">
+        <div
+          data-canvas-overlay
+          className="pointer-events-auto min-h-0 w-64 max-w-full overflow-y-auto rounded-lg border bg-card p-2 shadow-lg"
+        >
           <div className="flex items-center justify-between gap-2 px-1 pb-2">
             <span className="text-sm font-medium">Add a node</span>
             <Button
@@ -1523,6 +1712,7 @@ function NodeConnectMenu({
       ref={ref}
       role="menu"
       data-connect-menu
+      data-canvas-overlay
       aria-label={`Add a node after ${sourceTitle}`}
       className="absolute left-0 top-0 z-40 flex max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-lg border bg-card shadow-xl duration-150 animate-in fade-in-0 zoom-in-95"
       style={{
@@ -1627,6 +1817,7 @@ function NodeInspector({
     <div
       ref={ref}
       role="dialog"
+      data-canvas-overlay
       aria-label={`${moduleLabel(module)} settings`}
       className="absolute left-0 top-0 z-40 flex max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-lg border bg-card shadow-xl duration-150 animate-in fade-in-0 zoom-in-95"
       style={{
@@ -2173,6 +2364,55 @@ function canvasPositionTransform(position: CanvasNodePosition) {
   return `translate3d(${position.x}px, ${position.y}px, 0)`;
 }
 
+function canvasViewTransform(view: CanvasView) {
+  return `${canvasPositionTransform(view)} scale(${view.zoom})`;
+}
+
+function clampZoom(zoom: number) {
+  return Math.min(Math.max(zoom, minZoom), maxZoom);
+}
+
+/**
+ * Scales the board around a point given in board-container pixels, so whatever
+ * sits under that point — the pinching fingers, or the middle of the view —
+ * stays exactly where it was while everything else moves away from it.
+ */
+function zoomView(
+  view: CanvasView,
+  focal: CanvasNodePosition,
+  nextZoom: number
+): CanvasView {
+  const zoom = clampZoom(nextZoom);
+
+  if (zoom === view.zoom) {
+    return view;
+  }
+
+  const scale = zoom / view.zoom;
+
+  return {
+    x: focal.x - (focal.x - view.x) * scale,
+    y: focal.y - (focal.y - view.y) * scale,
+    zoom,
+  };
+}
+
+/** Wheel deltas arrive in pixels, lines, or pages depending on the device. */
+function wheelDelta(event: WheelEvent) {
+  const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 100 : 1;
+
+  return { x: event.deltaX * unit, y: event.deltaY * unit };
+}
+
+/**
+ * Turns a pinch into a scale factor. Exponential so the gesture feels the same
+ * whether the board is at 40% or 200%, and capped per event because a mouse
+ * wheel held down with Ctrl reports far bigger jumps than a trackpad does.
+ */
+function wheelZoomFactor(deltaY: number) {
+  return Math.exp(-Math.min(Math.max(deltaY, -80), 80) / 200);
+}
+
 /** Only the nodes a workflow can live without can be deleted. */
 function canDeleteModule(module: SelectedModule) {
   return module.type === "outcome" || module.type === "action";
@@ -2197,20 +2437,23 @@ function isTextEntryTarget(target: EventTarget | null) {
  */
 function floatingPanelPosition({
   nodePosition,
-  pan,
+  view,
   board,
   panelWidth,
   panelHeight,
 }: {
   nodePosition: CanvasNodePosition;
-  pan: CanvasNodePosition;
+  view: CanvasView;
   board: { width: number; height: number };
   panelWidth: number;
   panelHeight: number;
 }): CanvasNodePosition {
-  const nodeLeft = nodePosition.x + pan.x;
-  const nodeTop = nodePosition.y + pan.y;
-  const rightX = nodeLeft + nodeWidth + inspectorGap;
+  // The panel floats over the board rather than inside it, so it is never
+  // scaled — only the node it points at is, and that is what has to be
+  // converted from board pixels to the ones the panel is placed in.
+  const nodeLeft = nodePosition.x * view.zoom + view.x;
+  const nodeTop = nodePosition.y * view.zoom + view.y;
+  const rightX = nodeLeft + nodeWidth * view.zoom + inspectorGap;
   const leftX = nodeLeft - inspectorGap - panelWidth;
 
   let x = rightX;

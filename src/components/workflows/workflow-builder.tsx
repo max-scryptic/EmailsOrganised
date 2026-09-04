@@ -319,13 +319,6 @@ export function WorkflowBuilder({
     : lastSavedAt
       ? `Draft saved at ${lastSavedAt}.`
       : null;
-  const actionsReady =
-    outcomes.length > 0 &&
-    outcomes.every(
-      (outcome) =>
-        outcome.actions.length > 0 && outcome.actions.every(actionIsReady)
-    );
-
   // The board measures itself so the inspector can flip sides and stay inside
   // the visible area instead of hanging off the edge of the card.
   React.useEffect(() => {
@@ -1101,15 +1094,6 @@ export function WorkflowBuilder({
             ))}
           </div>
 
-          <div className="pointer-events-none absolute left-3 top-3 z-10 flex flex-wrap items-center gap-2">
-            <ReadinessChip label="Trigger" ready={Boolean(trigger.trim())} />
-            <ReadinessChip
-              label="Classifier"
-              ready={Boolean(classifierPrompt.trim()) && exampleCount > 0}
-            />
-            <ReadinessChip label="Actions" ready={actionsReady} />
-          </div>
-
           <NodePalette
             open={isPaletteOpen}
             canAddAction={outcomes.length > 0}
@@ -1720,25 +1704,6 @@ function FlowEdges({
         );
       })}
     </svg>
-  );
-}
-
-function ReadinessChip({ label, ready }: { label: string; ready: boolean }) {
-  return (
-    <span
-      className={cn(
-        "flex items-center gap-1.5 rounded-full border bg-background/95 px-2.5 py-1 text-xs shadow-sm",
-        ready ? "text-muted-foreground" : "border-destructive/40 text-destructive"
-      )}
-    >
-      {ready ? (
-        <CircleDot className="size-3 text-success" />
-      ) : (
-        <TriangleAlert className="size-3" />
-      )}
-      {label}
-      <span className="sr-only">{ready ? "ready" : "needs input"}</span>
-    </span>
   );
 }
 

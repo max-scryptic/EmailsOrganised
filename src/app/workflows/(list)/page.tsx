@@ -16,12 +16,14 @@ export default async function WorkflowsPage() {
       title="Workflows"
       description={`The mailbox routines ${appConfig.name} runs for you. Open one to change how it classifies, routes, drafts, and reviews.`}
       actions={
-        <Button asChild>
-          <Link href="/workflows/new">
-            <Plus className="size-4" />
-            New workflow
-          </Link>
-        </Button>
+        workflows.length > 0 ? (
+          <Button asChild>
+            <Link href="/workflows/new">
+              <Plus className="size-4" />
+              New workflow
+            </Link>
+          </Button>
+        ) : null
       }
     >
       <WorkflowList workflows={workflows} />

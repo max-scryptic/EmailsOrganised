@@ -280,6 +280,11 @@ export function WorkflowBuilder({
     () => createInitialNodePositions(initialDraft.outcomes)
   );
   const [view, setView] = React.useState<CanvasView>({ x: 8, y: 8, zoom: 1 });
+  /**
+   * True only while the board is being dragged. The grab hand belongs to the
+   * drag, not to the board sitting there — idle, the pointer stays an arrow.
+   */
+  const [isPanning, setIsPanning] = React.useState(false);
   const [connectingFrom, setConnectingFrom] =
     React.useState<FlowCanvasNode | null>(null);
   /**
@@ -995,6 +1000,7 @@ export function WorkflowBuilder({
       startClientY: event.clientY,
       startPan: view,
     };
+    setIsPanning(true);
     setConnectingFrom(null);
     setConnectMenuNodeId(null);
     // Clicking the board itself is how you dismiss the node inspector.
@@ -1174,6 +1180,7 @@ export function WorkflowBuilder({
     }
 
     dragState.current = null;
+    setIsPanning(false);
   }
 
   function handleConnectionTarget(targetNode: FlowCanvasNode) {
@@ -1278,7 +1285,10 @@ export function WorkflowBuilder({
             // A container so the floating panels lay themselves out against the
             // board's own width, not the viewport's.
             "@container relative min-h-0 flex-1 overflow-hidden bg-background",
-            "bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)]"
+            "bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)]",
+            // A pan holds the hand over the whole board, so passing under a
+            // node mid-drag does not flick the cursor back to an arrow.
+            isPanning && "cursor-grabbing"
           )}
           style={{
             // The grid is the board's ruler, so it takes the zoom with it —
@@ -1294,7 +1304,7 @@ export function WorkflowBuilder({
           onPointerCancel={handleCanvasPointerUp}
         >
           <div
-            className="absolute left-0 top-0 cursor-grab active:cursor-grabbing"
+            className="absolute left-0 top-0"
             style={{
               width: canvasWidth,
               height: canvasHeight,
@@ -1927,7 +1937,7 @@ function CanvasNode({
         // Not `transition-all`: the position is a transform written straight to
         // the DOM every frame of a drag, and easing that would lag the pointer.
         "transition-[background-color,border-color,box-shadow,color]",
-        "cursor-grab select-none active:cursor-grabbing",
+        "select-none",
         // The trigger's idle glow animates box-shadow, which would outrank the
         // drag ring below — so it steps aside while the node is being dragged.
         isInitialNode &&
@@ -1937,8 +1947,10 @@ function CanvasNode({
         canReceiveConnection && "ring-2 ring-muted-foreground/20",
         // Set on the DOM by the drag handlers, not by React. A dragged node
         // lifts off the board: brand ring, deeper shadow, and above its
-        // neighbours so it never slides underneath one.
-        "data-[dragging=true]:z-20 data-[dragging=true]:border-primary data-[dragging=true]:bg-primary/5 data-[dragging=true]:shadow-lg data-[dragging=true]:ring-2 data-[dragging=true]:ring-primary/35"
+        // neighbours so it never slides underneath one. The hand appears with
+        // it — the attribute is only set once a press clears the drag
+        // threshold, so a plain click never changes the cursor.
+        "data-[dragging=true]:z-20 data-[dragging=true]:cursor-grabbing data-[dragging=true]:border-primary data-[dragging=true]:bg-primary/5 data-[dragging=true]:shadow-lg data-[dragging=true]:ring-2 data-[dragging=true]:ring-primary/35"
       )}
       style={{
         width: nodeWidth,

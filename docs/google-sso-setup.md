@@ -12,8 +12,10 @@ Section 4 is the long pole and should be started early — see the warning there
 ## 1. Supabase project
 
 1. Create a project in the **EmailsOrganised** organisation.
-2. Apply `supabase/migrations/20260902000000_users_and_google_credentials.sql`
-   — via `supabase db push`, or by pasting it into the SQL editor.
+2. Apply every file in `supabase/migrations/`, oldest first — via
+   `supabase db push`, or by pasting each one into the SQL editor. Do this
+   again whenever a migration is added: a table that exists in the repo but
+   not in the project fails at request time, not at build time.
 3. From **Project Settings → API Keys**, copy into `.env.local`:
    - `NEXT_PUBLIC_SUPABASE_URL` — `https://<project-ref>.supabase.co`
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` — the `sb_publishable_...` key

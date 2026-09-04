@@ -76,7 +76,7 @@ the product exists to do.
 | `src/proxy.ts` | Session refresh plus an optimistic signed-out redirect. |
 | `src/lib/supabase/` | Browser, server, service-role, and Proxy clients. |
 | `src/lib/google/token-store.ts` | Stores and refreshes Google mailbox tokens. |
-| `supabase/migrations/` | `public.users` and `public.google_credentials`. |
+| `supabase/migrations/` | `public.users`, `public.google_credentials`, `public.workflows`. |
 
 Authorization is enforced in `session.ts`, not in Proxy. Proxy runs on
 prefetches and only reads the session cookie, so it is a UX shortcut; every

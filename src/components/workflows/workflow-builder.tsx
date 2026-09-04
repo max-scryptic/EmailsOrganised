@@ -75,6 +75,12 @@ const defaultInspectorHeight = 360;
 /** The add-node menu the output handle opens, floated the same way. */
 const connectMenuWidth = 264;
 const defaultConnectMenuHeight = 340;
+/**
+ * How far the pointer has to travel before a press on a node counts as a drag
+ * rather than a click. Below it the node stays put and the press selects the
+ * node; above it the node moves and the inspector stays closed.
+ */
+const nodeDragThreshold = 4;
 /** Gap the auto-placed node leaves after the node it was added from. */
 const autoPlaceGap = 78;
 const autoPlaceStep = 148;
@@ -132,6 +138,8 @@ type DragState =
       element: HTMLDivElement;
       frame: number;
       nextPosition: CanvasNodePosition;
+      /** Flips once the pointer clears `nodeDragThreshold`. */
+      moved: boolean;
     };
 
 /**
@@ -174,6 +182,9 @@ export function WorkflowBuilder({
   const [isPending, startTransition] = React.useTransition();
   const canvasRef = React.useRef<HTMLDivElement>(null);
   const dragState = React.useRef<DragState | null>(null);
+  // Set when a node drag ends, so the trailing click does not open the
+  // inspector for the node that was just moved.
+  const ignoreNodeClick = React.useRef(false);
   const { confirm, ConfirmDialog } = useConfirmDialog();
   const inspectorRef = React.useRef<HTMLDivElement | null>(null);
   const [boardSize, setBoardSize] = React.useState({ width: 0, height: 0 });
@@ -866,8 +877,24 @@ export function WorkflowBuilder({
       element: event.currentTarget,
       frame: 0,
       nextPosition: node.position,
+      moved: false,
     };
+    ignoreNodeClick.current = false;
     setConnectMenuNodeId(null);
+    // Selection waits for the click: pressing to drag a node should move it,
+    // not open its inspector.
+  }
+
+  /**
+   * The click a press leaves behind opens the inspector, unless that press
+   * turned into a drag.
+   */
+  function handleNodeClick(node: FlowCanvasNode) {
+    if (ignoreNodeClick.current) {
+      ignoreNodeClick.current = false;
+      return;
+    }
+
     setSelectedModule(node.module);
   }
 
@@ -886,10 +913,22 @@ export function WorkflowBuilder({
       return;
     }
 
+    const deltaX = event.clientX - drag.startClientX;
+    const deltaY = event.clientY - drag.startClientY;
+
+    if (!drag.moved) {
+      if (Math.hypot(deltaX, deltaY) < nodeDragThreshold) {
+        // Still within the wobble a click carries — leave the node alone.
+        return;
+      }
+
+      drag.moved = true;
+    }
+
     drag.nextPosition = clampCanvasPosition(
       {
-        x: drag.startPosition.x + event.clientX - drag.startClientX,
-        y: drag.startPosition.y + event.clientY - drag.startClientY,
+        x: drag.startPosition.x + deltaX,
+        y: drag.startPosition.y + deltaY,
       },
       drag.nodeKind
     );
@@ -930,7 +969,7 @@ export function WorkflowBuilder({
   function handleCanvasPointerUp() {
     const drag = dragState.current;
 
-    if (drag?.type === "node") {
+    if (drag?.type === "node" && drag.moved) {
       if (drag.frame !== 0) {
         window.cancelAnimationFrame(drag.frame);
         drag.element.style.transform = canvasPositionTransform(
@@ -943,6 +982,9 @@ export function WorkflowBuilder({
         ...current,
         [drag.nodeId]: drag.nextPosition,
       }));
+      // The browser still fires a click after the drag; that one is not a
+      // request to open the inspector.
+      ignoreNodeClick.current = true;
     }
 
     dragState.current = null;
@@ -1077,7 +1119,7 @@ export function WorkflowBuilder({
                   connectingFrom && connectingFrom.id !== node.id
                 )}
                 onPointerDown={(event) => handleNodePointerDown(event, node)}
-                onSelect={() => setSelectedModule(node.module)}
+                onSelect={() => handleNodeClick(node)}
                 canAddNext={nodeMenuOptions(node, showWorkflowGraph).length > 0}
                 menuOpen={connectMenuNodeId === node.id}
                 onToggleMenu={() => {

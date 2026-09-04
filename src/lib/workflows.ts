@@ -16,7 +16,6 @@ import {
 type WorkflowRow = {
   id: string;
   name: string;
-  detail: string;
   status: WorkflowStatus;
   owner_role: string;
   trigger: string;
@@ -36,7 +35,7 @@ export async function listWorkflows(): Promise<SavedWorkflow[]> {
   const { data, error } = await supabase
     .from("workflows")
     .select(
-      "id, name, detail, status, owner_role, trigger, classifier_prompt, outcomes, created_at, updated_at"
+      "id, name, status, owner_role, trigger, classifier_prompt, outcomes, created_at, updated_at"
     )
     .eq("user_id", user.id)
     .order("updated_at", { ascending: false });
@@ -51,7 +50,6 @@ export async function listWorkflows(): Promise<SavedWorkflow[]> {
 export function workflowFromRow(row: WorkflowRow): SavedWorkflow {
   const draft = workflowDraftSchema.parse({
     name: row.name,
-    detail: row.detail,
     ownerRole: row.owner_role,
     trigger: row.trigger,
     classifierPrompt: row.classifier_prompt,
@@ -85,7 +83,7 @@ export async function getWorkflow(id: string): Promise<SavedWorkflow | null> {
   const { data, error } = await supabase
     .from("workflows")
     .select(
-      "id, name, detail, status, owner_role, trigger, classifier_prompt, outcomes, created_at, updated_at"
+      "id, name, status, owner_role, trigger, classifier_prompt, outcomes, created_at, updated_at"
     )
     .eq("id", parsedId.data)
     .eq("user_id", user.id)

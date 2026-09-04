@@ -28,9 +28,11 @@ export type WorkflowOutcome = {
 };
 
 export type WorkflowDraft = {
+  /**
+   * Blank is allowed: saving an unnamed workflow gives it the next
+   * `New Workflow N` name instead of refusing the save.
+   */
   name: string;
-  /** One-line summary of what the workflow does, shown in the workflows list. */
-  detail: string;
   ownerRole: string;
   trigger: string;
   classifierPrompt: string;
@@ -41,7 +43,7 @@ export type WorkflowStatus = "live" | "paused" | "draft";
 
 /**
  * A workflow as it appears in the workflows list. `draft` is everything the
- * builder edits on the detail page, including the name and detail line.
+ * builder edits on the detail page, including the name.
  */
 export type SavedWorkflow = {
   id: string;
@@ -89,11 +91,22 @@ export function createWorkflowAction(
 /** The one email event every workflow starts from. */
 export const defaultWorkflowTrigger = "Email arrives in primary inbox";
 
+/**
+ * Workflows saved without a name are numbered from this prefix — the first is
+ * "New Workflow 1", the next "New Workflow 2", and so on per user.
+ */
+export const defaultWorkflowNamePrefix = "New Workflow";
+
+/** Matches a name this app generated, so the next number can follow it. */
+export const defaultWorkflowNamePattern = new RegExp(
+  `^${defaultWorkflowNamePrefix}\\s+(\\d+)$`,
+  "i"
+);
+
 /** The blank slate the builder opens with on `/workflows/new`. */
 export function createEmptyWorkflowDraft(): WorkflowDraft {
   return {
     name: "",
-    detail: "",
     ownerRole: "",
     trigger: defaultWorkflowTrigger,
     classifierPrompt: "",

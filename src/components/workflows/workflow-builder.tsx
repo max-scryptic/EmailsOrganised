@@ -44,6 +44,7 @@ import { cn } from "@/lib/utils";
 import {
   actionLabels,
   createWorkflowAction,
+  defaultWorkflowNamePrefix,
   type WorkflowAction,
   type WorkflowActionType,
   type WorkflowDraft,
@@ -198,7 +199,6 @@ export function WorkflowBuilder({
     [measureInspector]
   );
   const [workflowName, setWorkflowName] = React.useState(initialDraft.name);
-  const [detail, setDetail] = React.useState(initialDraft.detail);
   // No longer edited in the builder header — kept so saving a draft round-trips
   // whatever owner the workflow already has.
   const ownerRole = initialDraft.ownerRole;
@@ -312,7 +312,13 @@ export function WorkflowBuilder({
       })
     : null;
 
-  const basicsReady = Boolean(workflowName.trim()) && Boolean(detail.trim());
+  // A name is optional, so the only thing worth saying beside Save is what an
+  // unnamed workflow will end up called — or when the last save landed.
+  const saveHint = !workflowName.trim()
+    ? "Unnamed workflows are numbered for you."
+    : lastSavedAt
+      ? `Draft saved at ${lastSavedAt}.`
+      : null;
   const actionsReady =
     outcomes.length > 0 &&
     outcomes.every(
@@ -601,7 +607,6 @@ export function WorkflowBuilder({
   function currentDraft(): WorkflowDraft {
     return {
       name: workflowName,
-      detail,
       ownerRole,
       trigger,
       classifierPrompt,
@@ -987,6 +992,9 @@ export function WorkflowBuilder({
           const savedWorkflow = response.workflow;
 
           setLastSavedAt(formatWorkflowTimestamp(savedWorkflow.updatedAt));
+          // An unnamed workflow is numbered on the server, so the heading only
+          // learns its name from the row that came back.
+          setWorkflowName(savedWorkflow.draft.name);
 
           if (!workflowId) {
             router.replace(`/workflows/${savedWorkflow.id}`);
@@ -999,7 +1007,7 @@ export function WorkflowBuilder({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       {result ? (
         <Alert variant={result.status === "error" ? "destructive" : "default"}>
           {result.status === "error" ? (
@@ -1012,51 +1020,32 @@ export function WorkflowBuilder({
         </Alert>
       ) : null}
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      {/* One line, so the board underneath gets the rest of the viewport. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <InlineEditableText
             value={workflowName}
             onChange={setWorkflowName}
             label="workflow name"
-            placeholder="Name this workflow"
-            className="text-2xl font-semibold tracking-normal sm:text-3xl"
-          />
-          <InlineEditableText
-            value={detail}
-            onChange={setDetail}
-            label="workflow detail"
-            placeholder="Describe in one line what this workflow does"
-            multiline
-            className="max-w-2xl text-sm text-muted-foreground"
+            placeholder={defaultWorkflowNamePrefix}
+            className="text-xl font-semibold tracking-normal sm:text-2xl"
           />
         </div>
-        <div className="flex shrink-0 flex-col gap-1 lg:items-end">
-          <div className="flex flex-wrap items-center gap-2">
-            {actions}
-            <Button
-              type="button"
-              onClick={saveDraft}
-              disabled={!basicsReady || isPending}
-            >
-              {isPending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Save className="size-4" />
-              )}
-              {mode === "new" && !lastSavedAt
-                ? "Create workflow"
-                : "Save workflow"}
-            </Button>
-          </div>
-          {!basicsReady ? (
-            <p className="text-xs text-muted-foreground">
-              Name the workflow and add a one-line detail before saving it.
-            </p>
-          ) : lastSavedAt ? (
-            <p className="text-xs text-muted-foreground">
-              Draft saved at {lastSavedAt}.
-            </p>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {saveHint ? (
+            <p className="text-xs text-muted-foreground">{saveHint}</p>
           ) : null}
+          {actions}
+          <Button type="button" onClick={saveDraft} disabled={isPending}>
+            {isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Save className="size-4" />
+            )}
+            {mode === "new" && !lastSavedAt
+              ? "Create workflow"
+              : "Save workflow"}
+          </Button>
         </div>
       </div>
 
@@ -1113,7 +1102,6 @@ export function WorkflowBuilder({
           </div>
 
           <div className="pointer-events-none absolute left-3 top-3 z-10 flex flex-wrap items-center gap-2">
-            <ReadinessChip label="Basics" ready={basicsReady} />
             <ReadinessChip label="Trigger" ready={Boolean(trigger.trim())} />
             <ReadinessChip
               label="Classifier"

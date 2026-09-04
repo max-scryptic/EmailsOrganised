@@ -29,13 +29,12 @@ export default async function WorkflowDetailPage({
   return (
     <AppShell
       title={workflow.draft.name}
-      description={workflow.draft.detail}
       breadcrumbs={[
         { title: "Workflows", href: "/workflows" },
         { title: workflow.draft.name },
       ]}
-      // The builder owns the heading so the name and detail stay editable, and
-      // the board fills everything under it.
+      // The builder owns the heading so the name stays editable, and the board
+      // fills everything under it.
       hideHeading
       fill
     >

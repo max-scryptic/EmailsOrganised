@@ -59,8 +59,8 @@ function WorkflowRow({
         if (event.target instanceof Element && event.target.closest("a, button, input, select, textarea, [role='button']")) {
           return;
         }
-        // A modified click has no anchor to act on here, and selecting the
-        // detail text should not navigate away.
+        // A modified click has no anchor to act on here, and selecting text in
+        // the row should not navigate away.
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
           return;
         }
@@ -80,9 +80,6 @@ function WorkflowRow({
         <div className="text-xs text-muted-foreground">
           {workflow.draft.ownerRole}
         </div>
-      </TableCell>
-      <TableCell className="max-w-md px-4 py-3 align-top text-muted-foreground whitespace-normal">
-        {workflow.draft.detail}
       </TableCell>
       <TableCell className="px-4 py-3 align-top">
         <Badge variant={statusVariant[workflow.status]}>
@@ -166,7 +163,6 @@ export function WorkflowTable({ workflows }: { workflows: SavedWorkflow[] }) {
           <TableHeader>
             <TableRow className="bg-muted/30">
               <TableHead className="px-4">Workflow</TableHead>
-              <TableHead className="px-4">Detail</TableHead>
               <TableHead className="px-4">Status</TableHead>
               <TableHead className="px-4">Last edited</TableHead>
               <TableHead className="w-12 px-4">

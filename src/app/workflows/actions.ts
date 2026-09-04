@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/session";
-import type { SavedWorkflow } from "@/lib/workflow-data";
+import {
+  defaultWorkflowNamePattern,
+  defaultWorkflowNamePrefix,
+  type SavedWorkflow,
+} from "@/lib/workflow-data";
 import { workflowFromRow } from "@/lib/workflows";
 import {
   saveWorkflowInputSchema,
@@ -29,7 +33,6 @@ type WorkflowMutationResult =
 type WorkflowMutationRow = {
   id: string;
   name: string;
-  detail: string;
   status: "live" | "paused" | "draft";
   owner_role: string;
   trigger: string;
@@ -64,9 +67,13 @@ export async function saveWorkflow(
 
   const user = await requireUser();
   const supabase = await createClient();
+  // Naming a workflow is optional, so an unnamed one is numbered here rather
+  // than in the builder — only the database knows what the user already has.
+  const name =
+    parsed.data.name ||
+    (await nextDefaultWorkflowName(supabase, user.id, parsed.data.id));
   const values = {
-    name: parsed.data.name,
-    detail: parsed.data.detail,
+    name,
     status: parsed.data.status ?? "draft",
     owner_role: parsed.data.ownerRole,
     trigger: parsed.data.trigger,
@@ -84,7 +91,7 @@ export async function saveWorkflow(
 
   const { data, error } = await query
     .select(
-      "id, name, detail, status, owner_role, trigger, classifier_prompt, outcomes, created_at, updated_at"
+      "id, name, status, owner_role, trigger, classifier_prompt, outcomes, created_at, updated_at"
     )
     .single();
 
@@ -104,9 +111,40 @@ export async function saveWorkflow(
   return {
     status: "success",
     title: parsed.data.id ? "Workflow updated" : "Workflow created",
-    description: `${parsed.data.name} is saved in the database.`,
+    description: `${name} is saved in the database.`,
     workflow: workflowFromRow(data as WorkflowMutationRow),
   };
+}
+
+/**
+ * The next free "New Workflow N" for this user. Numbering follows the highest
+ * one already taken, so deleting a workflow never hands its number to a new
+ * one. `currentId` is excluded so clearing an existing workflow's name does
+ * not make it step over itself.
+ */
+async function nextDefaultWorkflowName(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  currentId?: string
+) {
+  let query = supabase
+    .from("workflows")
+    .select("name")
+    .eq("user_id", userId)
+    .ilike("name", `${defaultWorkflowNamePrefix} %`);
+
+  if (currentId) {
+    query = query.neq("id", currentId);
+  }
+
+  const { data } = await query;
+  const highest = ((data ?? []) as { name: string }[]).reduce((max, row) => {
+    const match = defaultWorkflowNamePattern.exec(row.name.trim());
+
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 0);
+
+  return `${defaultWorkflowNamePrefix} ${highest + 1}`;
 }
 
 export async function deleteWorkflow(

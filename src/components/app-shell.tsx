@@ -91,13 +91,15 @@ export function AppShell({
         <div
           className={cn(
             "flex flex-1 flex-col px-4 py-6 sm:px-6 lg:px-8",
-            fill && "min-h-0 py-4"
+            // A filling page is all board, so it keeps only enough padding to
+            // clear the top bar and the window edges.
+            fill && "min-h-0 py-3"
           )}
         >
           <div
             className={cn(
               "mx-auto flex w-full max-w-7xl flex-col gap-6",
-              fill && "min-h-0 max-w-none flex-1 gap-4"
+              fill && "min-h-0 max-w-none flex-1 gap-3"
             )}
           >
             {hideHeading ? null : (

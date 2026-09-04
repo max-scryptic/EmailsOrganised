@@ -59,6 +59,14 @@ Confirmed and implemented:
   **classifier prompt**, **outcome** (name, description, examples), **action**,
   and the four action labels "Forward email", "Draft reply", "Tag email",
   "Archive". Status labels are "Live", "Paused", "Draft".
+- Test mode on the builder: "Test workflow" arms the trigger node to listen to
+  the connected mailbox (Gmail read only), and the first message to arrive
+  after that starts a run the user steps through node by node, seeing each
+  node's settings with `{{variables}}` resolved and the values it passes on. A
+  test never writes to the mailbox — actions are described, not performed — and
+  the branch is chosen by matching each classification's own words against the
+  email, not by the live model, so any branch can be stepped through on demand.
+  A sample email stands in when no mailbox is connected.
 - Actions carry their own settings — forward target, subject prefix, note,
   signature, include original thread, mark handled, draft instructions, draft
   tone, and an approval requirement on generated drafts.

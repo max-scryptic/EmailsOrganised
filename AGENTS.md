@@ -58,6 +58,13 @@ Read both before designing a surface. The bullets below are the short version.
   (`src/components/workflows/variable-fields.tsx`) so the data panel can insert
   into them, and declare what a node outputs in
   `src/lib/workflow-variables.ts` — nowhere else.
+- Test mode on the builder (`src/components/workflows/workflow-debug.tsx` for
+  the UI, `src/lib/workflow-debug.ts` for the engine) steps one email through
+  the draft on the board. It only ever reads the mailbox — the Gmail calls live
+  in `src/lib/gmail/messages.ts` and there is no write path — so any new action
+  must be described in `actionStep`, never performed. A node's outputs come
+  from `chainOutputFields`, so adding a variable in
+  `src/lib/workflow-variables.ts` is what makes it show up in a run.
 - Every async product view should have designed loading, empty, and error
   states.
 - Destructive actions should go through `useConfirmDialog` or

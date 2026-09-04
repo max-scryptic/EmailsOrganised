@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   CircleDot,
   Filter,
+  FlaskConical,
   Forward,
   Grip,
   Inbox,
@@ -28,6 +29,12 @@ import {
   NodeOutputSummary,
   UpstreamDataPanel,
 } from "@/components/workflows/node-data-panel";
+import {
+  useWorkflowDebug,
+  WorkflowDebugBar,
+  WorkflowDebugDialog,
+  WorkflowDebugStepPanel,
+} from "@/components/workflows/workflow-debug";
 import {
   VariableInsertProvider,
   VariableInput,
@@ -125,6 +132,13 @@ const nodeHeights = {
 } satisfies Record<CanvasNodeKind, number>;
 
 type CanvasNodeKind = "trigger" | "classifier" | "outcome" | "action";
+
+/**
+ * How a node reads during a test: the trigger while it waits for mail, then —
+ * once a run starts — the node the run is on, the ones it has been through, the
+ * ones still to come, and the ones this email never reaches.
+ */
+type DebugNodeState = "listening" | "active" | "passed" | "ahead" | "muted";
 
 type CanvasNodePosition = {
   x: number;
@@ -299,6 +313,23 @@ export function WorkflowBuilder({
   const [isPaletteOpen, setIsPaletteOpen] = React.useState(false);
   const [lastSavedAt, setLastSavedAt] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<WorkflowResult>(null);
+  const draft = React.useMemo<WorkflowDraft>(
+    () => ({
+      name: workflowName,
+      ownerRole,
+      trigger,
+      classifierPrompt,
+      outcomes,
+    }),
+    [classifierPrompt, outcomes, ownerRole, trigger, workflowName]
+  );
+  /**
+   * A test run works on the draft that is on the board, not on the saved row,
+   * so a workflow can be tested before it has ever been saved.
+   */
+  const debug = useWorkflowDebug(draft);
+  const { height: debugPanelHeight, measure: measureDebugPanel } =
+    useMeasuredHeight(defaultInspectorHeight);
 
   const selectedOutcome =
     selectedModule && "outcomeId" in selectedModule
@@ -407,6 +438,27 @@ export function WorkflowBuilder({
         board: boardSize,
         panelWidth: connectMenuWidth,
         panelHeight: connectMenuHeight,
+      })
+    : null;
+
+  // The step panel floats beside the node the run is on, exactly the way the
+  // settings inspector floats beside the node you are editing.
+  const debugNode = debug.step
+    ? canvasNodeMap.get(debug.step.nodeId) ?? null
+    : null;
+  const debugPanelWidth = Math.min(
+    inspectorSettingsWidth,
+    boardSize.width > 0
+      ? Math.max(240, boardSize.width - inspectorMargin * 2)
+      : Number.POSITIVE_INFINITY
+  );
+  const debugPanelPosition = debugNode
+    ? floatingPanelPosition({
+        nodePosition: debugNode.position,
+        view,
+        board: boardSize,
+        panelWidth: debugPanelWidth,
+        panelHeight: debugPanelHeight,
       })
     : null;
 
@@ -761,16 +813,6 @@ export function WorkflowBuilder({
     };
   }, [connectMenuNodeId]);
 
-  function currentDraft(): WorkflowDraft {
-    return {
-      name: workflowName,
-      ownerRole,
-      trigger,
-      classifierPrompt,
-      outcomes,
-    };
-  }
-
   function moveActionToOutcome(actionId: string, outcomeId: string) {
     let movedAction: WorkflowAction | undefined;
 
@@ -929,6 +971,71 @@ export function WorkflowBuilder({
     });
   }
 
+  // Both are read from effects that must not re-run when the board re-renders.
+  const revealPositionRef = React.useRef(revealPosition);
+  const canvasNodeMapRef = React.useRef(canvasNodeMap);
+
+  React.useEffect(() => {
+    revealPositionRef.current = revealPosition;
+    canvasNodeMapRef.current = canvasNodeMap;
+  });
+
+  const debugNodeId = debug.isRunning ? debug.step?.nodeId ?? null : null;
+
+  // Stepping the run slides the board to the node the step belongs to, so the
+  // panel is never explaining a node that is off screen.
+  React.useEffect(() => {
+    if (!debugNodeId) {
+      return;
+    }
+
+    const node = canvasNodeMapRef.current.get(debugNodeId);
+
+    if (node) {
+      revealPositionRef.current(node.position, node.kind);
+    }
+  }, [boardSize.height, boardSize.width, debugNodeId]);
+
+  /**
+   * A test takes the board over: nothing is edited while it runs, so the
+   * inspector, the add-node menu, and the palette all step aside before the
+   * watcher starts listening.
+   */
+  function startDebug() {
+    setSelectedModule(null);
+    setConnectMenuNodeId(null);
+    setConnectingFrom(null);
+    setIsPaletteOpen(false);
+    debug.start();
+  }
+
+  /** Where a node stands in the test, or undefined when no test is on. */
+  function debugNodeState(nodeId: string): DebugNodeState | undefined {
+    // Waiting for mail is the trigger node's job, so it is the node that shows
+    // it. Everything else is simply not doing anything yet.
+    if (debug.isListening) {
+      return nodeId === "trigger" ? "listening" : undefined;
+    }
+
+    if (!debug.isRunning || !debug.run) {
+      return undefined;
+    }
+
+    if (debug.step?.nodeId === nodeId) {
+      return "active";
+    }
+
+    const index = debug.run.steps.findIndex((item) => item.nodeId === nodeId);
+
+    if (index === -1) {
+      // This email never reaches the node — a branch it did not match, or an
+      // action under one.
+      return "muted";
+    }
+
+    return index < debug.stepIndex ? "passed" : "ahead";
+  }
+
   /**
    * Adds the picked node straight after the node whose handle opened the menu,
    * so the new node arrives already wired into that classification's sequence.
@@ -1042,6 +1149,16 @@ export function WorkflowBuilder({
   function handleNodeClick(node: FlowCanvasNode) {
     if (ignoreNodeClick.current) {
       ignoreNodeClick.current = false;
+      return;
+    }
+
+    // During a test a node is not something you open — while a run is stepping
+    // it is a step to jump to, if this email went through it at all.
+    if (debug.isDebugging) {
+      if (debug.isRunning) {
+        debug.goToNode(node.id);
+      }
+
       return;
     }
 
@@ -1212,7 +1329,7 @@ export function WorkflowBuilder({
         const response = await saveWorkflow({
           id: workflowId,
           status,
-          ...currentDraft(),
+          ...draft,
         });
 
         setResult(response);
@@ -1265,6 +1382,18 @@ export function WorkflowBuilder({
             <p className="text-xs text-muted-foreground">{saveHint}</p>
           ) : null}
           {actions}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={debug.isDebugging ? debug.stop : startDebug}
+          >
+            {debug.isDebugging ? (
+              <X className="size-4" />
+            ) : (
+              <FlaskConical className="size-4" />
+            )}
+            {debug.isDebugging ? "Exit test" : "Test workflow"}
+          </Button>
           <Button type="button" onClick={saveDraft} disabled={isPending}>
             {isPending ? (
               <Loader2 className="size-4 animate-spin" />
@@ -1331,7 +1460,10 @@ export function WorkflowBuilder({
                 )}
                 onPointerDown={(event) => handleNodePointerDown(event, node)}
                 onSelect={() => handleNodeClick(node)}
-                canAddNext={nodeMenuOptions(node).length > 0}
+                debugState={debugNodeState(node.id)}
+                canAddNext={
+                  !debug.isDebugging && nodeMenuOptions(node).length > 0
+                }
                 menuOpen={connectMenuNodeId === node.id}
                 onToggleMenu={() => {
                   setConnectingFrom(null);
@@ -1356,23 +1488,41 @@ export function WorkflowBuilder({
             onReset={() => zoomFromButton(() => 1)}
           />
 
-          <NodePalette
-            open={isPaletteOpen}
-            canAddAction={outcomes.length > 0}
-            onOpenChange={setIsPaletteOpen}
-            onAddOutcome={() => {
-              addOutcome();
-              setIsPaletteOpen(false);
-            }}
-            onAddAction={(type) => {
-              const outcomeId = selectedOutcomeIdForWidgetDrop({ x: 0, y: 0 });
-
-              if (outcomeId) {
-                addAction(outcomeId, type);
+          {debug.isDebugging ? null : (
+            <NodePalette
+              open={isPaletteOpen}
+              canAddAction={outcomes.length > 0}
+              onOpenChange={setIsPaletteOpen}
+              onAddOutcome={() => {
+                addOutcome();
                 setIsPaletteOpen(false);
-              }
-            }}
-          />
+              }}
+              onAddAction={(type) => {
+                const outcomeId = selectedOutcomeIdForWidgetDrop({ x: 0, y: 0 });
+
+                if (outcomeId) {
+                  addAction(outcomeId, type);
+                  setIsPaletteOpen(false);
+                }
+              }}
+            />
+          )}
+
+          <WorkflowDebugBar debug={debug} />
+
+          {debug.isRunning && debugPanelPosition ? (
+            <WorkflowDebugStepPanel
+              ref={measureDebugPanel}
+              debug={debug}
+              position={debugPanelPosition}
+              width={debugPanelWidth}
+              maxHeight={Math.max(
+                200,
+                (boardSize.height || defaultInspectorHeight) -
+                  inspectorMargin * 2
+              )}
+            />
+          ) : null}
 
           {connectMenuNode &&
           connectMenuPosition &&
@@ -1472,6 +1622,7 @@ export function WorkflowBuilder({
       </Card>
 
       <ConfirmDialog />
+      <WorkflowDebugDialog debug={debug} />
     </div>
   );
 }
@@ -1895,6 +2046,7 @@ function CanvasNode({
   canReceiveConnection,
   canAddNext,
   menuOpen,
+  debugState,
   onPointerDown,
   onSelect,
   onToggleMenu,
@@ -1907,6 +2059,8 @@ function CanvasNode({
   /** False when nothing can follow this node, which hides the plus entirely. */
   canAddNext: boolean;
   menuOpen: boolean;
+  /** Set only while a test run is stepping through the board. */
+  debugState?: DebugNodeState;
   onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
   onSelect: () => void;
   onToggleMenu: () => void;
@@ -1940,11 +2094,22 @@ function CanvasNode({
         "select-none",
         // The trigger's idle glow animates box-shadow, which would outrank the
         // drag ring below — so it steps aside while the node is being dragged.
+        // The halo also steps aside for a test run, where the lit node is
+        // whichever step the run is on.
         isInitialNode &&
+          !debugState &&
           "border-primary/45 not-data-[dragging=true]:motion-safe:animate-brand-glow-pulse not-data-[dragging=true]:motion-reduce:shadow-[0_0_0_1px_var(--brand-glow),0_0_22px_-6px_var(--brand-glow)]",
         selected && "border-primary shadow-md ring-2 ring-primary/20",
         connecting && "border-primary bg-primary/10",
         canReceiveConnection && "ring-2 ring-muted-foreground/20",
+        // A run reads as a path across the board: the step it is on is lit, the
+        // nodes this email never reached recede.
+        debugState === "listening" &&
+          "border-primary shadow-md ring-2 ring-primary/30 not-data-[dragging=true]:motion-safe:animate-brand-glow-pulse not-data-[dragging=true]:motion-reduce:shadow-[0_0_0_1px_var(--brand-glow),0_0_22px_-6px_var(--brand-glow)]",
+        debugState === "active" &&
+          "border-primary shadow-md ring-2 ring-primary/30",
+        debugState === "passed" && "border-success/50",
+        debugState === "muted" && "opacity-40",
         // Set on the DOM by the drag handlers, not by React. A dragged node
         // lifts off the board: brand ring, deeper shadow, and above its
         // neighbours so it never slides underneath one. The hand appears with
@@ -2036,13 +2201,36 @@ function CanvasNode({
       </div>
       <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span className="truncate">{node.meta}</span>
-        <Badge variant={node.ready ? "outline" : "destructive"}>
-          {node.ready ? "Ready" : "Needs input"}
-        </Badge>
+        {/* During a run the badge reports the run, not the draft: whether the
+            node is configured is a question for when you are editing it. */}
+        {debugState ? (
+          <Badge variant={debugBadge[debugState].variant}>
+            {debugBadge[debugState].label}
+          </Badge>
+        ) : (
+          <Badge variant={node.ready ? "outline" : "destructive"}>
+            {node.ready ? "Ready" : "Needs input"}
+          </Badge>
+        )}
       </div>
     </div>
   );
 }
+
+/**
+ * What a node's badge says while a run is stepping through. "Running" is a true
+ * live state, which is why it is the one that takes the accent.
+ */
+const debugBadge = {
+  listening: { label: "Listening", variant: "default" },
+  active: { label: "Running", variant: "default" },
+  passed: { label: "Done", variant: "secondary" },
+  ahead: { label: "Next up", variant: "outline" },
+  muted: { label: "Not reached", variant: "outline" },
+} satisfies Record<
+  DebugNodeState,
+  { label: string; variant: React.ComponentProps<typeof Badge>["variant"] }
+>;
 
 function FlowEdges({
   edges,

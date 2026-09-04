@@ -1,0 +1,428 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-04T00:00:00.000Z",
+  "title": "Design System: EmailsOrganised",
+  "extensions": {
+    "colorMeta": {
+      "signal-orange": {
+        "role": "primary",
+        "displayName": "Signal Orange",
+        "canonical": "oklch(0.77 0.166 63)",
+        "description": "The brand orange, taken from the logo mark. Carries --primary, --ring and --sidebar-primary so the accent and the logo cannot drift apart. Primary action, active nav item, focus ring, live badge, selected node — and nowhere else.",
+        "tonalRamp": [
+          "oklch(0.2 0.05 63)",
+          "oklch(0.31 0.08 63)",
+          "oklch(0.43 0.11 63)",
+          "oklch(0.55 0.14 63)",
+          "oklch(0.66 0.16 63)",
+          "oklch(0.77 0.166 63)",
+          "oklch(0.86 0.11 63)",
+          "oklch(0.95 0.04 63)"
+        ]
+      },
+      "signal-orange-dark": {
+        "role": "primary",
+        "displayName": "Signal Orange (dark theme)",
+        "canonical": "oklch(0.8 0.163 63)",
+        "description": "The same accent nudged lighter so it keeps its punch against the dark ground.",
+        "tonalRamp": [
+          "oklch(0.2 0.05 63)",
+          "oklch(0.31 0.08 63)",
+          "oklch(0.43 0.11 63)",
+          "oklch(0.55 0.14 63)",
+          "oklch(0.68 0.16 63)",
+          "oklch(0.8 0.163 63)",
+          "oklch(0.88 0.1 63)",
+          "oklch(0.95 0.04 63)"
+        ]
+      },
+      "signal-glow": {
+        "role": "primary",
+        "displayName": "Signal Glow",
+        "canonical": "oklch(0.77 0.166 63 / 0.4)",
+        "description": "Translucent Signal Orange for halos cast around a surface rather than painted on it. Its one use is the breathing halo on the workflow canvas' first node.",
+        "tonalRamp": [
+          "oklch(0.77 0.166 63 / 0.1)",
+          "oklch(0.77 0.166 63 / 0.2)",
+          "oklch(0.77 0.166 63 / 0.3)",
+          "oklch(0.77 0.166 63 / 0.4)",
+          "oklch(0.77 0.166 63 / 0.5)",
+          "oklch(0.77 0.166 63 / 0.6)",
+          "oklch(0.77 0.166 63 / 0.8)",
+          "oklch(0.77 0.166 63 / 1)"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "oklch(0.985 0 0)",
+        "description": "The page ground. Slightly off-white so cards can be pure white and still separate.",
+        "tonalRamp": [
+          "oklch(0.145 0 0)",
+          "oklch(0.205 0 0)",
+          "oklch(0.269 0 0)",
+          "oklch(0.439 0 0)",
+          "oklch(0.556 0 0)",
+          "oklch(0.708 0 0)",
+          "oklch(0.922 0 0)",
+          "oklch(0.985 0 0)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Surface",
+        "canonical": "oklch(1 0 0)",
+        "description": "Cards, popovers, inputs, sidebar. Pure white in light mode; oklch(0.205 0 0) in dark.",
+        "tonalRamp": [
+          "oklch(0.145 0 0)",
+          "oklch(0.205 0 0)",
+          "oklch(0.269 0 0)",
+          "oklch(0.439 0 0)",
+          "oklch(0.556 0 0)",
+          "oklch(0.708 0 0)",
+          "oklch(0.922 0 0)",
+          "oklch(1 0 0)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "oklch(0.145 0 0)",
+        "description": "Primary text, and the dark-mode page ground. The two themes are a straight inversion of the same two values.",
+        "tonalRamp": [
+          "oklch(0.145 0 0)",
+          "oklch(0.205 0 0)",
+          "oklch(0.269 0 0)",
+          "oklch(0.371 0 0)",
+          "oklch(0.439 0 0)",
+          "oklch(0.556 0 0)",
+          "oklch(0.708 0 0)",
+          "oklch(0.922 0 0)"
+        ]
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Ink Muted",
+        "canonical": "oklch(0.556 0 0)",
+        "description": "Secondary text, descriptions, placeholders, inactive icons. The workhorse of the hierarchy — what would be a smaller size elsewhere is muted grey here.",
+        "tonalRamp": [
+          "oklch(0.145 0 0)",
+          "oklch(0.205 0 0)",
+          "oklch(0.269 0 0)",
+          "oklch(0.371 0 0)",
+          "oklch(0.439 0 0)",
+          "oklch(0.556 0 0)",
+          "oklch(0.708 0 0)",
+          "oklch(0.922 0 0)"
+        ]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "oklch(0.922 0 0)",
+        "description": "Borders, dividers and input strokes. In dark mode it becomes oklch(1 0 0 / 10%) — a translucent white rather than a fixed grey.",
+        "tonalRamp": [
+          "oklch(0.145 0 0)",
+          "oklch(0.269 0 0)",
+          "oklch(0.439 0 0)",
+          "oklch(0.556 0 0)",
+          "oklch(0.708 0 0)",
+          "oklch(0.87 0 0)",
+          "oklch(0.922 0 0)",
+          "oklch(0.985 0 0)"
+        ]
+      },
+      "quiet-fill": {
+        "role": "neutral",
+        "displayName": "Quiet Fill",
+        "canonical": "oklch(0.965 0 0)",
+        "description": "The secondary, muted and accent surface — hover fills, secondary buttons, table zebra. All three roles share one value on purpose: the system has one step of quietness, not three.",
+        "tonalRamp": [
+          "oklch(0.145 0 0)",
+          "oklch(0.205 0 0)",
+          "oklch(0.269 0 0)",
+          "oklch(0.439 0 0)",
+          "oklch(0.556 0 0)",
+          "oklch(0.708 0 0)",
+          "oklch(0.965 0 0)",
+          "oklch(1 0 0)"
+        ]
+      },
+      "danger": {
+        "role": "tertiary",
+        "displayName": "Danger",
+        "canonical": "oklch(0.577 0.245 27.325)",
+        "description": "Destructive actions and validation errors. Almost never a solid fill — destructive buttons and badges are a 10% tint with Danger-coloured text, so the loudest colour stays quiet until it is pressed.",
+        "tonalRamp": [
+          "oklch(0.2 0.07 27)",
+          "oklch(0.3 0.12 27)",
+          "oklch(0.4 0.18 27)",
+          "oklch(0.5 0.22 27)",
+          "oklch(0.577 0.245 27.325)",
+          "oklch(0.7 0.19 22)",
+          "oklch(0.83 0.11 25)",
+          "oklch(0.94 0.04 25)"
+        ]
+      },
+      "affirm": {
+        "role": "tertiary",
+        "displayName": "Affirm",
+        "canonical": "oklch(0.63 0.17 152)",
+        "description": "A completed or successful state.",
+        "tonalRamp": [
+          "oklch(0.2 0.05 152)",
+          "oklch(0.31 0.08 152)",
+          "oklch(0.42 0.12 152)",
+          "oklch(0.53 0.15 152)",
+          "oklch(0.63 0.17 152)",
+          "oklch(0.72 0.18 151)",
+          "oklch(0.85 0.1 152)",
+          "oklch(0.95 0.04 152)"
+        ]
+      },
+      "caution": {
+        "role": "tertiary",
+        "displayName": "Caution",
+        "canonical": "oklch(0.74 0.15 75)",
+        "description": "A warning that is not yet an error. Sits close to Signal Orange in hue — keep them apart on the same screen or the accent stops reading as the accent.",
+        "tonalRamp": [
+          "oklch(0.22 0.05 75)",
+          "oklch(0.33 0.08 75)",
+          "oklch(0.45 0.1 75)",
+          "oklch(0.56 0.13 75)",
+          "oklch(0.66 0.14 75)",
+          "oklch(0.74 0.15 75)",
+          "oklch(0.86 0.09 75)",
+          "oklch(0.95 0.035 75)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page titles in the app shell header at sm and up. The largest type in the product; there is nothing above it."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Page titles at mobile width, legal document titles, the workflow name in the builder header."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card titles, section headings, plan names."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "The default, and nearly everything: table cells, form values, descriptions, canvas node text. Inputs render at 1rem below md so iOS does not zoom on focus."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Badges, table headers, helper text, metadata. The floor of the scale — nothing goes smaller."
+      },
+      "control-sm": {
+        "displayName": "Control (sm)",
+        "purpose": "The one step between Body and Label, used only by the 28px sm button so a compact control reads slightly smaller than body text without dropping to badge size. A control step, not a text step."
+      }
+    },
+    "shadows": [
+      {
+        "name": "resting-node",
+        "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        "purpose": "A workflow node sitting on the canvas — just enough to lift it off the grid."
+      },
+      {
+        "name": "selected-node",
+        "value": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+        "purpose": "Supports a selection that is really carried by ring-2 ring-primary/20."
+      },
+      {
+        "name": "floating-panel",
+        "value": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
+        "purpose": "The canvas toolbar and the circular add-node button."
+      },
+      {
+        "name": "canvas-overlay",
+        "value": "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
+        "purpose": "Node editor popovers, which sit above everything else on the canvas."
+      },
+      {
+        "name": "brand-halo",
+        "value": "0 0 0 1px var(--brand-glow), 0 0 16px -6px var(--brand-glow)",
+        "purpose": "The first-node affordance on an empty canvas. Breathes to 0 0 30px -2px over 3.6s behind motion-safe:, with this value as the motion-reduce: fallback."
+      }
+    ],
+    "motion": [
+      {
+        "name": "transition-default",
+        "value": "150ms cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Every hover, focus and colour change. Tailwind's default duration and easing, never overridden."
+      },
+      {
+        "name": "overlay-enter",
+        "value": "150ms fade-in-0 zoom-in-95",
+        "purpose": "Canvas popovers and floating editors entering."
+      },
+      {
+        "name": "sidebar-collapse",
+        "value": "200ms linear",
+        "purpose": "Sidebar width transition between expanded and icon rail."
+      },
+      {
+        "name": "brand-glow-pulse",
+        "value": "3.6s ease-in-out infinite",
+        "purpose": "The breathing halo on the empty canvas' first node. Always paired with a motion-reduce: static fallback."
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "2xl", "value": "1536px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one loud control on a view. Signal Orange fill, white label, 32px tall.",
+      "html": "<button class=\"ds-btn-primary\">Save workflow</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--radius-lg, 2px); background: var(--primary, oklch(0.77 0.166 63)); color: var(--primary-foreground, oklch(0.985 0 0)); font: 500 0.875rem/1.25rem ui-sans-serif, system-ui, sans-serif; white-space: nowrap; cursor: pointer; transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-primary:hover { background: color-mix(in oklch, var(--primary, oklch(0.77 0.166 63)) 80%, transparent); } .ds-btn-primary:focus-visible { outline: none; border-color: var(--ring, oklch(0.7 0.15 63)); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.7 0.15 63)) 50%, transparent); } .ds-btn-primary:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "The default non-primary action: surface fill, hairline border, quiet hover.",
+      "html": "<button class=\"ds-btn-outline\">Cancel</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid var(--border, oklch(0.922 0 0)); border-radius: var(--radius-lg, 2px); background: var(--card, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); font: 500 0.875rem/1.25rem ui-sans-serif, system-ui, sans-serif; white-space: nowrap; cursor: pointer; transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-outline:hover { background: var(--muted, oklch(0.965 0 0)); } .ds-btn-outline:focus-visible { outline: none; border-color: var(--ring, oklch(0.7 0.15 63)); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.7 0.15 63)) 50%, transparent); } .ds-btn-outline:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Destructive Button",
+      "kind": "button",
+      "refersTo": "button-destructive",
+      "description": "Tinted, not solid — the loudest colour in the system stays quiet until it is pressed.",
+      "html": "<button class=\"ds-btn-destructive\">Delete workflow</button>",
+      "css": ".ds-btn-destructive { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--radius-lg, 2px); background: color-mix(in oklch, var(--destructive, oklch(0.577 0.245 27.325)) 10%, transparent); color: var(--destructive, oklch(0.577 0.245 27.325)); font: 500 0.875rem/1.25rem ui-sans-serif, system-ui, sans-serif; white-space: nowrap; cursor: pointer; transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-destructive:hover { background: color-mix(in oklch, var(--destructive, oklch(0.577 0.245 27.325)) 20%, transparent); } .ds-btn-destructive:focus-visible { outline: none; border-color: color-mix(in oklch, var(--destructive, oklch(0.577 0.245 27.325)) 40%, transparent); box-shadow: 0 0 0 3px color-mix(in oklch, var(--destructive, oklch(0.577 0.245 27.325)) 20%, transparent); }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input-default",
+      "description": "32px tall so it lines up exactly with a button beside it. Focus is a border shift plus a 3px ring.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Forward to…\" />",
+      "css": ".ds-input { display: block; width: 100%; height: 32px; padding: 4px 10px; border: 1px solid var(--input, oklch(0.922 0 0)); border-radius: var(--radius-lg, 2px); background: var(--card, oklch(1 0 0)); color: var(--foreground, oklch(0.145 0 0)); font: 400 0.875rem/1.25rem ui-sans-serif, system-ui, sans-serif; transition: color 150ms, background-color 150ms, border-color 150ms, box-shadow 150ms; } .ds-input::placeholder { color: var(--muted-foreground, oklch(0.556 0 0)); } .ds-input:focus-visible { outline: none; border-color: var(--ring, oklch(0.7 0.15 63)); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring, oklch(0.7 0.15 63)) 50%, transparent); } .ds-input[aria-invalid=\"true\"] { border-color: var(--destructive, oklch(0.577 0.245 27.325)); box-shadow: 0 0 0 3px color-mix(in oklch, var(--destructive, oklch(0.577 0.245 27.325)) 20%, transparent); } .ds-input:disabled { opacity: 0.5; cursor: not-allowed; background: color-mix(in oklch, var(--input, oklch(0.922 0 0)) 50%, transparent); }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Flat surface separated by a hairline ring, never a shadow. Padding comes from one --card-spacing property so header, content and footer stay in step.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-title\">Weekly digest</div><div class=\"ds-card-body\">Forwards anything tagged Newsletter to your reading list every Friday.</div></div>",
+      "css": ".ds-card { --ds-card-spacing: 16px; display: flex; flex-direction: column; gap: var(--ds-card-spacing); padding: var(--ds-card-spacing) 0; overflow: hidden; border-radius: var(--radius-xl, 2.8px); background: var(--card, oklch(1 0 0)); color: var(--card-foreground, oklch(0.145 0 0)); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--foreground, oklch(0.145 0 0)) 10%, transparent); font: 400 0.875rem/1.25rem ui-sans-serif, system-ui, sans-serif; } .ds-card-title { padding: 0 var(--ds-card-spacing); font-size: 1.125rem; font-weight: 500; line-height: 1.75rem; } .ds-card-body { padding: 0 var(--ds-card-spacing); color: var(--muted-foreground, oklch(0.556 0 0)); }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "badge-default",
+      "description": "Workflow status. Signal Orange is reserved for Live; Paused takes the quiet fill and Draft the hairline outline.",
+      "html": "<span class=\"ds-badge-live\">Live</span> <span class=\"ds-badge-quiet\">Paused</span> <span class=\"ds-badge-outline\">Draft</span>",
+      "css": ".ds-badge-live, .ds-badge-quiet, .ds-badge-outline { display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 20px; padding: 2px 8px; border: 1px solid transparent; border-radius: var(--radius-4xl, 5.2px); font: 500 0.75rem/1rem ui-sans-serif, system-ui, sans-serif; white-space: nowrap; } .ds-badge-live { background: var(--primary, oklch(0.77 0.166 63)); color: var(--primary-foreground, oklch(0.985 0 0)); } .ds-badge-quiet { background: var(--secondary, oklch(0.965 0 0)); color: var(--secondary-foreground, oklch(0.205 0 0)); } .ds-badge-outline { border-color: var(--border, oklch(0.922 0 0)); color: var(--foreground, oklch(0.145 0 0)); }"
+    },
+    {
+      "name": "Sidebar Nav Item",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Ghost at rest, quiet fill on hover, Signal Orange with white text when active.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item ds-nav-item--active\" href=\"#\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"3\" width=\"6\" height=\"6\" rx=\"1\"/><rect x=\"15\" y=\"15\" width=\"6\" height=\"6\" rx=\"1\"/><path d=\"M6 9v3a3 3 0 0 0 3 3h6\"/></svg>Workflows</a><a class=\"ds-nav-item\" href=\"#\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z\"/></svg>Settings</a></nav>",
+      "css": ".ds-nav { display: flex; flex-direction: column; gap: 2px; width: 16rem; padding: 8px; background: var(--sidebar, oklch(1 0 0)); } .ds-nav-item { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: var(--radius-lg, 2px); color: var(--sidebar-foreground, oklch(0.145 0 0)); font: 400 0.875rem/1.25rem ui-sans-serif, system-ui, sans-serif; text-decoration: none; transition: background-color 150ms, color 150ms; } .ds-nav-item svg { width: 16px; height: 16px; flex-shrink: 0; } .ds-nav-item:hover { background: var(--sidebar-accent, oklch(0.97 0 0)); color: var(--sidebar-accent-foreground, oklch(0.205 0 0)); } .ds-nav-item--active, .ds-nav-item--active:hover { background: var(--sidebar-primary, oklch(0.77 0.166 63)); color: var(--sidebar-primary-foreground, oklch(0.985 0 0)); font-weight: 500; }"
+    },
+    {
+      "name": "Workflow Node",
+      "kind": "custom",
+      "refersTo": "workflow-node",
+      "description": "The signature component. A card on the canvas at rest; selection is the ring, with shadow only supporting it. The empty-canvas first node wears the breathing Signal Glow halo.",
+      "html": "<div class=\"ds-node\">Email arrives in primary inbox</div><div class=\"ds-node ds-node--selected\">Tag as Invoice</div><div class=\"ds-node ds-node--seed\">Add your first step</div>",
+      "css": ".ds-node { display: inline-block; margin: 8px; padding: 12px; border: 1px solid var(--border, oklch(0.922 0 0)); border-radius: var(--radius-md, 1.6px); background: var(--card, oklch(1 0 0)); color: var(--card-foreground, oklch(0.145 0 0)); font: 400 0.875rem/1.25rem ui-sans-serif, system-ui, sans-serif; box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05); transition: border-color 150ms, box-shadow 150ms; } .ds-node:hover { border-color: color-mix(in oklch, var(--primary, oklch(0.77 0.166 63)) 60%, transparent); } .ds-node--selected { border-color: var(--primary, oklch(0.77 0.166 63)); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 0 0 2px color-mix(in oklch, var(--primary, oklch(0.77 0.166 63)) 20%, transparent); } .ds-node--seed { border-color: color-mix(in oklch, var(--primary, oklch(0.77 0.166 63)) 45%, transparent); box-shadow: 0 0 0 1px var(--brand-glow, oklch(0.77 0.166 63 / 0.4)), 0 0 16px -6px var(--brand-glow, oklch(0.77 0.166 63 / 0.4)); animation: ds-node-glow 3.6s ease-in-out infinite; } @keyframes ds-node-glow { 0%, 100% { box-shadow: 0 0 0 1px var(--brand-glow, oklch(0.77 0.166 63 / 0.4)), 0 0 16px -6px var(--brand-glow, oklch(0.77 0.166 63 / 0.4)); } 50% { box-shadow: 0 0 0 1px var(--brand-glow, oklch(0.77 0.166 63 / 0.4)), 0 0 30px -2px var(--brand-glow, oklch(0.77 0.166 63 / 0.4)); } } @media (prefers-reduced-motion: reduce) { .ds-node--seed { animation: none; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Workbench",
+    "overview": "EmailsOrganised looks like a workbench someone keeps tidy: a dense surface of tools laid out exactly where they were left, in a grey so even it disappears, with one warm orange reserved for the things you can act on. Nothing decorates. Corners are cut almost square, separation is drawn with hairlines rather than shadow, and controls sit at 32px because a person configuring triage rules is scanning many of them at once, not admiring one.\n\nThe system is built for reading structure. A workflow is a trigger, a set of outcomes, and the actions under each one — and the interface's whole job is to make that shape legible at a glance. Density is therefore a feature, not a compromise: tighter rows mean more of the structure is on screen at once. Weight does the work that size would do in a marketing layout; the type scale is narrow, and hierarchy comes from 500/600 weight and muted grey, not from jumps between display sizes.\n\nColour is rationed. Grey is not a background the brand sits on top of — grey is the system, and Signal Orange is an event inside it. That is why the accent survives: it appears on the primary action, the live state, the selected node, and essentially nowhere else. A screen where the orange has spread across headings, icons, and decorative fills has broken the system even if every token is technically correct.",
+    "keyCharacteristics": [
+      "Near-square corners (2px base radius) — crisp, drafted, not friendly-round",
+      "Achromatic greys throughout; one chromatic accent, used sparingly",
+      "Hairline rings and borders instead of shadows for separation",
+      "32px control height as the default rhythm; 14px body text",
+      "Full light/dark parity — every colour is defined in both themes",
+      "OKLCH throughout, so lightness edits stay perceptually honest"
+    ],
+    "rules": [
+      {
+        "name": "The Rationed Accent Rule",
+        "body": "Signal Orange appears on at most one primary action per view, plus genuine live-state indicators. If a screen shows orange in three unrelated places, two of them are wrong.",
+        "section": "colors"
+      },
+      {
+        "name": "The White-On-Orange Rule",
+        "body": "Anything sitting on Signal Orange is white (--primary-foreground), in both themes, always. Dark text on the orange is never correct.",
+        "section": "colors"
+      },
+      {
+        "name": "The No Raw Hex Rule",
+        "body": "Product UI uses semantic tokens. A new brand or status colour is added to src/app/globals.css first, in OKLCH, in both :root and .dark, and only then referenced.",
+        "section": "colors"
+      },
+      {
+        "name": "The Narrow Ramp Rule",
+        "body": "The scale runs 12 → 30px across the whole product. Hierarchy is made with weight (400/500/600) and muted grey, not with size. A new surface reaching for 40px+ type is importing a marketing habit into an operator tool.",
+        "section": "typography"
+      },
+      {
+        "name": "The Muted Second Voice Rule",
+        "body": "Supporting text is text-muted-foreground at the same size, not smaller black text. Shrinking below 12px is not an option the system offers.",
+        "section": "typography"
+      },
+      {
+        "name": "The One Column Rule",
+        "body": "Product views are a single centred column of stacked sections. Multi-column dashboards are not part of this system — the workflow canvas is the one surface allowed its own spatial model.",
+        "section": "layout"
+      },
+      {
+        "name": "The Depth-Belongs-To-The-Canvas Rule",
+        "body": "Outside the workflow canvas, surfaces are flat and separated by hairlines. If a new component reaches for shadow-md, the right answer is almost always a ring or a border.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Reduced-Motion Pair Rule",
+        "body": "Any animated depth ships its motion-reduce: static equivalent in the same commit, at the same colour.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Cut-Corner Rule",
+        "body": "Radius comes from the scale. A hard-coded rounded-full or rounded-2xl in product UI is a bug unless the element is an avatar or a canvas affordance.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do reach for a semantic token (bg-card, text-muted-foreground, border-border) before any literal value, and add the token to globals.css first when one is genuinely missing.",
+      "Do define every new colour in both :root and .dark, in OKLCH.",
+      "Do keep controls on the 32px rhythm so buttons, inputs, and selects align when they sit in a row.",
+      "Do build hierarchy from weight and muted grey rather than from size.",
+      "Do separate surfaces with ring-1 ring-foreground/10 or a hairline border.",
+      "Do pair every animation with a motion-reduce: fallback.",
+      "Do render the logo through BrandMark / BrandLockup and read the product name from appConfig.",
+      "Do give every async view a designed loading, empty, and error state, and route destructive actions through useConfirmDialog or AlertDialog."
+    ],
+    "donts": [
+      "Don't put a raw hex value in product UI.",
+      "Don't put dark text on Signal Orange, in either theme.",
+      "Don't spread Signal Orange across headings, icons, or decorative fills — one primary action per view, plus true live states.",
+      "Don't use shadow for separation outside the workflow canvas.",
+      "Don't hard-code rounded-full or rounded-2xl in product UI; the radius scale is derived from --radius and avatars and canvas affordances are the only circles.",
+      "Don't introduce a display typeface, a gradient, or a glassmorphic panel. The system is one system font, flat fills, and hairlines.",
+      "Don't go below 12px type or above 30px in product UI.",
+      "Don't replace a shadcn primitive in src/components/ui with a one-off; compose product components around it instead."
+    ]
+  }
+}

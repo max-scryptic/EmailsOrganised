@@ -58,6 +58,16 @@ Read both before designing a surface. The bullets below are the short version.
   (`src/components/workflows/variable-fields.tsx`) so the data panel can insert
   into them, and declare what a node outputs in
   `src/lib/workflow-variables.ts` — nowhere else.
+- A canvas node shows an icon and its name. Anything else about it — settings,
+  counts, summaries — belongs in the node's editor popover. The classification
+  node is the one exception, carrying a row per output label because each row is
+  a branch the flow leaves from.
+- The classification node's outputs are `ClassificationLabel[]` on the draft.
+  They are the branches on the board *and* the enum the model's answer is
+  decoded against, so adding one changes both. `src/lib/ai/classify-email.ts`
+  owns that call and is the only place the model is spoken to. Note the seam:
+  the column behind them is still called `outcomes`, mapped to `labels` in
+  `src/lib/workflows.ts` and `src/app/workflows/actions.ts`.
 - Every async product view should have designed loading, empty, and error
   states.
 - Destructive actions should go through `useConfirmDialog` or

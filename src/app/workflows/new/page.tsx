@@ -9,7 +9,7 @@ export default function NewWorkflowPage() {
   return (
     <AppShell
       title="New workflow"
-      description="Build the classifications and the actions each one runs. Naming it is optional — an unnamed workflow is numbered for you."
+      description="Name what the classification can answer, then build the actions each answer runs. Naming the workflow is optional — an unnamed one is numbered for you."
       breadcrumbs={[
         { title: "Workflows", href: "/workflows" },
         { title: "New workflow" },

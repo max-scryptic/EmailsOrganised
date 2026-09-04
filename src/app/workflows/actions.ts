@@ -1,6 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import {
+  ClassificationError,
+  classifyEmail,
+  type EmailClassification,
+} from "@/lib/ai/classify-email";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth/session";
@@ -9,10 +14,13 @@ import {
   defaultWorkflowNamePrefix,
   type SavedWorkflow,
 } from "@/lib/workflow-data";
+import { applyVariables, sampleEmailValues } from "@/lib/workflow-variables";
 import { workflowFromRow } from "@/lib/workflows";
 import {
+  classificationTestInputSchema,
   saveWorkflowInputSchema,
   workflowIdSchema,
+  type ClassificationTestInput,
   type SaveWorkflowInput,
 } from "@/lib/workflow-validation";
 
@@ -37,6 +45,7 @@ type WorkflowMutationRow = {
   owner_role: string;
   trigger: string;
   classifier_prompt: string;
+  /** Classification output labels — see the note on `WorkflowRow`. */
   outcomes: unknown;
   created_at: string;
   updated_at: string;
@@ -78,7 +87,7 @@ export async function saveWorkflow(
     owner_role: parsed.data.ownerRole,
     trigger: parsed.data.trigger,
     classifier_prompt: parsed.data.classifierPrompt,
-    outcomes: parsed.data.outcomes,
+    outcomes: parsed.data.labels,
   };
 
   const query = parsed.data.id
@@ -145,6 +154,68 @@ async function nextDefaultWorkflowName(
   }, 0);
 
   return `${defaultWorkflowNamePrefix} ${highest + 1}`;
+}
+
+type ClassificationTestResult =
+  | { status: "success"; classification: EmailClassification }
+  | { status: "error"; title: string; description: string };
+
+/**
+ * Runs the classification node against one made-up email, so the prompt and
+ * the output labels can be checked before the workflow is pointed at a real
+ * inbox.
+ *
+ * Signed in only: this spends the product's model budget, and an unauthenticated
+ * caller would make it an open proxy to the API key.
+ */
+export async function testClassification(
+  input: ClassificationTestInput
+): Promise<ClassificationTestResult> {
+  const parsed = classificationTestInputSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return {
+      status: "error",
+      title: "Nothing to test yet",
+      description:
+        parsed.error.issues[0]?.message ??
+        "Check the prompt and the output labels.",
+    };
+  }
+
+  await requireUser();
+
+  const { subject, body, prompt, labels } = parsed.data;
+  // The prompt is written against the values a real run carries, so the test
+  // stands the sample email in for them rather than sending raw `{{tokens}}`.
+  const values = sampleEmailValues({
+    "email.subject": subject,
+    "email.body.text": body,
+    "email.snippet": body.slice(0, 120),
+  });
+
+  try {
+    const classification = await classifyEmail({
+      prompt: applyVariables(prompt, values),
+      labels,
+      email: {
+        subject: subject || values["email.subject"],
+        from: values["email.from.address"],
+        body: body || values["email.body.text"],
+      },
+    });
+
+    return { status: "success", classification };
+  } catch (error) {
+    return {
+      status: "error",
+      title: "The test did not run",
+      description:
+        error instanceof ClassificationError
+          ? error.message
+          : "The classification could not be run. Try again.",
+    };
+  }
 }
 
 export async function deleteWorkflow(

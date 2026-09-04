@@ -7,7 +7,6 @@ import {
   CircleDot,
   Filter,
   Forward,
-  GitBranch,
   Grip,
   Inbox,
   Link2,
@@ -384,7 +383,8 @@ export function WorkflowBuilder({
   }
 
   /**
-   * `insertIndex` is where the action lands in its branch's sequence, which is
+   * `insertIndex` is where the action lands in its classification's sequence,
+   * which is
    * also where it lands in the drawn chain. Left out, it goes on the end.
    */
   function addAction(
@@ -453,7 +453,7 @@ export function WorkflowBuilder({
     setSelectedModule(null);
   }
 
-  /** A branch takes its action nodes with it when it leaves the board. */
+  /** A classification takes its action nodes with it when it leaves the board. */
   function removeOutcome(outcomeId: string) {
     const removedOutcome = outcomes.find((outcome) => outcome.id === outcomeId);
 
@@ -495,7 +495,7 @@ export function WorkflowBuilder({
       return;
     }
 
-    // Removing a branch cascades to its actions, so confirm when there is
+    // Removing a classification cascades to its actions, so confirm when there is
     // something to lose. A lone action node deletes straight away.
     if (outcome.actions.length > 0) {
       // A second Backspace while the dialog is open must not stack confirms.
@@ -506,13 +506,13 @@ export function WorkflowBuilder({
       isConfirmingDelete.current = true;
 
       const confirmed = await confirm({
-        title: "Delete this branch?",
+        title: "Delete this classification?",
         description: `${
-          outcome.name.trim() || "This branch"
+          outcome.name.trim() || "This classification"
         } and its ${outcome.actions.length} action${
           outcome.actions.length === 1 ? "" : "s"
         } will be removed from the flow.`,
-        confirmLabel: "Delete branch",
+        confirmLabel: "Delete classification",
       });
 
       isConfirmingDelete.current = false;
@@ -761,7 +761,7 @@ export function WorkflowBuilder({
 
   /**
    * Adds the picked node straight after the node whose handle opened the menu,
-   * so the new node arrives already wired into that branch's sequence.
+   * so the new node arrives already wired into that classification's sequence.
    */
   function addNodeAfter(
     sourceNode: FlowCanvasNode,
@@ -773,7 +773,7 @@ export function WorkflowBuilder({
       kind,
       occupied: canvasNodes,
       // Before the graph exists the classifier is not on the board yet, but it
-      // appears the moment a branch is added — so keep its slot clear.
+      // appears the moment a classification is added — so keep its slot clear.
       reserved: showWorkflowGraph
         ? []
         : [
@@ -793,7 +793,7 @@ export function WorkflowBuilder({
     }
 
     if (sourceNode.kind === "outcome") {
-      // First in the branch: the new node sits between the branch and whatever
+      // First in the classification: the new node sits between it and whatever
       // used to be its first action.
       addAction(sourceNode.id, widgetType, { position, insertIndex: 0 });
       return;
@@ -1234,9 +1234,9 @@ function NodePalette({
           </div>
           <div className="space-y-2">
             <PaletteItem
-              title="Branch"
-              detail="Classification outcome"
-              icon={GitBranch}
+              title="Classification"
+              detail="Classification rule"
+              icon={Sparkles}
               widgetType="outcome"
               onAdd={onAddOutcome}
             />
@@ -1251,7 +1251,7 @@ function NodePalette({
                   icon={Icon}
                   widgetType={type}
                   disabled={!canAddAction}
-                  disabledHint="Add a branch before adding actions"
+                  disabledHint="Add a classification before adding actions"
                   onAdd={() => onAddAction(type)}
                 />
               );
@@ -1392,15 +1392,17 @@ function NodeConnectMenu({
       </div>
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
         {options.map((option) => {
-          const Icon = option === "outcome" ? GitBranch : actionIcons[option];
+          const Icon = option === "outcome" ? Sparkles : actionIcons[option];
 
           return (
             <PaletteItem
               key={option}
               role="menuitem"
-              title={option === "outcome" ? "Branch" : actionLabels[option]}
+              title={
+                option === "outcome" ? "Classification" : actionLabels[option]
+              }
               detail={
-                option === "outcome" ? "Classification outcome" : "Action node"
+                option === "outcome" ? "Classification rule" : "Action node"
               }
               icon={Icon}
               draggable={false}
@@ -1784,7 +1786,9 @@ function createCanvasNodes({
     module: { type: "classifier" },
     title: "Classify with AI",
     detail: classifierPrompt || "AI classification prompt",
-    meta: `${outcomes.length} branches, ${exampleCount} examples`,
+    meta: `${outcomes.length} classification${
+      outcomes.length === 1 ? "" : "s"
+    }, ${exampleCount} example${exampleCount === 1 ? "" : "s"}`,
     icon: Filter,
     position: nodePositions.classifier ?? { x: 382, y: 390 },
     ready: Boolean(classifierPrompt.trim()) && exampleCount > 0,
@@ -1821,7 +1825,7 @@ function createCanvasNodes({
         },
         title: actionLabels[action.type],
         detail: actionSummary(action),
-        meta: `${outcome.name} branch`,
+        meta: `Under ${outcome.name}`,
         icon: Icon,
         position:
           nodePositions[action.id] ?? {
@@ -1989,8 +1993,9 @@ function useMeasuredHeight(defaultHeight: number) {
 }
 
 /**
- * What can follow a node in the flow. Branches only ever hang off the
- * classifier, and actions only ever hang off a branch or another action, so
+ * What can follow a node in the flow. Classifications only ever hang off the
+ * classifier, and actions only ever hang off a classification or another
+ * action, so
  * the handle offers exactly the nodes that can legally come next.
  */
 function nodeMenuOptions(
@@ -2010,7 +2015,7 @@ function nodeMenuOptions(
   return actionTypes;
 }
 
-/** Only branches and actions can be re-parented by hand. */
+/** Only classifications and actions can be re-parented by hand. */
 function canStartConnection(node: FlowCanvasNode) {
   return node.kind === "outcome" || node.kind === "action";
 }
@@ -2093,7 +2098,7 @@ function moduleTitle(
   }
 
   if (module.type === "outcome") {
-    return outcome?.name || "Branch";
+    return outcome?.name || "Classification";
   }
 
   return action ? actionLabels[action.type] : "Action";
@@ -2458,7 +2463,7 @@ function moduleLabel(module: SelectedModule) {
   }
 
   if (module.type === "outcome") {
-    return "Branch";
+    return "Classification";
   }
 
   return "Action";

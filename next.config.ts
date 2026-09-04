@@ -15,18 +15,15 @@ const nextConfig: NextConfig = {
     // `/auth/sign-up` is deliberately not in this list: sign-up is a real page
     // again, because visitors look for the word even when the flow behind it is
     // the same single OAuth call.
-    return [
-      {
-        source: "/workflows",
-        destination: "/",
-        permanent: false,
-      },
-      ...authRedirectSources.map((source) => ({
-        source,
-        destination: "/auth/sign-in",
-        permanent: false,
-      })),
-    ];
+    //
+    // Nothing else belongs here. `/workflows` in particular must not redirect:
+    // it is the app surface, and `/` already redirects to it, so a rule
+    // pointing back at `/` makes the two bounce off each other forever.
+    return authRedirectSources.map((source) => ({
+      source,
+      destination: "/auth/sign-in",
+      permanent: false,
+    }));
   },
 };
 

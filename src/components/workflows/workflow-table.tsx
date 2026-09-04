@@ -3,9 +3,10 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Loader2, Trash2 } from "lucide-react";
+import { ChevronRight, Loader2, Trash2, TriangleAlert } from "lucide-react";
 import { deleteWorkflow } from "@/app/workflows/actions";
 import { useConfirmDialog } from "@/components/use-confirm-dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +29,8 @@ const statusVariant: Record<WorkflowStatus, "default" | "secondary" | "outline">
     paused: "secondary",
     draft: "outline",
   };
+
+type DeleteError = { title: string; description: string } | null;
 
 const updatedAtFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -117,6 +120,7 @@ export function WorkflowTable({ workflows }: { workflows: SavedWorkflow[] }) {
   const router = useRouter();
   const { confirm, ConfirmDialog } = useConfirmDialog();
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<DeleteError>(null);
   const [isPending, startTransition] = React.useTransition();
 
   async function confirmDelete(workflow: SavedWorkflow) {
@@ -129,6 +133,7 @@ export function WorkflowTable({ workflows }: { workflows: SavedWorkflow[] }) {
 
     if (confirmed) {
       setDeletingId(workflow.id);
+      setError(null);
       startTransition(() => {
         void (async () => {
           const result = await deleteWorkflow(workflow.id);
@@ -136,6 +141,10 @@ export function WorkflowTable({ workflows }: { workflows: SavedWorkflow[] }) {
           setDeletingId(null);
           if (result.status === "success") {
             router.refresh();
+          } else {
+            // Without this the row simply stops spinning and stays put, which
+            // reads as the button doing nothing at all.
+            setError({ title: result.title, description: result.description });
           }
         })();
       });
@@ -143,33 +152,44 @@ export function WorkflowTable({ workflows }: { workflows: SavedWorkflow[] }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-md border">
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-muted/30">
-            <TableHead className="px-4">Workflow</TableHead>
-            <TableHead className="px-4">Detail</TableHead>
-            <TableHead className="px-4">Status</TableHead>
-            <TableHead className="px-4">Last edited</TableHead>
-            <TableHead className="w-12 px-4">
-              <span className="sr-only">Open</span>
-            </TableHead>
-            <TableHead className="w-12 px-2">
-              <span className="sr-only">Actions</span>
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {workflows.map((workflow) => (
-            <WorkflowRow
-              key={workflow.id}
-              workflow={workflow}
-              isDeleting={isPending && deletingId === workflow.id}
-              onDelete={() => confirmDelete(workflow)}
-            />
-          ))}
-        </TableBody>
-      </Table>
+    <div className="space-y-4">
+      {error ? (
+        <Alert variant="destructive">
+          <TriangleAlert className="size-4" />
+          <AlertTitle>{error.title}</AlertTitle>
+          <AlertDescription>{error.description}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className="overflow-hidden rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/30">
+              <TableHead className="px-4">Workflow</TableHead>
+              <TableHead className="px-4">Detail</TableHead>
+              <TableHead className="px-4">Status</TableHead>
+              <TableHead className="px-4">Last edited</TableHead>
+              <TableHead className="w-12 px-4">
+                <span className="sr-only">Open</span>
+              </TableHead>
+              <TableHead className="w-12 px-2">
+                <span className="sr-only">Actions</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {workflows.map((workflow) => (
+              <WorkflowRow
+                key={workflow.id}
+                workflow={workflow}
+                isDeleting={isPending && deletingId === workflow.id}
+                onDelete={() => confirmDelete(workflow)}
+              />
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
       <ConfirmDialog />
     </div>
   );

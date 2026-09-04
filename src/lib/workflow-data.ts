@@ -299,31 +299,8 @@ export const newsletterCleanupDraft: WorkflowDraft = {
   ],
 };
 
-/**
- * Placeholder until workflows are persisted — same status as the sample data in
- * `template-data.ts`.
- */
-export const savedWorkflows: SavedWorkflow[] = [
-  {
-    id: "ceo-inbox-triage",
-    status: "live",
-    updatedAt: "2026-08-28",
-    draft: ceoWorkflowDraft,
-  },
-  {
-    id: "support-inbox-triage",
-    status: "live",
-    updatedAt: "2026-08-21",
-    draft: supportTriageDraft,
-  },
-  {
-    id: "newsletter-cleanup",
-    status: "draft",
-    updatedAt: "2026-08-14",
-    draft: newsletterCleanupDraft,
-  },
-];
-
-export function getSavedWorkflow(id: string): SavedWorkflow | undefined {
-  return savedWorkflows.find((workflow) => workflow.id === id);
-}
+// Workflows are persisted in `public.workflows` and read through
+// `src/lib/workflows.ts`. The drafts above are starting points for the builder,
+// not stand-ins for saved rows: a hardcoded list used to back `/`, and because
+// its ids were slugs rather than uuids, every delete from that page failed
+// validation before it reached the database.

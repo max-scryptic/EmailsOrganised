@@ -49,3 +49,15 @@ export const saveWorkflowInputSchema = workflowDraftSchema.extend({
 });
 
 export type SaveWorkflowInput = z.infer<typeof saveWorkflowInputSchema>;
+
+/**
+ * What the debug watcher sends back on each poll: when it started listening,
+ * and the messages it has already handed to the board. The seen list is capped
+ * because it comes from the browser and is only ever a handful of ids.
+ */
+export const debugWatchPollSchema = z.object({
+  startedAt: z.number().int().positive(),
+  seenIds: z.array(z.string().max(128)).max(50),
+});
+
+export type DebugWatchPollInput = z.infer<typeof debugWatchPollSchema>;

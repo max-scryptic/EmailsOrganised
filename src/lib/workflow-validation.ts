@@ -33,8 +33,8 @@ export const workflowOutcomeSchema = z.object({
 });
 
 export const workflowDraftSchema = z.object({
-  name: z.string().trim().min(1, "Name is required."),
-  detail: z.string(),
+  // Blank is valid — `saveWorkflow` fills it with the next "New Workflow N".
+  name: z.string().trim(),
   ownerRole: z.string(),
   trigger: z.string(),
   classifierPrompt: z.string(),

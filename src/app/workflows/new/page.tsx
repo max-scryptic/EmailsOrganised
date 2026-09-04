@@ -9,13 +9,13 @@ export default function NewWorkflowPage() {
   return (
     <AppShell
       title="New workflow"
-      description="Name it and describe what it does, then build the filter branches and the actions each one runs."
+      description="Build the filter branches and the actions each one runs. Naming it is optional — an unnamed workflow is numbered for you."
       breadcrumbs={[
         { title: "Workflows", href: "/workflows" },
         { title: "New workflow" },
       ]}
-      // The builder owns the heading so the name and detail stay editable, and
-      // the board fills everything under it.
+      // The builder owns the heading so the name stays editable, and the board
+      // fills everything under it.
       hideHeading
       fill
     >

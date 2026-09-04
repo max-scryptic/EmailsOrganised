@@ -3,8 +3,8 @@
 import * as React from "react";
 import {
   Archive,
-  Bot,
   CircleDot,
+  Filter,
   Forward,
   GitBranch,
   Grip,
@@ -125,12 +125,18 @@ type SelectedModule =
 
 type WorkflowBuilderProps = {
   initialDraft: WorkflowDraft;
+  /** "new" starts from a blank draft and asks for a name before saving. */
+  mode?: "edit" | "new";
 };
 
-export function WorkflowBuilder({ initialDraft }: WorkflowBuilderProps) {
+export function WorkflowBuilder({
+  initialDraft,
+  mode = "edit",
+}: WorkflowBuilderProps) {
   const canvasRef = React.useRef<HTMLDivElement>(null);
   const dragState = React.useRef<DragState | null>(null);
   const [workflowName, setWorkflowName] = React.useState(initialDraft.name);
+  const [detail, setDetail] = React.useState(initialDraft.detail);
   const [ownerRole, setOwnerRole] = React.useState(initialDraft.ownerRole);
   const [trigger, setTrigger] = React.useState(initialDraft.trigger);
   const [classifierPrompt, setClassifierPrompt] = React.useState(
@@ -192,6 +198,11 @@ export function WorkflowBuilder({ initialDraft }: WorkflowBuilderProps) {
     () => createCanvasEdges(outcomes),
     [outcomes]
   );
+
+  const basicsReady = Boolean(workflowName.trim()) && Boolean(detail.trim());
+  const actionsReady =
+    outcomes.length > 0 &&
+    outcomes.every((outcome) => outcome.actions.every(actionIsReady));
 
   function updateOutcome(
     id: string,
@@ -566,18 +577,14 @@ export function WorkflowBuilder({ initialDraft }: WorkflowBuilderProps) {
             }}
           />
           <div className="flex min-w-0 flex-col">
-            <div className="grid gap-3 border-b bg-muted/20 p-3 text-sm md:grid-cols-3">
+            <div className="grid gap-3 border-b bg-muted/20 p-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+              <ReadinessRow label="Basics" ready={basicsReady} />
               <ReadinessRow label="Trigger" ready={Boolean(trigger.trim())} />
               <ReadinessRow
                 label="Classifier"
                 ready={Boolean(classifierPrompt.trim()) && exampleCount > 0}
               />
-              <ReadinessRow
-                label="Actions"
-                ready={outcomes.every((outcome) =>
-                  outcome.actions.every(actionIsReady)
-                )}
-              />
+              <ReadinessRow label="Actions" ready={actionsReady} />
             </div>
             <div
               ref={canvasRef}
@@ -638,8 +645,10 @@ export function WorkflowBuilder({ initialDraft }: WorkflowBuilderProps) {
             {selectedModule.type === "workflow" ? (
               <WorkflowSettings
                 workflowName={workflowName}
+                detail={detail}
                 ownerRole={ownerRole}
                 onWorkflowNameChange={setWorkflowName}
+                onDetailChange={setDetail}
                 onOwnerRoleChange={setOwnerRole}
               />
             ) : null}
@@ -675,11 +684,23 @@ export function WorkflowBuilder({ initialDraft }: WorkflowBuilderProps) {
               />
             ) : null}
             <Separator />
-            <Button type="button" className="w-full" onClick={saveDraft}>
+            <Button
+              type="button"
+              className="w-full"
+              disabled={!basicsReady}
+              onClick={saveDraft}
+            >
               <Save className="size-4" />
-              Save workflow
+              {mode === "new" && !lastSavedAt
+                ? "Create workflow"
+                : "Save workflow"}
             </Button>
-            {lastSavedAt ? (
+            {!basicsReady ? (
+              <p className="text-xs text-muted-foreground">
+                Give the workflow a name and a one-line detail in Settings
+                before saving it.
+              </p>
+            ) : lastSavedAt ? (
               <p className="text-xs text-muted-foreground">
                 Draft saved at {lastSavedAt}.
               </p>
@@ -1129,13 +1150,17 @@ function moduleKey(module: SelectedModule) {
 
 function WorkflowSettings({
   workflowName,
+  detail,
   ownerRole,
   onWorkflowNameChange,
+  onDetailChange,
   onOwnerRoleChange,
 }: {
   workflowName: string;
+  detail: string;
   ownerRole: string;
   onWorkflowNameChange: (value: string) => void;
+  onDetailChange: (value: string) => void;
   onOwnerRoleChange: (value: string) => void;
 }) {
   return (
@@ -1145,14 +1170,30 @@ function WorkflowSettings({
         <Input
           id="workflow-name"
           value={workflowName}
+          placeholder="CEO inbox triage"
           onChange={(event) => onWorkflowNameChange(event.target.value)}
         />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="workflow-detail">Detail</Label>
+        <Textarea
+          id="workflow-detail"
+          value={detail}
+          placeholder="Routes investor, finance, and escalation mail out of the inbox before it needs a read."
+          onChange={(event) => onDetailChange(event.target.value)}
+          className="min-h-24"
+        />
+        <p className="text-xs text-muted-foreground">
+          One line describing what this workflow does. It is what the workflows
+          list shows next to the name.
+        </p>
       </div>
       <div className="space-y-2">
         <Label htmlFor="owner-role">Owner</Label>
         <Input
           id="owner-role"
           value={ownerRole}
+          placeholder="Everyone"
           onChange={(event) => onOwnerRoleChange(event.target.value)}
         />
       </div>
@@ -1162,7 +1203,6 @@ function WorkflowSettings({
 
 function TriggerSettings({
   trigger,
-  onTriggerChange,
 }: {
   trigger: string;
   onTriggerChange: (value: string) => void;
@@ -1170,11 +1210,10 @@ function TriggerSettings({
   return (
     <div className="space-y-2">
       <Label htmlFor="trigger">Trigger</Label>
-      <Input
-        id="trigger"
-        value={trigger}
-        onChange={(event) => onTriggerChange(event.target.value)}
-      />
+      <Input id="trigger" value={trigger} disabled readOnly />
+      <p className="text-xs text-muted-foreground">
+        Every workflow starts from this fixed email event.
+      </p>
     </div>
   );
 }
@@ -1188,7 +1227,7 @@ function ClassifierSettings({
 }) {
   return (
     <div className="space-y-2">
-      <Label htmlFor="classifier-prompt">AI grounding</Label>
+      <Label htmlFor="classifier-prompt">Filter instructions</Label>
       <Textarea
         id="classifier-prompt"
         value={classifierPrompt}
@@ -1535,7 +1574,7 @@ function moduleLabel(module: SelectedModule) {
   }
 
   if (module.type === "classifier") {
-    return "Classifier";
+    return "Filter";
   }
 
   if (module.type === "outcome") {

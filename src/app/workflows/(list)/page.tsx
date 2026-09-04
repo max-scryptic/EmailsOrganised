@@ -4,9 +4,13 @@ import { AppShell } from "@/components/app-shell";
 import { WorkflowList } from "@/components/workflows/workflow-list";
 import { Button } from "@/components/ui/button";
 import { appConfig } from "@/lib/template-data";
-import { savedWorkflows } from "@/lib/workflow-data";
+import { listWorkflows } from "@/lib/workflows";
 
-export default function WorkflowsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function WorkflowsPage() {
+  const workflows = await listWorkflows();
+
   return (
     <AppShell
       title="Workflows"
@@ -20,7 +24,7 @@ export default function WorkflowsPage() {
         </Button>
       }
     >
-      <WorkflowList workflows={savedWorkflows} />
+      <WorkflowList workflows={workflows} />
     </AppShell>
   );
 }

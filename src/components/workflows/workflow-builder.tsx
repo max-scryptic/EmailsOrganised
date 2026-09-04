@@ -3,12 +3,14 @@
 import * as React from "react";
 import {
   Archive,
+  CheckCircle2,
   CircleDot,
   Filter,
   Forward,
   GitBranch,
   Grip,
   Inbox,
+  Loader2,
   MailCheck,
   MousePointer2,
   Move,
@@ -17,7 +19,11 @@ import {
   Sparkles,
   Tag,
   Trash2,
+  TriangleAlert,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { saveWorkflow } from "@/app/workflows/actions";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +53,7 @@ import {
   type WorkflowActionType,
   type WorkflowDraft,
   type WorkflowOutcome,
+  type WorkflowStatus,
 } from "@/lib/workflow-data";
 
 const actionIcons = {
@@ -125,14 +132,28 @@ type SelectedModule =
 
 type WorkflowBuilderProps = {
   initialDraft: WorkflowDraft;
+  workflowId?: string;
+  status?: WorkflowStatus;
   /** "new" starts from a blank draft and asks for a name before saving. */
   mode?: "edit" | "new";
 };
 
+type WorkflowResult =
+  | {
+      status: "success" | "error";
+      title: string;
+      description: string;
+    }
+  | null;
+
 export function WorkflowBuilder({
   initialDraft,
+  workflowId,
+  status = "draft",
   mode = "edit",
 }: WorkflowBuilderProps) {
+  const router = useRouter();
+  const [isPending, startTransition] = React.useTransition();
   const canvasRef = React.useRef<HTMLDivElement>(null);
   const dragState = React.useRef<DragState | null>(null);
   const [workflowName, setWorkflowName] = React.useState(initialDraft.name);
@@ -153,6 +174,7 @@ export function WorkflowBuilder({
     type: "workflow",
   });
   const [lastSavedAt, setLastSavedAt] = React.useState<string | null>(null);
+  const [result, setResult] = React.useState<WorkflowResult>(null);
 
   const selectedOutcome =
     "outcomeId" in selectedModule
@@ -305,6 +327,17 @@ export function WorkflowBuilder({
       return next;
     });
     setSelectedModule({ type: "outcome", outcomeId });
+  }
+
+  function currentDraft(): WorkflowDraft {
+    return {
+      name: workflowName,
+      detail,
+      ownerRole,
+      trigger,
+      classifierPrompt,
+      outcomes,
+    };
   }
 
   function moveActionToOutcome(actionId: string, outcomeId: string) {
@@ -529,24 +562,56 @@ export function WorkflowBuilder({
   }
 
   function saveDraft() {
-    setLastSavedAt(
-      new Intl.DateTimeFormat(undefined, {
-        hour: "numeric",
-        minute: "2-digit",
-      }).format(new Date())
-    );
+    startTransition(() => {
+      void (async () => {
+        const response = await saveWorkflow({
+          id: workflowId,
+          status,
+          ...currentDraft(),
+        });
+
+        setResult(response);
+
+        if (response.status === "success" && response.workflow) {
+          const savedWorkflow = response.workflow;
+
+          setLastSavedAt(formatWorkflowTimestamp(savedWorkflow.updatedAt));
+
+          if (!workflowId) {
+            router.replace(`/workflows/${savedWorkflow.id}`);
+          } else {
+            router.refresh();
+          }
+        }
+      })();
+    });
   }
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <Card className="overflow-hidden">
-        <CardHeader className="border-b">
-          <CardTitle>Flow builder</CardTitle>
-          <CardAction className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant={selectedModule.type === "workflow" ? "default" : "outline"}
-              onClick={() => setSelectedModule({ type: "workflow" })}
+      <div className="space-y-4">
+        {result ? (
+          <Alert
+            variant={result.status === "error" ? "destructive" : "default"}
+          >
+            {result.status === "error" ? (
+              <TriangleAlert className="size-4" />
+            ) : (
+              <CheckCircle2 className="size-4" />
+            )}
+            <AlertTitle>{result.title}</AlertTitle>
+            <AlertDescription>{result.description}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <Card className="overflow-hidden">
+          <CardHeader className="border-b">
+            <CardTitle>Flow builder</CardTitle>
+            <CardAction className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant={selectedModule.type === "workflow" ? "default" : "outline"}
+                onClick={() => setSelectedModule({ type: "workflow" })}
             >
               <Settings2 className="size-4" />
               Workflow
@@ -632,6 +697,7 @@ export function WorkflowBuilder({
           </div>
         </CardContent>
       </Card>
+    </div>
 
       <aside className="space-y-4">
         <Card>
@@ -687,10 +753,14 @@ export function WorkflowBuilder({
             <Button
               type="button"
               className="w-full"
-              disabled={!basicsReady}
               onClick={saveDraft}
+              disabled={!basicsReady || isPending}
             >
-              <Save className="size-4" />
+              {isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Save className="size-4" />
+              )}
               {mode === "new" && !lastSavedAt
                 ? "Create workflow"
                 : "Save workflow"}
@@ -710,6 +780,13 @@ export function WorkflowBuilder({
       </aside>
     </div>
   );
+}
+
+function formatWorkflowTimestamp(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 function WidgetPalette({

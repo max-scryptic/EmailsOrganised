@@ -3,13 +3,15 @@ import type { Metadata } from "next";
 import { AppShell } from "@/components/app-shell";
 import { WorkflowDetail } from "@/components/workflows/workflow-detail";
 import { WorkflowDetailActions } from "@/components/workflows/workflow-detail-actions";
-import { getSavedWorkflow } from "@/lib/workflow-data";
+import { getWorkflow } from "@/lib/workflows";
+
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
 }: PageProps<"/workflows/[workflowId]">): Promise<Metadata> {
   const { workflowId } = await params;
-  const workflow = getSavedWorkflow(workflowId);
+  const workflow = await getWorkflow(workflowId);
 
   return { title: workflow ? workflow.draft.name : "Workflow" };
 }
@@ -18,7 +20,7 @@ export default async function WorkflowDetailPage({
   params,
 }: PageProps<"/workflows/[workflowId]">) {
   const { workflowId } = await params;
-  const workflow = getSavedWorkflow(workflowId);
+  const workflow = await getWorkflow(workflowId);
 
   if (!workflow) {
     notFound();

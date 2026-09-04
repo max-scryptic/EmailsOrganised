@@ -1,8 +1,10 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Trash2 } from "lucide-react";
+import { ChevronRight, Loader2, Trash2 } from "lucide-react";
+import { deleteWorkflow } from "@/app/workflows/actions";
 import { useConfirmDialog } from "@/components/use-confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,7 +21,6 @@ import {
   type WorkflowStatus,
   workflowStatusLabels,
 } from "@/lib/workflow-data";
-import { deleteWorkflow } from "@/lib/workflow-store";
 
 const statusVariant: Record<WorkflowStatus, "default" | "secondary" | "outline"> =
   {
@@ -36,9 +37,11 @@ const updatedAtFormatter = new Intl.DateTimeFormat("en-US", {
 
 function WorkflowRow({
   workflow,
+  isDeleting,
   onDelete,
 }: {
   workflow: SavedWorkflow;
+  isDeleting: boolean;
   onDelete: () => void;
 }) {
   const router = useRouter();
@@ -97,8 +100,13 @@ function WorkflowRow({
           aria-label={`Delete ${workflow.draft.name}`}
           className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
           onClick={onDelete}
+          disabled={isDeleting}
         >
-          <Trash2 className="size-4" />
+          {isDeleting ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Trash2 className="size-4" />
+          )}
         </Button>
       </TableCell>
     </TableRow>
@@ -106,7 +114,10 @@ function WorkflowRow({
 }
 
 export function WorkflowTable({ workflows }: { workflows: SavedWorkflow[] }) {
+  const router = useRouter();
   const { confirm, ConfirmDialog } = useConfirmDialog();
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
+  const [isPending, startTransition] = React.useTransition();
 
   async function confirmDelete(workflow: SavedWorkflow) {
     const confirmed = await confirm({
@@ -117,7 +128,17 @@ export function WorkflowTable({ workflows }: { workflows: SavedWorkflow[] }) {
     });
 
     if (confirmed) {
-      deleteWorkflow(workflow.id);
+      setDeletingId(workflow.id);
+      startTransition(() => {
+        void (async () => {
+          const result = await deleteWorkflow(workflow.id);
+
+          setDeletingId(null);
+          if (result.status === "success") {
+            router.refresh();
+          }
+        })();
+      });
     }
   }
 
@@ -143,6 +164,7 @@ export function WorkflowTable({ workflows }: { workflows: SavedWorkflow[] }) {
             <WorkflowRow
               key={workflow.id}
               workflow={workflow}
+              isDeleting={isPending && deletingId === workflow.id}
               onDelete={() => confirmDelete(workflow)}
             />
           ))}

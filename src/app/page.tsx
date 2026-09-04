@@ -1,29 +1,26 @@
-import { Play, Plus } from "lucide-react";
+import Link from "next/link";
+import { Plus } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
-import { WorkflowBuilder } from "@/components/workflows/workflow-builder";
+import { WorkflowList } from "@/components/workflows/workflow-list";
 import { appConfig } from "@/lib/template-data";
-import { ceoWorkflowDraft } from "@/lib/workflow-data";
+import { savedWorkflows } from "@/lib/workflow-data";
 
 export default function Home() {
   return (
     <AppShell
       title="Workflows"
-      description={`Build the mailbox routines ${appConfig.name} can classify, route, draft, and review.`}
+      description={`The mailbox routines ${appConfig.name} runs for you. Open one to change how it classifies, routes, drafts, and reviews.`}
       actions={
-        <>
-          <Button type="button" variant="outline">
-            <Play className="size-4" />
-            Run checks
-          </Button>
-          <Button type="button">
+        <Button asChild>
+          <Link href="/workflows/new">
             <Plus className="size-4" />
             New workflow
-          </Button>
-        </>
+          </Link>
+        </Button>
       }
     >
-      <WorkflowBuilder initialDraft={ceoWorkflowDraft} />
+      <WorkflowList workflows={savedWorkflows} />
     </AppShell>
   );
 }

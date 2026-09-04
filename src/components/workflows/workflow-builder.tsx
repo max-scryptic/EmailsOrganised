@@ -3,11 +3,9 @@
 import * as React from "react";
 import {
   Archive,
-  ArrowDown,
-  ArrowRight,
   Filter,
   Forward,
-  GitBranch,
+  GripVertical,
   Inbox,
   MailCheck,
   Plus,
@@ -67,11 +65,41 @@ type SelectedModule =
   | { type: "outcome"; outcomeId: string }
   | { type: "action"; outcomeId: string; actionId: string };
 
+type NodePosition = {
+  x: number;
+  y: number;
+};
+
+type FlowCanvasNode = {
+  id: string;
+  title: string;
+  detail: string;
+  icon: React.ComponentType<{ className?: string }>;
+  module: SelectedModule;
+  position: NodePosition;
+  width: number;
+  height: number;
+  badge?: string;
+};
+
+type FlowCanvasEdge = {
+  id: string;
+  from: string;
+  to: string;
+};
+
 type WorkflowBuilderProps = {
   initialDraft: WorkflowDraft;
   /** "new" starts from a blank draft and asks for a name before saving. */
   mode?: "edit" | "new";
 };
+
+const triggerNodeId = "trigger";
+const classifierNodeId = "classifier";
+const flowNodeWidth = 250;
+const flowNodeHeight = 104;
+const actionNodeWidth = 230;
+const actionNodeHeight = 88;
 
 export function WorkflowBuilder({
   initialDraft,
@@ -89,6 +117,35 @@ export function WorkflowBuilder({
     type: "workflow",
   });
   const [lastSavedAt, setLastSavedAt] = React.useState<string | null>(null);
+  const [nodePositions, setNodePositions] = React.useState<
+    Record<string, NodePosition>
+  >({});
+
+  const showWorkflowGraph =
+    mode === "edit" || outcomes.length > 0 || Boolean(classifierPrompt.trim());
+  const flowNodes = React.useMemo(
+    () =>
+      createFlowCanvasNodes({
+        trigger,
+        classifierPrompt,
+        outcomes,
+        showWorkflowGraph,
+        nodePositions,
+      }),
+    [classifierPrompt, nodePositions, outcomes, showWorkflowGraph, trigger]
+  );
+  const flowEdges = React.useMemo(
+    () => createFlowCanvasEdges(outcomes, showWorkflowGraph),
+    [outcomes, showWorkflowGraph]
+  );
+  const flowNodeMap = React.useMemo(
+    () => new Map(flowNodes.map((node) => [node.id, node])),
+    [flowNodes]
+  );
+  const flowCanvasSize = React.useMemo(
+    () => getFlowCanvasSize(flowNodes),
+    [flowNodes]
+  );
 
   const selectedOutcome =
     "outcomeId" in selectedModule
@@ -189,13 +246,20 @@ export function WorkflowBuilder({
     );
   }
 
+  const updateNodePosition = React.useCallback(
+    (id: string, position: NodePosition) => {
+      setNodePositions((current) => ({ ...current, [id]: position }));
+    },
+    []
+  );
+
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
       <div className="space-y-4">
         <Card>
           <CardHeader>
             <CardTitle>Flow builder</CardTitle>
-            <CardAction>
+            <CardAction className="flex flex-wrap justify-end gap-2">
               <Button
                 type="button"
                 variant={
@@ -206,84 +270,22 @@ export function WorkflowBuilder({
                 <Settings2 className="size-4" />
                 Settings
               </Button>
+              <Button type="button" variant="outline" onClick={addOutcome}>
+                <Plus className="size-4" />
+                Add branch
+              </Button>
             </CardAction>
           </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="mx-auto flex w-full max-w-2xl flex-col items-center">
-              <FlowModuleButton
-                title="Email arrives"
-                detail={trigger}
-                icon={Inbox}
-                selected={selectedModule.type === "trigger"}
-                onClick={() => setSelectedModule({ type: "trigger" })}
-                className="max-w-md"
-              />
-              <FlowConnector label="new email" />
-              <FlowModuleButton
-                title="Filter incoming email"
-                detail={`${outcomes.length} outcomes, ${exampleCount} examples`}
-                icon={Filter}
-                selected={selectedModule.type === "classifier"}
-                onClick={() => setSelectedModule({ type: "classifier" })}
-                className="max-w-md"
-              />
-            </div>
-
-            <div className="flex justify-center">
-              <BranchSplit />
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="font-medium">Filter branches</div>
-                <Button type="button" variant="outline" onClick={addOutcome}>
-                  <Plus className="size-4" />
-                  Add branch
-                </Button>
-              </div>
-
-              {outcomes.length === 0 ? (
-                <div className="flex flex-col items-center gap-3 rounded-md border border-dashed px-6 py-10 text-center">
-                  <GitBranch className="size-5 text-muted-foreground" />
-                  <div className="space-y-1">
-                    <p className="font-medium">No branches yet</p>
-                    <p className="max-w-sm text-sm text-muted-foreground">
-                      A branch is one thing the filter can decide an email is.
-                      Add one, describe the mail it should catch, then choose
-                      what happens to it.
-                    </p>
-                  </div>
-                  <Button type="button" onClick={addOutcome}>
-                    <Plus className="size-4" />
-                    Add first branch
-                  </Button>
-                </div>
-              ) : null}
-
-              <div className="grid gap-3">
-                {outcomes.map((outcome) => (
-                  <OutcomeBranch
-                    key={outcome.id}
-                    outcome={outcome}
-                    selectedModule={selectedModule}
-                    onSelectOutcome={() =>
-                      setSelectedModule({
-                        type: "outcome",
-                        outcomeId: outcome.id,
-                      })
-                    }
-                    onSelectAction={(actionId) =>
-                      setSelectedModule({
-                        type: "action",
-                        outcomeId: outcome.id,
-                        actionId,
-                      })
-                    }
-                    onAddAction={(type) => addAction(outcome.id, type)}
-                  />
-                ))}
-              </div>
-            </div>
+          <CardContent>
+            <FlowCanvas
+              nodes={flowNodes}
+              edges={flowEdges}
+              nodeMap={flowNodeMap}
+              canvasSize={flowCanvasSize}
+              selectedModule={selectedModule}
+              onSelectModule={setSelectedModule}
+              onNodePositionChange={updateNodePosition}
+            />
           </CardContent>
         </Card>
 
@@ -334,6 +336,7 @@ export function WorkflowBuilder({
             {selectedModule.type === "outcome" && selectedOutcome ? (
               <OutcomeSettings
                 outcome={selectedOutcome}
+                onAddAction={(type) => addAction(selectedOutcome.id, type)}
                 onChange={(updater) =>
                   updateOutcome(selectedOutcome.id, updater)
                 }
@@ -382,90 +385,411 @@ export function WorkflowBuilder({
   );
 }
 
-function OutcomeBranch({
-  outcome,
+function FlowCanvas({
+  nodes,
+  edges,
+  nodeMap,
+  canvasSize,
   selectedModule,
-  onSelectOutcome,
-  onSelectAction,
-  onAddAction,
+  onSelectModule,
+  onNodePositionChange,
 }: {
-  outcome: WorkflowOutcome;
+  nodes: FlowCanvasNode[];
+  edges: FlowCanvasEdge[];
+  nodeMap: Map<string, FlowCanvasNode>;
+  canvasSize: { width: number; height: number };
   selectedModule: SelectedModule;
-  onSelectOutcome: () => void;
-  onSelectAction: (actionId: string) => void;
-  onAddAction: (type: WorkflowActionType) => void;
+  onSelectModule: (module: SelectedModule) => void;
+  onNodePositionChange: (id: string, position: NodePosition) => void;
 }) {
   return (
-    <div className="rounded-md border bg-muted/20 p-3">
-      <button
-        type="button"
-        onClick={onSelectOutcome}
-        className={cn(
-          "flex w-full items-start gap-3 rounded-md border bg-background p-3 text-left transition hover:bg-muted/60",
-          selectedModule.type === "outcome" &&
-            selectedModule.outcomeId === outcome.id &&
-            "border-primary bg-primary/10"
-        )}
+    <div className="overflow-auto rounded-md border bg-muted/20">
+      <div
+        className="relative min-h-[360px]"
+        style={{ width: canvasSize.width, height: canvasSize.height }}
       >
-        <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium">{outcome.name}</span>
-          <span className="mt-1 block truncate text-xs text-muted-foreground">
-            {outcome.description || "Classification rule"}
-          </span>
-        </span>
-        <Badge variant="secondary">{outcome.actions.length}</Badge>
-      </button>
+        <svg
+          className="pointer-events-none absolute inset-0 size-full"
+          aria-hidden="true"
+        >
+          {edges.map((edge) => {
+            const path = flowEdgePath(edge, nodeMap);
 
-      <div className="mt-3 flex flex-wrap items-center gap-2 pl-3">
-        {outcome.actions.map((action, index) => {
-          const Icon = actionIcons[action.type];
-          const selected =
-            selectedModule.type === "action" &&
-            selectedModule.outcomeId === outcome.id &&
-            selectedModule.actionId === action.id;
-
-          return (
-            <React.Fragment key={action.id}>
-              {index > 0 ? (
-                <ArrowRight className="size-4 text-muted-foreground" />
-              ) : null}
-              <button
-                type="button"
-                onClick={() => onSelectAction(action.id)}
-                className={cn(
-                  "inline-flex h-9 max-w-full items-center gap-2 rounded-md border bg-background px-3 text-sm transition hover:bg-muted/60",
-                  selected && "border-primary bg-primary/10"
-                )}
-              >
-                <Icon className="size-4 shrink-0 text-primary" />
-                <span className="truncate">{actionSummary(action)}</span>
-              </button>
-            </React.Fragment>
-          );
-        })}
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-2 pl-3">
-        {actionTypes.map((type) => {
-          const Icon = actionIcons[type];
-
-          return (
-            <Button
-              key={type}
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => onAddAction(type)}
-            >
-              <Icon className="size-4" />
-              {actionLabels[type]}
-            </Button>
-          );
-        })}
+            return path ? (
+              <path
+                key={edge.id}
+                className="stroke-border"
+                d={path}
+                fill="none"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            ) : null;
+          })}
+        </svg>
+        {nodes.map((node) => (
+          <DraggableFlowNode
+            key={node.id}
+            node={node}
+            selected={modulesMatch(selectedModule, node.module)}
+            onSelect={() => onSelectModule(node.module)}
+            onPositionChange={(position) =>
+              onNodePositionChange(node.id, position)
+            }
+          />
+        ))}
       </div>
     </div>
   );
+}
+
+function DraggableFlowNode({
+  node,
+  selected,
+  onSelect,
+  onPositionChange,
+}: {
+  node: FlowCanvasNode;
+  selected: boolean;
+  onSelect: () => void;
+  onPositionChange: (position: NodePosition) => void;
+}) {
+  const nodeRef = React.useRef<HTMLDivElement>(null);
+  const dragRef = React.useRef({
+    dragging: false,
+    frame: 0,
+    originClientX: 0,
+    originClientY: 0,
+    originX: 0,
+    originY: 0,
+    nextX: node.position.x,
+    nextY: node.position.y,
+  });
+  const Icon = node.icon;
+
+  React.useEffect(() => {
+    const element = nodeRef.current;
+
+    if (!element || dragRef.current.dragging) {
+      return;
+    }
+
+    element.style.transform = positionTransform(node.position);
+  }, [node.position]);
+
+  function handlePointerDown(event: React.PointerEvent<HTMLButtonElement>) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const element = nodeRef.current;
+
+    if (!element) {
+      return;
+    }
+
+    dragRef.current = {
+      dragging: true,
+      frame: 0,
+      originClientX: event.clientX,
+      originClientY: event.clientY,
+      originX: node.position.x,
+      originY: node.position.y,
+      nextX: node.position.x,
+      nextY: node.position.y,
+    };
+    element.style.zIndex = "20";
+
+    const applyPosition = () => {
+      dragRef.current.frame = 0;
+      element.style.transform = positionTransform({
+        x: dragRef.current.nextX,
+        y: dragRef.current.nextY,
+      });
+    };
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const nextX =
+        dragRef.current.originX +
+        moveEvent.clientX -
+        dragRef.current.originClientX;
+      const nextY =
+        dragRef.current.originY +
+        moveEvent.clientY -
+        dragRef.current.originClientY;
+
+      dragRef.current.nextX = Math.max(12, nextX);
+      dragRef.current.nextY = Math.max(12, nextY);
+
+      if (dragRef.current.frame === 0) {
+        dragRef.current.frame = window.requestAnimationFrame(applyPosition);
+      }
+    };
+
+    const finishDrag = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", finishDrag);
+      window.removeEventListener("pointercancel", finishDrag);
+
+      if (dragRef.current.frame !== 0) {
+        window.cancelAnimationFrame(dragRef.current.frame);
+        applyPosition();
+      }
+
+      dragRef.current.dragging = false;
+      element.style.zIndex = "";
+      onPositionChange({
+        x: dragRef.current.nextX,
+        y: dragRef.current.nextY,
+      });
+    };
+
+    window.addEventListener("pointermove", handlePointerMove, {
+      passive: true,
+    });
+    window.addEventListener("pointerup", finishDrag);
+    window.addEventListener("pointercancel", finishDrag);
+  }
+
+  return (
+    <div
+      ref={nodeRef}
+      className="absolute will-change-transform"
+      style={{
+        width: node.width,
+        height: node.height,
+        transform: positionTransform(node.position),
+      }}
+    >
+      <div
+        className={cn(
+          "flex size-full items-start gap-3 rounded-md border bg-background p-3 text-left shadow-sm",
+          selected && "border-primary bg-primary/10 ring-2 ring-primary/20"
+        )}
+      >
+        <button
+          type="button"
+          onClick={onSelect}
+          className="flex min-w-0 flex-1 items-start gap-3 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Icon className="mt-0.5 size-5 shrink-0 text-primary" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-medium">{node.title}</span>
+            <span className="mt-2 block line-clamp-2 text-sm text-muted-foreground">
+              {node.detail}
+            </span>
+            {node.badge ? (
+              <Badge variant="secondary" className="mt-2">
+                {node.badge}
+              </Badge>
+            ) : null}
+          </span>
+        </button>
+        <button
+          type="button"
+          aria-label={`Move ${node.title}`}
+          onPointerDown={handlePointerDown}
+          className="inline-flex size-8 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <GripVertical className="size-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function createFlowCanvasNodes({
+  trigger,
+  classifierPrompt,
+  outcomes,
+  showWorkflowGraph,
+  nodePositions,
+}: {
+  trigger: string;
+  classifierPrompt: string;
+  outcomes: WorkflowOutcome[];
+  showWorkflowGraph: boolean;
+  nodePositions: Record<string, NodePosition>;
+}): FlowCanvasNode[] {
+  const nodes: FlowCanvasNode[] = [
+    {
+      id: triggerNodeId,
+      title: "Email watcher",
+      detail: trigger,
+      icon: Inbox,
+      module: { type: "trigger" },
+      position: nodePositions[triggerNodeId] ?? { x: 32, y: 48 },
+      width: flowNodeWidth,
+      height: flowNodeHeight,
+      badge: "Initial node",
+    },
+  ];
+
+  if (!showWorkflowGraph) {
+    return nodes;
+  }
+
+  nodes.push({
+    id: classifierNodeId,
+    title: "Filter incoming email",
+    detail: classifierPrompt || "Decide which branch should handle the email.",
+    icon: Filter,
+    module: { type: "classifier" },
+    position: nodePositions[classifierNodeId] ?? { x: 360, y: 48 },
+    width: flowNodeWidth,
+    height: flowNodeHeight,
+    badge: `${outcomes.length} branches`,
+  });
+
+  outcomes.forEach((outcome, outcomeIndex) => {
+    const column = outcomeIndex % 2;
+    const row = Math.floor(outcomeIndex / 2);
+    const outcomeId = outcomeNodeId(outcome.id);
+    const baseX = 88 + column * 360;
+    const baseY = 224 + row * 260;
+
+    nodes.push({
+      id: outcomeId,
+      title: outcome.name || "New classification",
+      detail: outcome.description || "Classification rule",
+      icon: Sparkles,
+      module: { type: "outcome", outcomeId: outcome.id },
+      position: nodePositions[outcomeId] ?? { x: baseX, y: baseY },
+      width: flowNodeWidth,
+      height: flowNodeHeight,
+      badge: `${outcome.actions.length} actions`,
+    });
+
+    outcome.actions.forEach((action, actionIndex) => {
+      const actionId = actionNodeId(action.id);
+
+      nodes.push({
+        id: actionId,
+        title: actionLabels[action.type],
+        detail: actionSummary(action),
+        icon: actionIcons[action.type],
+        module: {
+          type: "action",
+          outcomeId: outcome.id,
+          actionId: action.id,
+        },
+        position: nodePositions[actionId] ?? {
+          x: baseX + actionIndex * 250,
+          y: baseY + 150,
+        },
+        width: actionNodeWidth,
+        height: actionNodeHeight,
+      });
+    });
+  });
+
+  return nodes;
+}
+
+function createFlowCanvasEdges(
+  outcomes: WorkflowOutcome[],
+  showWorkflowGraph: boolean
+): FlowCanvasEdge[] {
+  if (!showWorkflowGraph) {
+    return [];
+  }
+
+  const edges: FlowCanvasEdge[] = [
+    {
+      id: "trigger-to-classifier",
+      from: triggerNodeId,
+      to: classifierNodeId,
+    },
+  ];
+
+  outcomes.forEach((outcome) => {
+    const outcomeId = outcomeNodeId(outcome.id);
+
+    edges.push({
+      id: `${classifierNodeId}-to-${outcomeId}`,
+      from: classifierNodeId,
+      to: outcomeId,
+    });
+
+    outcome.actions.forEach((action, actionIndex) => {
+      const previousAction = outcome.actions[actionIndex - 1];
+
+      edges.push({
+        id: previousAction
+          ? `${actionNodeId(previousAction.id)}-to-${actionNodeId(action.id)}`
+          : `${outcomeId}-to-${actionNodeId(action.id)}`,
+        from: previousAction ? actionNodeId(previousAction.id) : outcomeId,
+        to: actionNodeId(action.id),
+      });
+    });
+  });
+
+  return edges;
+}
+
+function flowEdgePath(
+  edge: FlowCanvasEdge,
+  nodeMap: Map<string, FlowCanvasNode>
+) {
+  const from = nodeMap.get(edge.from);
+  const to = nodeMap.get(edge.to);
+
+  if (!from || !to) {
+    return null;
+  }
+
+  const x1 = from.position.x + from.width;
+  const y1 = from.position.y + from.height / 2;
+  const x2 = to.position.x;
+  const y2 = to.position.y + to.height / 2;
+  const distance = Math.max(80, Math.abs(x2 - x1) / 2);
+  const c1 = x1 + distance;
+  const c2 = x2 - distance;
+
+  return `M ${x1} ${y1} C ${c1} ${y1}, ${c2} ${y2}, ${x2} ${y2}`;
+}
+
+function getFlowCanvasSize(nodes: FlowCanvasNode[]) {
+  return nodes.reduce(
+    (size, node) => ({
+      width: Math.max(size.width, node.position.x + node.width + 48),
+      height: Math.max(size.height, node.position.y + node.height + 48),
+    }),
+    { width: 760, height: 420 }
+  );
+}
+
+function modulesMatch(first: SelectedModule, second: SelectedModule) {
+  if (first.type !== second.type) {
+    return false;
+  }
+
+  if (first.type === "outcome" && second.type === "outcome") {
+    return first.outcomeId === second.outcomeId;
+  }
+
+  if (first.type === "action" && second.type === "action") {
+    return (
+      first.outcomeId === second.outcomeId && first.actionId === second.actionId
+    );
+  }
+
+  return true;
+}
+
+function positionTransform(position: NodePosition) {
+  return `translate3d(${position.x}px, ${position.y}px, 0)`;
+}
+
+function outcomeNodeId(outcomeId: string) {
+  return `outcome-${outcomeId}`;
+}
+
+function actionNodeId(actionId: string) {
+  return `action-${actionId}`;
 }
 
 function WorkflowSettings({
@@ -560,9 +884,11 @@ function ClassifierSettings({
 
 function OutcomeSettings({
   outcome,
+  onAddAction,
   onChange,
 }: {
   outcome: WorkflowOutcome;
+  onAddAction: (type: WorkflowActionType) => void;
   onChange: (updater: (outcome: WorkflowOutcome) => WorkflowOutcome) => void;
 }) {
   return (
@@ -607,6 +933,27 @@ function OutcomeSettings({
           }
           className="min-h-32"
         />
+      </div>
+      <div className="space-y-2">
+        <Label>Actions</Label>
+        <div className="grid gap-2">
+          {actionTypes.map((type) => {
+            const Icon = actionIcons[type];
+
+            return (
+              <Button
+                key={type}
+                type="button"
+                variant="outline"
+                className="justify-start"
+                onClick={() => onAddAction(type)}
+              >
+                <Icon className="size-4" />
+                {actionLabels[type]}
+              </Button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -880,66 +1227,6 @@ function ArchiveFields({ action, actionId, onChange }: ActionFieldProps) {
           }))
         }
       />
-    </div>
-  );
-}
-
-function FlowModuleButton({
-  title,
-  detail,
-  icon: Icon,
-  selected,
-  onClick,
-  className,
-}: {
-  title: string;
-  detail: string;
-  icon: React.ComponentType<{ className?: string }>;
-  selected: boolean;
-  onClick: () => void;
-  className?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex min-h-24 w-full items-start gap-3 rounded-md border bg-background p-4 text-left transition hover:bg-muted/60",
-        selected && "border-primary bg-primary/10",
-        className
-      )}
-    >
-      <Icon className="mt-0.5 size-5 shrink-0 text-primary" />
-      <span className="min-w-0 flex-1">
-        <span className="block font-medium">{title}</span>
-        <span className="mt-2 block line-clamp-2 text-sm text-muted-foreground">
-          {detail}
-        </span>
-      </span>
-    </button>
-  );
-}
-
-function FlowConnector({ label }: { label: string }) {
-  return (
-    <div className="flex h-16 flex-col items-center justify-center">
-      <div className="h-8 w-px bg-border" />
-      <span className="rounded-md border bg-background px-2 py-1 text-xs text-muted-foreground">
-        {label}
-      </span>
-      <div className="h-8 w-px bg-border" />
-    </div>
-  );
-}
-
-function BranchSplit() {
-  return (
-    <div className="flex h-14 flex-col items-center justify-center">
-      <div className="h-5 w-px bg-border" />
-      <span className="flex size-8 items-center justify-center rounded-md border bg-background text-primary">
-        <GitBranch className="size-4" />
-      </span>
-      <ArrowDown className="mt-1 size-4 text-muted-foreground" />
     </div>
   );
 }

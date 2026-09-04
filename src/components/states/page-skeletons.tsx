@@ -55,7 +55,7 @@ export function WorkflowDetailSkeleton() {
   return (
     <AppShell
       title="Workflow"
-      description="Loading the classifier, branches, and actions for this workflow."
+      description="Loading the classifier, classifications, and actions for this workflow."
       breadcrumbs={[{ title: "Workflows", href: "/workflows" }, { title: "Workflow" }]}
       hideHeading
       fill

@@ -3,12 +3,15 @@
 import * as React from "react";
 import {
   Archive,
+  CircleDot,
   Filter,
   Forward,
-  GripVertical,
+  GitBranch,
+  Grip,
   Inbox,
   MailCheck,
-  Plus,
+  MousePointer2,
+  Move,
   Save,
   Settings2,
   Sparkles,
@@ -58,6 +61,61 @@ const actionIcons = {
 
 const actionTypes = Object.keys(actionLabels) as WorkflowActionType[];
 
+const canvasWidth = 1520;
+const canvasHeight = 980;
+const nodeWidth = 248;
+const nodeHeights = {
+  trigger: 112,
+  classifier: 112,
+  outcome: 124,
+  action: 104,
+} satisfies Record<CanvasNodeKind, number>;
+
+type CanvasNodeKind = "trigger" | "classifier" | "outcome" | "action";
+
+type CanvasNodePosition = {
+  x: number;
+  y: number;
+};
+
+type CanvasPositions = Record<string, CanvasNodePosition>;
+
+type FlowCanvasNode = {
+  id: string;
+  kind: CanvasNodeKind;
+  module: Exclude<SelectedModule, { type: "workflow" }>;
+  title: string;
+  detail: string;
+  meta: string;
+  icon: React.ComponentType<{ className?: string }>;
+  position: CanvasNodePosition;
+  ready: boolean;
+  outcomeId?: string;
+  actionId?: string;
+};
+
+type CanvasEdge = {
+  from: string;
+  to: string;
+};
+
+type PaletteWidgetType = "outcome" | WorkflowActionType;
+
+type DragState =
+  | {
+      type: "pan";
+      startClientX: number;
+      startClientY: number;
+      startPan: CanvasNodePosition;
+    }
+  | {
+      type: "node";
+      nodeId: string;
+      startClientX: number;
+      startClientY: number;
+      startPosition: CanvasNodePosition;
+    };
+
 type SelectedModule =
   | { type: "workflow" }
   | { type: "trigger" }
@@ -65,46 +123,18 @@ type SelectedModule =
   | { type: "outcome"; outcomeId: string }
   | { type: "action"; outcomeId: string; actionId: string };
 
-type NodePosition = {
-  x: number;
-  y: number;
-};
-
-type FlowCanvasNode = {
-  id: string;
-  title: string;
-  detail: string;
-  icon: React.ComponentType<{ className?: string }>;
-  module: SelectedModule;
-  position: NodePosition;
-  width: number;
-  height: number;
-  badge?: string;
-};
-
-type FlowCanvasEdge = {
-  id: string;
-  from: string;
-  to: string;
-};
-
 type WorkflowBuilderProps = {
   initialDraft: WorkflowDraft;
   /** "new" starts from a blank draft and asks for a name before saving. */
   mode?: "edit" | "new";
 };
 
-const triggerNodeId = "trigger";
-const classifierNodeId = "classifier";
-const flowNodeWidth = 250;
-const flowNodeHeight = 104;
-const actionNodeWidth = 230;
-const actionNodeHeight = 88;
-
 export function WorkflowBuilder({
   initialDraft,
   mode = "edit",
 }: WorkflowBuilderProps) {
+  const canvasRef = React.useRef<HTMLDivElement>(null);
+  const dragState = React.useRef<DragState | null>(null);
   const [workflowName, setWorkflowName] = React.useState(initialDraft.name);
   const [detail, setDetail] = React.useState(initialDraft.detail);
   const [ownerRole, setOwnerRole] = React.useState(initialDraft.ownerRole);
@@ -113,39 +143,16 @@ export function WorkflowBuilder({
     initialDraft.classifierPrompt
   );
   const [outcomes, setOutcomes] = React.useState(initialDraft.outcomes);
+  const [nodePositions, setNodePositions] = React.useState<CanvasPositions>(
+    () => createInitialNodePositions(initialDraft.outcomes)
+  );
+  const [pan, setPan] = React.useState<CanvasNodePosition>({ x: 8, y: 8 });
+  const [connectingFrom, setConnectingFrom] =
+    React.useState<FlowCanvasNode | null>(null);
   const [selectedModule, setSelectedModule] = React.useState<SelectedModule>({
     type: "workflow",
   });
   const [lastSavedAt, setLastSavedAt] = React.useState<string | null>(null);
-  const [nodePositions, setNodePositions] = React.useState<
-    Record<string, NodePosition>
-  >({});
-
-  const showWorkflowGraph =
-    mode === "edit" || outcomes.length > 0 || Boolean(classifierPrompt.trim());
-  const flowNodes = React.useMemo(
-    () =>
-      createFlowCanvasNodes({
-        trigger,
-        classifierPrompt,
-        outcomes,
-        showWorkflowGraph,
-        nodePositions,
-      }),
-    [classifierPrompt, nodePositions, outcomes, showWorkflowGraph, trigger]
-  );
-  const flowEdges = React.useMemo(
-    () => createFlowCanvasEdges(outcomes, showWorkflowGraph),
-    [outcomes, showWorkflowGraph]
-  );
-  const flowNodeMap = React.useMemo(
-    () => new Map(flowNodes.map((node) => [node.id, node])),
-    [flowNodes]
-  );
-  const flowCanvasSize = React.useMemo(
-    () => getFlowCanvasSize(flowNodes),
-    [flowNodes]
-  );
 
   const selectedOutcome =
     "outcomeId" in selectedModule
@@ -172,6 +179,26 @@ export function WorkflowBuilder({
     [outcomes]
   );
 
+  const canvasNodes = React.useMemo(
+    () =>
+      createCanvasNodes({
+        trigger,
+        classifierPrompt,
+        outcomes,
+        exampleCount,
+        nodePositions,
+      }),
+    [classifierPrompt, exampleCount, nodePositions, outcomes, trigger]
+  );
+  const canvasNodeMap = React.useMemo(
+    () => new Map(canvasNodes.map((node) => [node.id, node])),
+    [canvasNodes]
+  );
+  const canvasEdges = React.useMemo(
+    () => createCanvasEdges(outcomes),
+    [outcomes]
+  );
+
   const basicsReady = Boolean(workflowName.trim()) && Boolean(detail.trim());
   const actionsReady =
     outcomes.length > 0 &&
@@ -186,7 +213,8 @@ export function WorkflowBuilder({
     );
   }
 
-  function addOutcome() {
+  function addOutcome(position?: CanvasNodePosition) {
+    const nextIndex = outcomes.length;
     const nextOutcome: WorkflowOutcome = {
       id: `outcome-${Date.now()}`,
       name: "New classification",
@@ -194,14 +222,51 @@ export function WorkflowBuilder({
       examples: "",
       actions: [createWorkflowAction("forward")],
     };
+    const outcomePosition = clampCanvasPosition(
+      position ?? {
+        x: 640,
+        y: 96 + nextIndex * 176,
+      },
+      "outcome"
+    );
+    const actionPosition = clampCanvasPosition(
+      {
+        x: outcomePosition.x + 330,
+        y: outcomePosition.y + 10,
+      },
+      "action"
+    );
+    const firstAction = nextOutcome.actions[0];
 
+    setNodePositions((current) => ({
+      ...current,
+      [nextOutcome.id]: outcomePosition,
+      [firstAction.id]: actionPosition,
+    }));
     setOutcomes((current) => [...current, nextOutcome]);
     setSelectedModule({ type: "outcome", outcomeId: nextOutcome.id });
   }
 
-  function addAction(outcomeId: string, type: WorkflowActionType) {
+  function addAction(
+    outcomeId: string,
+    type: WorkflowActionType,
+    position?: CanvasNodePosition
+  ) {
     const nextAction = createWorkflowAction(type);
+    const outcome = outcomes.find((current) => current.id === outcomeId);
+    const outcomePosition = nodePositions[outcomeId] ?? { x: 640, y: 96 };
+    const actionPosition = clampCanvasPosition(
+      position ?? {
+        x: outcomePosition.x + 330 + (outcome?.actions.length ?? 0) * 286,
+        y: outcomePosition.y + 10,
+      },
+      "action"
+    );
 
+    setNodePositions((current) => ({
+      ...current,
+      [nextAction.id]: actionPosition,
+    }));
     updateOutcome(outcomeId, (outcome) => ({
       ...outcome,
       actions: [...outcome.actions, nextAction],
@@ -234,7 +299,233 @@ export function WorkflowBuilder({
           ? outcome.actions.filter((action) => action.id !== actionId)
           : outcome.actions,
     }));
+    setNodePositions((current) => {
+      const next = { ...current };
+      delete next[actionId];
+      return next;
+    });
     setSelectedModule({ type: "outcome", outcomeId });
+  }
+
+  function moveActionToOutcome(actionId: string, outcomeId: string) {
+    let movedAction: WorkflowAction | undefined;
+
+    setOutcomes((current) => {
+      const next = current.map((outcome) => {
+        const action = outcome.actions.find((item) => item.id === actionId);
+
+        if (!action) {
+          return outcome;
+        }
+
+        movedAction = action;
+        return {
+          ...outcome,
+          actions: outcome.actions.filter((item) => item.id !== actionId),
+        };
+      });
+
+      if (!movedAction) {
+        return current;
+      }
+
+      const actionToMove = movedAction;
+
+      return next.map((outcome) =>
+        outcome.id === outcomeId &&
+        !outcome.actions.some((action) => action.id === actionId)
+          ? { ...outcome, actions: [...outcome.actions, actionToMove] }
+          : outcome
+      );
+    });
+    setSelectedModule({ type: "action", outcomeId, actionId });
+  }
+
+  function reorderActionAfter(sourceActionId: string, targetActionId: string) {
+    setOutcomes((current) =>
+      current.map((outcome) => {
+        const sourceIndex = outcome.actions.findIndex(
+          (action) => action.id === sourceActionId
+        );
+        const targetIndex = outcome.actions.findIndex(
+          (action) => action.id === targetActionId
+        );
+
+        if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) {
+          return outcome;
+        }
+
+        const nextActions = [...outcome.actions];
+        const [targetAction] = nextActions.splice(targetIndex, 1);
+        const nextSourceIndex = nextActions.findIndex(
+          (action) => action.id === sourceActionId
+        );
+        nextActions.splice(nextSourceIndex + 1, 0, targetAction);
+
+        return { ...outcome, actions: nextActions };
+      })
+    );
+  }
+
+  function getCanvasPoint(clientX: number, clientY: number) {
+    const bounds = canvasRef.current?.getBoundingClientRect();
+
+    if (!bounds) {
+      return { x: 0, y: 0 };
+    }
+
+    return {
+      x: clientX - bounds.left - pan.x,
+      y: clientY - bounds.top - pan.y,
+    };
+  }
+
+  function selectedOutcomeIdForWidgetDrop(point: CanvasNodePosition) {
+    const nearestOutcome = outcomes
+      .map((outcome) => ({
+        outcome,
+        position: nodePositions[outcome.id] ?? { x: 640, y: 96 },
+      }))
+      .map(({ outcome, position }) => ({
+        outcome,
+        distance: Math.hypot(point.x - position.x, point.y - position.y),
+      }))
+      .sort((a, b) => a.distance - b.distance)[0];
+
+    if (nearestOutcome && nearestOutcome.distance < 360) {
+      return nearestOutcome.outcome.id;
+    }
+
+    if ("outcomeId" in selectedModule) {
+      return selectedModule.outcomeId;
+    }
+
+    return outcomes[0]?.id;
+  }
+
+  function handleWidgetDrop(widgetType: PaletteWidgetType, point: CanvasNodePosition) {
+    const position = {
+      x: point.x - nodeWidth / 2,
+      y: point.y - nodeHeights[widgetType === "outcome" ? "outcome" : "action"] / 2,
+    };
+
+    if (widgetType === "outcome") {
+      addOutcome(position);
+      return;
+    }
+
+    const outcomeId = selectedOutcomeIdForWidgetDrop(point);
+
+    if (outcomeId) {
+      addAction(outcomeId, widgetType, position);
+    }
+  }
+
+  function handleCanvasDrop(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const widgetType = event.dataTransfer.getData(
+      "application/x-workflow-widget"
+    ) as PaletteWidgetType;
+
+    if (!isPaletteWidgetType(widgetType)) {
+      return;
+    }
+
+    handleWidgetDrop(widgetType, getCanvasPoint(event.clientX, event.clientY));
+  }
+
+  function handleCanvasPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0 || event.target !== event.currentTarget) {
+      return;
+    }
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragState.current = {
+      type: "pan",
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startPan: pan,
+    };
+    setConnectingFrom(null);
+  }
+
+  function handleNodePointerDown(
+    event: React.PointerEvent<HTMLDivElement>,
+    node: FlowCanvasNode
+  ) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragState.current = {
+      type: "node",
+      nodeId: node.id,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startPosition: node.position,
+    };
+    setSelectedModule(node.module);
+  }
+
+  function handleCanvasPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragState.current;
+
+    if (!drag) {
+      return;
+    }
+
+    if (drag.type === "pan") {
+      setPan({
+        x: drag.startPan.x + event.clientX - drag.startClientX,
+        y: drag.startPan.y + event.clientY - drag.startClientY,
+      });
+      return;
+    }
+
+    const node = canvasNodeMap.get(drag.nodeId);
+
+    if (!node) {
+      return;
+    }
+
+    setNodePositions((current) => ({
+      ...current,
+      [drag.nodeId]: clampCanvasPosition(
+        {
+          x: drag.startPosition.x + event.clientX - drag.startClientX,
+          y: drag.startPosition.y + event.clientY - drag.startClientY,
+        },
+        node.kind
+      ),
+    }));
+  }
+
+  function handleCanvasPointerUp() {
+    dragState.current = null;
+  }
+
+  function handleConnectionTarget(targetNode: FlowCanvasNode) {
+    if (!connectingFrom || connectingFrom.id === targetNode.id) {
+      setConnectingFrom(null);
+      return;
+    }
+
+    connectCanvasNodes(connectingFrom, targetNode);
+    setConnectingFrom(null);
+    setSelectedModule(targetNode.module);
+  }
+
+  function connectCanvasNodes(sourceNode: FlowCanvasNode, targetNode: FlowCanvasNode) {
+    if (sourceNode.kind === "outcome" && targetNode.kind === "action") {
+      moveActionToOutcome(targetNode.id, sourceNode.id);
+      return;
+    }
+
+    if (sourceNode.kind === "action" && targetNode.kind === "action") {
+      reorderActionAfter(sourceNode.id, targetNode.id);
+    }
   }
 
   function saveDraft() {
@@ -246,64 +537,101 @@ export function WorkflowBuilder({
     );
   }
 
-  const updateNodePosition = React.useCallback(
-    (id: string, position: NodePosition) => {
-      setNodePositions((current) => ({ ...current, [id]: position }));
-    },
-    []
-  );
-
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-      <div className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Flow builder</CardTitle>
-            <CardAction className="flex flex-wrap justify-end gap-2">
-              <Button
-                type="button"
-                variant={
-                  selectedModule.type === "workflow" ? "default" : "outline"
-                }
-                onClick={() => setSelectedModule({ type: "workflow" })}
-              >
-                <Settings2 className="size-4" />
-                Settings
-              </Button>
-              <Button type="button" variant="outline" onClick={addOutcome}>
-                <Plus className="size-4" />
-                Add branch
-              </Button>
-            </CardAction>
-          </CardHeader>
-          <CardContent>
-            <FlowCanvas
-              nodes={flowNodes}
-              edges={flowEdges}
-              nodeMap={flowNodeMap}
-              canvasSize={flowCanvasSize}
-              selectedModule={selectedModule}
-              onSelectModule={setSelectedModule}
-              onNodePositionChange={updateNodePosition}
-            />
-          </CardContent>
-        </Card>
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b">
+          <CardTitle>Flow builder</CardTitle>
+          <CardAction className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant={selectedModule.type === "workflow" ? "default" : "outline"}
+              onClick={() => setSelectedModule({ type: "workflow" })}
+            >
+              <Settings2 className="size-4" />
+              Workflow
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => setPan({ x: 8, y: 8 })}
+              aria-label="Reset canvas position"
+              title="Reset canvas position"
+            >
+              <Move className="size-4" />
+            </Button>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="grid min-h-[720px] gap-0 p-0 lg:grid-cols-[232px_minmax(0,1fr)]">
+          <WidgetPalette
+            selectedModule={selectedModule}
+            onSelectWorkflow={() => setSelectedModule({ type: "workflow" })}
+            onAddOutcome={() => addOutcome()}
+            onAddAction={(type) => {
+              const outcomeId = selectedOutcomeIdForWidgetDrop({ x: 0, y: 0 });
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Ready Check</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <ReadinessRow label="Basics" ready={basicsReady} />
-            <ReadinessRow label="Trigger" ready={Boolean(trigger.trim())} />
-            <ReadinessRow
-              label="Classifier"
-              ready={Boolean(classifierPrompt.trim()) && exampleCount > 0}
-            />
-            <ReadinessRow label="Actions" ready={actionsReady} />
-          </CardContent>
-        </Card>
-      </div>
+              if (outcomeId) {
+                addAction(outcomeId, type);
+              }
+            }}
+          />
+          <div className="flex min-w-0 flex-col">
+            <div className="grid gap-3 border-b bg-muted/20 p-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+              <ReadinessRow label="Basics" ready={basicsReady} />
+              <ReadinessRow label="Trigger" ready={Boolean(trigger.trim())} />
+              <ReadinessRow
+                label="Classifier"
+                ready={Boolean(classifierPrompt.trim()) && exampleCount > 0}
+              />
+              <ReadinessRow label="Actions" ready={actionsReady} />
+            </div>
+            <div
+              ref={canvasRef}
+              className={cn(
+                "relative min-h-[640px] flex-1 overflow-hidden bg-background",
+                "bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-[size:28px_28px]"
+              )}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={handleCanvasDrop}
+              onPointerMove={handleCanvasPointerMove}
+              onPointerUp={handleCanvasPointerUp}
+              onPointerCancel={handleCanvasPointerUp}
+            >
+              <div
+                className="absolute left-0 top-0 cursor-grab active:cursor-grabbing"
+                style={{
+                  width: canvasWidth,
+                  height: canvasHeight,
+                  transform: `translate(${pan.x}px, ${pan.y}px)`,
+                }}
+                onPointerDown={handleCanvasPointerDown}
+              >
+                <FlowEdges edges={canvasEdges} nodes={canvasNodeMap} />
+                {canvasNodes.map((node) => (
+                  <CanvasNode
+                    key={node.id}
+                    node={node}
+                    selected={moduleKey(selectedModule) === moduleKey(node.module)}
+                    connecting={connectingFrom?.id === node.id}
+                    canReceiveConnection={Boolean(
+                      connectingFrom && connectingFrom.id !== node.id
+                    )}
+                    onPointerDown={(event) => handleNodePointerDown(event, node)}
+                    onSelect={() => setSelectedModule(node.module)}
+                    onStartConnection={() => setConnectingFrom(node)}
+                    onCompleteConnection={() => handleConnectionTarget(node)}
+                  />
+                ))}
+              </div>
+              <div className="pointer-events-none absolute bottom-3 left-3 flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 text-xs text-muted-foreground shadow-sm">
+                <MousePointer2 className="size-3.5" />
+                <span>{connectingFrom ? "Choose a target node" : "Canvas ready"}</span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <aside className="space-y-4">
         <Card>
@@ -336,7 +664,6 @@ export function WorkflowBuilder({
             {selectedModule.type === "outcome" && selectedOutcome ? (
               <OutcomeSettings
                 outcome={selectedOutcome}
-                onAddAction={(type) => addAction(selectedOutcome.id, type)}
                 onChange={(updater) =>
                   updateOutcome(selectedOutcome.id, updater)
                 }
@@ -385,303 +712,392 @@ export function WorkflowBuilder({
   );
 }
 
-function FlowCanvas({
-  nodes,
-  edges,
-  nodeMap,
-  canvasSize,
+function WidgetPalette({
   selectedModule,
-  onSelectModule,
-  onNodePositionChange,
+  onSelectWorkflow,
+  onAddOutcome,
+  onAddAction,
 }: {
-  nodes: FlowCanvasNode[];
-  edges: FlowCanvasEdge[];
-  nodeMap: Map<string, FlowCanvasNode>;
-  canvasSize: { width: number; height: number };
   selectedModule: SelectedModule;
-  onSelectModule: (module: SelectedModule) => void;
-  onNodePositionChange: (id: string, position: NodePosition) => void;
+  onSelectWorkflow: () => void;
+  onAddOutcome: () => void;
+  onAddAction: (type: WorkflowActionType) => void;
 }) {
   return (
-    <div className="overflow-auto rounded-md border bg-muted/20">
-      <div
-        className="relative min-h-[360px]"
-        style={{ width: canvasSize.width, height: canvasSize.height }}
-      >
-        <svg
-          className="pointer-events-none absolute inset-0 size-full"
-          aria-hidden="true"
+    <div className="border-b bg-muted/20 p-3 lg:border-b-0 lg:border-r">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="text-sm font-medium">Widgets</div>
+        <Button
+          type="button"
+          variant={selectedModule.type === "workflow" ? "default" : "ghost"}
+          size="icon"
+          onClick={onSelectWorkflow}
+          aria-label="Workflow settings"
+          title="Workflow settings"
         >
-          {edges.map((edge) => {
-            const path = flowEdgePath(edge, nodeMap);
+          <Settings2 className="size-4" />
+        </Button>
+      </div>
+      <div className="space-y-2">
+        <PaletteItem
+          title="Branch"
+          detail="Classification outcome"
+          icon={GitBranch}
+          widgetType="outcome"
+          onAdd={onAddOutcome}
+        />
+        {actionTypes.map((type) => {
+          const Icon = actionIcons[type];
 
-            return path ? (
-              <path
-                key={edge.id}
-                className="stroke-border"
-                d={path}
-                fill="none"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            ) : null;
-          })}
-        </svg>
-        {nodes.map((node) => (
-          <DraggableFlowNode
-            key={node.id}
-            node={node}
-            selected={modulesMatch(selectedModule, node.module)}
-            onSelect={() => onSelectModule(node.module)}
-            onPositionChange={(position) =>
-              onNodePositionChange(node.id, position)
-            }
-          />
-        ))}
+          return (
+            <PaletteItem
+              key={type}
+              title={actionLabels[type]}
+              detail="Action node"
+              icon={Icon}
+              widgetType={type}
+              onAdd={() => onAddAction(type)}
+            />
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function DraggableFlowNode({
+function PaletteItem({
+  title,
+  detail,
+  icon: Icon,
+  widgetType,
+  onAdd,
+}: {
+  title: string;
+  detail: string;
+  icon: React.ComponentType<{ className?: string }>;
+  widgetType: PaletteWidgetType;
+  onAdd: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      draggable
+      onClick={onAdd}
+      onDragStart={(event) => {
+        event.dataTransfer.setData("application/x-workflow-widget", widgetType);
+        event.dataTransfer.effectAllowed = "copy";
+      }}
+      className="flex min-h-16 w-full items-center gap-3 rounded-md border bg-background px-3 py-2 text-left shadow-sm transition hover:border-primary/60 hover:bg-primary/5"
+    >
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+        <Icon className="size-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">{title}</span>
+        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+          {detail}
+        </span>
+      </span>
+      <Grip className="size-4 shrink-0 text-muted-foreground" />
+    </button>
+  );
+}
+
+function CanvasNode({
   node,
   selected,
+  connecting,
+  canReceiveConnection,
+  onPointerDown,
   onSelect,
-  onPositionChange,
+  onStartConnection,
+  onCompleteConnection,
 }: {
   node: FlowCanvasNode;
   selected: boolean;
+  connecting: boolean;
+  canReceiveConnection: boolean;
+  onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
   onSelect: () => void;
-  onPositionChange: (position: NodePosition) => void;
+  onStartConnection: () => void;
+  onCompleteConnection: () => void;
 }) {
-  const nodeRef = React.useRef<HTMLDivElement>(null);
-  const dragRef = React.useRef({
-    dragging: false,
-    frame: 0,
-    originClientX: 0,
-    originClientY: 0,
-    originX: 0,
-    originY: 0,
-    nextX: node.position.x,
-    nextY: node.position.y,
-  });
   const Icon = node.icon;
-
-  React.useEffect(() => {
-    const element = nodeRef.current;
-
-    if (!element || dragRef.current.dragging) {
-      return;
-    }
-
-    element.style.transform = positionTransform(node.position);
-  }, [node.position]);
-
-  function handlePointerDown(event: React.PointerEvent<HTMLButtonElement>) {
-    if (event.button !== 0) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    const element = nodeRef.current;
-
-    if (!element) {
-      return;
-    }
-
-    dragRef.current = {
-      dragging: true,
-      frame: 0,
-      originClientX: event.clientX,
-      originClientY: event.clientY,
-      originX: node.position.x,
-      originY: node.position.y,
-      nextX: node.position.x,
-      nextY: node.position.y,
-    };
-    element.style.zIndex = "20";
-
-    const applyPosition = () => {
-      dragRef.current.frame = 0;
-      element.style.transform = positionTransform({
-        x: dragRef.current.nextX,
-        y: dragRef.current.nextY,
-      });
-    };
-
-    const handlePointerMove = (moveEvent: PointerEvent) => {
-      const nextX =
-        dragRef.current.originX +
-        moveEvent.clientX -
-        dragRef.current.originClientX;
-      const nextY =
-        dragRef.current.originY +
-        moveEvent.clientY -
-        dragRef.current.originClientY;
-
-      dragRef.current.nextX = Math.max(12, nextX);
-      dragRef.current.nextY = Math.max(12, nextY);
-
-      if (dragRef.current.frame === 0) {
-        dragRef.current.frame = window.requestAnimationFrame(applyPosition);
-      }
-    };
-
-    const finishDrag = () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", finishDrag);
-      window.removeEventListener("pointercancel", finishDrag);
-
-      if (dragRef.current.frame !== 0) {
-        window.cancelAnimationFrame(dragRef.current.frame);
-        applyPosition();
-      }
-
-      dragRef.current.dragging = false;
-      element.style.zIndex = "";
-      onPositionChange({
-        x: dragRef.current.nextX,
-        y: dragRef.current.nextY,
-      });
-    };
-
-    window.addEventListener("pointermove", handlePointerMove, {
-      passive: true,
-    });
-    window.addEventListener("pointerup", finishDrag);
-    window.addEventListener("pointercancel", finishDrag);
-  }
+  const height = nodeHeights[node.kind];
 
   return (
     <div
-      ref={nodeRef}
-      className="absolute will-change-transform"
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
+      onPointerDown={onPointerDown}
+      className={cn(
+        "absolute rounded-md border bg-card p-3 text-card-foreground shadow-sm transition",
+        "cursor-grab select-none active:cursor-grabbing",
+        selected && "border-primary shadow-md ring-2 ring-primary/20",
+        connecting && "border-primary bg-primary/10",
+        canReceiveConnection && "ring-2 ring-muted-foreground/20"
+      )}
       style={{
-        width: node.width,
-        height: node.height,
-        transform: positionTransform(node.position),
+        width: nodeWidth,
+        minHeight: height,
+        transform: `translate(${node.position.x}px, ${node.position.y}px)`,
       }}
     >
-      <div
-        className={cn(
-          "flex size-full items-start gap-3 rounded-md border bg-background p-3 text-left shadow-sm",
-          selected && "border-primary bg-primary/10 ring-2 ring-primary/20"
-        )}
-      >
+      {node.kind !== "trigger" ? (
         <button
           type="button"
-          onClick={onSelect}
-          className="flex min-w-0 flex-1 items-start gap-3 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <Icon className="mt-0.5 size-5 shrink-0 text-primary" />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate font-medium">{node.title}</span>
-            <span className="mt-2 block line-clamp-2 text-sm text-muted-foreground">
-              {node.detail}
-            </span>
-            {node.badge ? (
-              <Badge variant="secondary" className="mt-2">
-                {node.badge}
-              </Badge>
+          onClick={(event) => {
+            event.stopPropagation();
+            onCompleteConnection();
+          }}
+          className={cn(
+            "absolute left-0 top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border bg-background transition",
+            canReceiveConnection
+              ? "border-primary ring-4 ring-primary/15"
+              : "border-border"
+          )}
+          aria-label={`Connect to ${node.title}`}
+          title={`Connect to ${node.title}`}
+        />
+      ) : null}
+
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onStartConnection();
+        }}
+        className={cn(
+          "absolute right-0 top-1/2 size-4 translate-x-1/2 -translate-y-1/2 rounded-full border bg-background transition",
+          connecting ? "border-primary ring-4 ring-primary/15" : "border-border"
+        )}
+        aria-label={`Start connection from ${node.title}`}
+        title={`Start connection from ${node.title}`}
+      >
+        <span className="sr-only">Connect</span>
+      </button>
+
+      <div className="flex items-start gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+          <Icon className="size-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span className="truncate font-medium">{node.title}</span>
+            {node.ready ? (
+              <CircleDot className="size-3.5 shrink-0 text-success" />
             ) : null}
           </span>
-        </button>
-        <button
-          type="button"
-          aria-label={`Move ${node.title}`}
-          onPointerDown={handlePointerDown}
-          className="inline-flex size-8 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <GripVertical className="size-4" />
-        </button>
+          <span className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+            {node.detail}
+          </span>
+        </span>
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span className="truncate">{node.meta}</span>
+        <Badge variant={node.ready ? "outline" : "destructive"}>
+          {node.ready ? "Ready" : "Needs input"}
+        </Badge>
       </div>
     </div>
   );
 }
 
-function createFlowCanvasNodes({
+function FlowEdges({
+  edges,
+  nodes,
+}: {
+  edges: CanvasEdge[];
+  nodes: Map<string, FlowCanvasNode>;
+}) {
+  return (
+    <svg
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 text-muted-foreground"
+      height={canvasHeight}
+      width={canvasWidth}
+      viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
+    >
+      <defs>
+        <marker
+          id="workflow-builder-arrow"
+          markerHeight="8"
+          markerWidth="8"
+          orient="auto"
+          refX="7"
+          refY="4"
+        >
+          <path d="M0,0 L8,4 L0,8 Z" fill="currentColor" />
+        </marker>
+      </defs>
+      {edges.map((edge) => {
+        const fromNode = nodes.get(edge.from);
+        const toNode = nodes.get(edge.to);
+
+        if (!fromNode || !toNode) {
+          return null;
+        }
+
+        const from = {
+          x: fromNode.position.x + nodeWidth,
+          y: fromNode.position.y + nodeHeights[fromNode.kind] / 2,
+        };
+        const to = {
+          x: toNode.position.x,
+          y: toNode.position.y + nodeHeights[toNode.kind] / 2,
+        };
+        const bend = Math.max(72, Math.abs(to.x - from.x) * 0.42);
+
+        return (
+          <path
+            key={`${edge.from}-${edge.to}`}
+            d={`M ${from.x} ${from.y} C ${from.x + bend} ${from.y}, ${
+              to.x - bend
+            } ${to.y}, ${to.x} ${to.y}`}
+            className="fill-none stroke-current stroke-[2]"
+            markerEnd="url(#workflow-builder-arrow)"
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
+function ReadinessRow({ label, ready }: { label: string; ready: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border bg-background px-3 py-2">
+      <span>{label}</span>
+      <Badge variant={ready ? "outline" : "destructive"}>
+        {ready ? "Ready" : "Needs input"}
+      </Badge>
+    </div>
+  );
+}
+
+function ActionSwitch({
+  title,
+  checked,
+  onCheckedChange,
+}: {
+  title: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+      <span className="truncate text-sm font-medium">{title}</span>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
+  );
+}
+
+function createInitialNodePositions(outcomes: WorkflowOutcome[]) {
+  const positions: CanvasPositions = {
+    trigger: { x: 72, y: 390 },
+    classifier: { x: 382, y: 390 },
+  };
+
+  outcomes.forEach((outcome, outcomeIndex) => {
+    const y = 72 + outcomeIndex * 178;
+
+    positions[outcome.id] = { x: 700, y };
+    outcome.actions.forEach((action, actionIndex) => {
+      positions[action.id] = {
+        x: 1028 + actionIndex * 288,
+        y: y + 10,
+      };
+    });
+  });
+
+  return positions;
+}
+
+function createCanvasNodes({
   trigger,
   classifierPrompt,
   outcomes,
-  showWorkflowGraph,
+  exampleCount,
   nodePositions,
 }: {
   trigger: string;
   classifierPrompt: string;
   outcomes: WorkflowOutcome[];
-  showWorkflowGraph: boolean;
-  nodePositions: Record<string, NodePosition>;
-}): FlowCanvasNode[] {
+  exampleCount: number;
+  nodePositions: CanvasPositions;
+}) {
   const nodes: FlowCanvasNode[] = [
     {
-      id: triggerNodeId,
-      title: "Email watcher",
-      detail: trigger,
-      icon: Inbox,
+      id: "trigger",
+      kind: "trigger",
       module: { type: "trigger" },
-      position: nodePositions[triggerNodeId] ?? { x: 32, y: 48 },
-      width: flowNodeWidth,
-      height: flowNodeHeight,
-      badge: "Initial node",
+      title: "Email arrives",
+      detail: trigger || "Mailbox trigger",
+      meta: "Trigger",
+      icon: Inbox,
+      position: nodePositions.trigger ?? { x: 72, y: 390 },
+      ready: Boolean(trigger.trim()),
+    },
+    {
+      id: "classifier",
+      kind: "classifier",
+      module: { type: "classifier" },
+      title: "Classify with AI",
+      detail: classifierPrompt || "AI classification prompt",
+      meta: `${outcomes.length} branches, ${exampleCount} examples`,
+      icon: Filter,
+      position: nodePositions.classifier ?? { x: 382, y: 390 },
+      ready: Boolean(classifierPrompt.trim()) && exampleCount > 0,
     },
   ];
 
-  if (!showWorkflowGraph) {
-    return nodes;
-  }
-
-  nodes.push({
-    id: classifierNodeId,
-    title: "Filter incoming email",
-    detail: classifierPrompt || "Decide which branch should handle the email.",
-    icon: Filter,
-    module: { type: "classifier" },
-    position: nodePositions[classifierNodeId] ?? { x: 360, y: 48 },
-    width: flowNodeWidth,
-    height: flowNodeHeight,
-    badge: `${outcomes.length} branches`,
-  });
-
   outcomes.forEach((outcome, outcomeIndex) => {
-    const column = outcomeIndex % 2;
-    const row = Math.floor(outcomeIndex / 2);
-    const outcomeId = outcomeNodeId(outcome.id);
-    const baseX = 88 + column * 360;
-    const baseY = 224 + row * 260;
-
     nodes.push({
-      id: outcomeId,
-      title: outcome.name || "New classification",
-      detail: outcome.description || "Classification rule",
-      icon: Sparkles,
+      id: outcome.id,
+      kind: "outcome",
       module: { type: "outcome", outcomeId: outcome.id },
-      position: nodePositions[outcomeId] ?? { x: baseX, y: baseY },
-      width: flowNodeWidth,
-      height: flowNodeHeight,
-      badge: `${outcome.actions.length} actions`,
+      title: outcome.name,
+      detail: outcome.description || "Classification rule",
+      meta: `${outcome.actions.length} actions`,
+      icon: Sparkles,
+      position:
+        nodePositions[outcome.id] ?? {
+          x: 700,
+          y: 72 + outcomeIndex * 178,
+        },
+      ready: Boolean(outcome.name.trim()) && Boolean(outcome.description.trim()),
+      outcomeId: outcome.id,
     });
 
     outcome.actions.forEach((action, actionIndex) => {
-      const actionId = actionNodeId(action.id);
+      const Icon = actionIcons[action.type];
 
       nodes.push({
-        id: actionId,
-        title: actionLabels[action.type],
-        detail: actionSummary(action),
-        icon: actionIcons[action.type],
+        id: action.id,
+        kind: "action",
         module: {
           type: "action",
           outcomeId: outcome.id,
           actionId: action.id,
         },
-        position: nodePositions[actionId] ?? {
-          x: baseX + actionIndex * 250,
-          y: baseY + 150,
-        },
-        width: actionNodeWidth,
-        height: actionNodeHeight,
+        title: actionLabels[action.type],
+        detail: actionSummary(action),
+        meta: `${outcome.name} branch`,
+        icon: Icon,
+        position:
+          nodePositions[action.id] ?? {
+            x: 1028 + actionIndex * 288,
+            y: 82 + outcomeIndex * 178,
+          },
+        ready: actionIsReady(action),
+        outcomeId: outcome.id,
+        actionId: action.id,
       });
     });
   });
@@ -689,40 +1105,16 @@ function createFlowCanvasNodes({
   return nodes;
 }
 
-function createFlowCanvasEdges(
-  outcomes: WorkflowOutcome[],
-  showWorkflowGraph: boolean
-): FlowCanvasEdge[] {
-  if (!showWorkflowGraph) {
-    return [];
-  }
-
-  const edges: FlowCanvasEdge[] = [
-    {
-      id: "trigger-to-classifier",
-      from: triggerNodeId,
-      to: classifierNodeId,
-    },
-  ];
+function createCanvasEdges(outcomes: WorkflowOutcome[]) {
+  const edges: CanvasEdge[] = [{ from: "trigger", to: "classifier" }];
 
   outcomes.forEach((outcome) => {
-    const outcomeId = outcomeNodeId(outcome.id);
-
-    edges.push({
-      id: `${classifierNodeId}-to-${outcomeId}`,
-      from: classifierNodeId,
-      to: outcomeId,
-    });
+    edges.push({ from: "classifier", to: outcome.id });
 
     outcome.actions.forEach((action, actionIndex) => {
-      const previousAction = outcome.actions[actionIndex - 1];
-
       edges.push({
-        id: previousAction
-          ? `${actionNodeId(previousAction.id)}-to-${actionNodeId(action.id)}`
-          : `${outcomeId}-to-${actionNodeId(action.id)}`,
-        from: previousAction ? actionNodeId(previousAction.id) : outcomeId,
-        to: actionNodeId(action.id),
+        from: actionIndex === 0 ? outcome.id : outcome.actions[actionIndex - 1].id,
+        to: action.id,
       });
     });
   });
@@ -730,66 +1122,30 @@ function createFlowCanvasEdges(
   return edges;
 }
 
-function flowEdgePath(
-  edge: FlowCanvasEdge,
-  nodeMap: Map<string, FlowCanvasNode>
-) {
-  const from = nodeMap.get(edge.from);
-  const to = nodeMap.get(edge.to);
+function clampCanvasPosition(position: CanvasNodePosition, kind: CanvasNodeKind) {
+  return {
+    x: Math.min(Math.max(position.x, 24), canvasWidth - nodeWidth - 24),
+    y: Math.min(
+      Math.max(position.y, 24),
+      canvasHeight - nodeHeights[kind] - 24
+    ),
+  };
+}
 
-  if (!from || !to) {
-    return null;
+function isPaletteWidgetType(value: string): value is PaletteWidgetType {
+  return value === "outcome" || actionTypes.includes(value as WorkflowActionType);
+}
+
+function moduleKey(module: SelectedModule) {
+  if (module.type === "outcome") {
+    return `${module.type}:${module.outcomeId}`;
   }
 
-  const x1 = from.position.x + from.width;
-  const y1 = from.position.y + from.height / 2;
-  const x2 = to.position.x;
-  const y2 = to.position.y + to.height / 2;
-  const distance = Math.max(80, Math.abs(x2 - x1) / 2);
-  const c1 = x1 + distance;
-  const c2 = x2 - distance;
-
-  return `M ${x1} ${y1} C ${c1} ${y1}, ${c2} ${y2}, ${x2} ${y2}`;
-}
-
-function getFlowCanvasSize(nodes: FlowCanvasNode[]) {
-  return nodes.reduce(
-    (size, node) => ({
-      width: Math.max(size.width, node.position.x + node.width + 48),
-      height: Math.max(size.height, node.position.y + node.height + 48),
-    }),
-    { width: 760, height: 420 }
-  );
-}
-
-function modulesMatch(first: SelectedModule, second: SelectedModule) {
-  if (first.type !== second.type) {
-    return false;
+  if (module.type === "action") {
+    return `${module.type}:${module.outcomeId}:${module.actionId}`;
   }
 
-  if (first.type === "outcome" && second.type === "outcome") {
-    return first.outcomeId === second.outcomeId;
-  }
-
-  if (first.type === "action" && second.type === "action") {
-    return (
-      first.outcomeId === second.outcomeId && first.actionId === second.actionId
-    );
-  }
-
-  return true;
-}
-
-function positionTransform(position: NodePosition) {
-  return `translate3d(${position.x}px, ${position.y}px, 0)`;
-}
-
-function outcomeNodeId(outcomeId: string) {
-  return `outcome-${outcomeId}`;
-}
-
-function actionNodeId(actionId: string) {
-  return `action-${actionId}`;
+  return module.type;
 }
 
 function WorkflowSettings({
@@ -884,11 +1240,9 @@ function ClassifierSettings({
 
 function OutcomeSettings({
   outcome,
-  onAddAction,
   onChange,
 }: {
   outcome: WorkflowOutcome;
-  onAddAction: (type: WorkflowActionType) => void;
   onChange: (updater: (outcome: WorkflowOutcome) => WorkflowOutcome) => void;
 }) {
   return (
@@ -933,27 +1287,6 @@ function OutcomeSettings({
           }
           className="min-h-32"
         />
-      </div>
-      <div className="space-y-2">
-        <Label>Actions</Label>
-        <div className="grid gap-2">
-          {actionTypes.map((type) => {
-            const Icon = actionIcons[type];
-
-            return (
-              <Button
-                key={type}
-                type="button"
-                variant="outline"
-                className="justify-start"
-                onClick={() => onAddAction(type)}
-              >
-                <Icon className="size-4" />
-                {actionLabels[type]}
-              </Button>
-            );
-          })}
-        </div>
       </div>
     </div>
   );
@@ -1227,34 +1560,6 @@ function ArchiveFields({ action, actionId, onChange }: ActionFieldProps) {
           }))
         }
       />
-    </div>
-  );
-}
-
-function ReadinessRow({ label, ready }: { label: string; ready: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-      <span>{label}</span>
-      <Badge variant={ready ? "outline" : "destructive"}>
-        {ready ? "Ready" : "Needs input"}
-      </Badge>
-    </div>
-  );
-}
-
-function ActionSwitch({
-  title,
-  checked,
-  onCheckedChange,
-}: {
-  title: string;
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-      <span className="truncate text-sm font-medium">{title}</span>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} />
     </div>
   );
 }

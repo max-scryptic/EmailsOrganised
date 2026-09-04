@@ -57,68 +57,34 @@ export function WorkflowDetailSkeleton() {
       title="Workflow"
       description="Loading the classifier, branches, and actions for this workflow."
       breadcrumbs={[{ title: "Workflows", href: "/workflows" }, { title: "Workflow" }]}
-      actions={<ActionSkeletons count={1} />}
+      hideHeading
+      fill
     >
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="space-y-4">
-          <Card>
-            <CardHeader className="flex items-center justify-between gap-4">
-              <Skeleton className="h-6 w-32" />
-              <Skeleton className="h-9 w-28" />
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <div className="mx-auto flex w-full max-w-md flex-col items-center gap-3">
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-6 w-px" />
-                <Skeleton className="h-16 w-full" />
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <Skeleton className="h-5 w-32" />
-                <Skeleton className="h-9 w-28" />
-              </div>
-              <div className="grid gap-3">
-                {Array.from({ length: 3 }).map((_, index) => (
-                  <div key={index} className="space-y-3 rounded-md border p-4">
-                    <div className="flex items-center gap-2">
-                      <Skeleton className="size-7 shrink-0" />
-                      <Skeleton className="h-5 w-48" />
-                    </div>
-                    <Skeleton className="h-4 w-full max-w-xl" />
-                    <Skeleton className="h-9 w-40" />
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <Skeleton className="h-6 w-32" />
-            </CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-3">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <div key={index} className="flex items-center gap-3">
-                  <Skeleton className="size-5 shrink-0" />
-                  <Skeleton className="h-4 w-24" />
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-64 max-w-full" />
+            <Skeleton className="h-4 w-96 max-w-full" />
+            <Skeleton className="h-3 w-28" />
+          </div>
+          <div className="flex gap-2">
+            <ActionSkeletons count={2} />
+          </div>
         </div>
-        <Card>
-          <CardHeader className="flex items-center justify-between gap-4">
-            <Skeleton className="h-6 w-36" />
-            <Skeleton className="h-5 w-20" />
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <div key={index} className="space-y-2">
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-10 w-full" />
-              </div>
-            ))}
-            <Skeleton className="h-px w-full" />
-            <Skeleton className="h-9 w-full" />
-          </CardContent>
+        <Card className="min-h-0 flex-1 gap-0 overflow-hidden py-0">
+          <div className="relative min-h-0 flex-1 bg-muted/20">
+            <div className="absolute left-3 top-3 flex flex-wrap gap-2">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <Skeleton key={index} className="h-6 w-24 rounded-full" />
+              ))}
+            </div>
+            <div className="absolute left-1/4 top-1/3 flex items-center gap-6">
+              {Array.from({ length: 2 }).map((_, index) => (
+                <Skeleton key={index} className="h-28 w-60" />
+              ))}
+            </div>
+            <Skeleton className="absolute bottom-3 right-3 size-11 rounded-full" />
+          </div>
         </Card>
       </div>
     </AppShell>

@@ -1,7 +1,10 @@
-import { WorkflowsPage } from "@/components/workflows/workflows-page";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export default async function Home() {
-  return <WorkflowsPage />;
+/**
+ * Workflows are the app surface, and the sidebar's only destination is
+ * `/workflows`. "/" is where sign-in lands, so send it there rather than
+ * keeping a second copy of the list.
+ */
+export default function Home() {
+  redirect("/workflows");
 }

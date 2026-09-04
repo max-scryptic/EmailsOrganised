@@ -21,6 +21,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { cn } from "@/lib/utils";
 
 type AppShellProps = {
   children: React.ReactNode;
@@ -28,6 +29,17 @@ type AppShellProps = {
   description?: string;
   actions?: React.ReactNode;
   breadcrumbs?: BreadcrumbEntry[];
+  /**
+   * Drops the title/description/actions row so a page can render its own
+   * heading — an editable one, for example — as part of `children`.
+   */
+  hideHeading?: boolean;
+  /**
+   * Sizes the content area to the viewport instead of to the content, so a
+   * full-page surface like the workflow board can own everything below the
+   * top bar. The page itself stops scrolling; `children` handles overflow.
+   */
+  fill?: boolean;
 };
 
 type BreadcrumbEntry = {
@@ -41,6 +53,8 @@ export function AppShell({
   description,
   actions,
   breadcrumbs,
+  hideHeading = false,
+  fill = false,
 }: AppShellProps) {
   // This shell remounts on every navigation, so the open/collapsed state is
   // controlled from the root layout instead of being held by the provider here.
@@ -48,6 +62,7 @@ export function AppShell({
 
   return (
     <SidebarProvider
+      className={cn(fill && "h-svh overflow-hidden")}
       open={sidebarState?.open}
       onOpenChange={sidebarState?.setOpen}
     >
@@ -73,23 +88,35 @@ export function AppShell({
             </div>
           </div>
         </header>
-        <div className="flex flex-1 flex-col px-4 py-6 sm:px-6 lg:px-8">
-          <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-              <div className="space-y-2">
-                <div>
-                  <h1 className="text-2xl font-semibold tracking-normal sm:text-3xl">
-                    {title}
-                  </h1>
-                  {description ? (
-                    <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                      {description}
-                    </p>
-                  ) : null}
+        <div
+          className={cn(
+            "flex flex-1 flex-col px-4 py-6 sm:px-6 lg:px-8",
+            fill && "min-h-0 py-4"
+          )}
+        >
+          <div
+            className={cn(
+              "mx-auto flex w-full max-w-7xl flex-col gap-6",
+              fill && "min-h-0 max-w-none flex-1 gap-4"
+            )}
+          >
+            {hideHeading ? null : (
+              <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div className="space-y-2">
+                  <div>
+                    <h1 className="text-2xl font-semibold tracking-normal sm:text-3xl">
+                      {title}
+                    </h1>
+                    {description ? (
+                      <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                        {description}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
+                {actions ? <div className="flex gap-2">{actions}</div> : null}
               </div>
-              {actions ? <div className="flex gap-2">{actions}</div> : null}
-            </div>
+            )}
             {children}
           </div>
         </div>

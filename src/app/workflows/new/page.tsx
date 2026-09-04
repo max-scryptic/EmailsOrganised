@@ -14,6 +14,10 @@ export default function NewWorkflowPage() {
         { title: "Workflows", href: "/workflows" },
         { title: "New workflow" },
       ]}
+      // The builder owns the heading so the name and detail stay editable, and
+      // the board fills everything under it.
+      hideHeading
+      fill
     >
       <WorkflowBuilder mode="new" initialDraft={createEmptyWorkflowDraft()} />
     </AppShell>

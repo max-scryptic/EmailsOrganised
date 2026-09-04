@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useConfirmDialog } from "@/components/use-confirm-dialog";
 import { cn } from "@/lib/utils";
 import {
   actionLabels,
@@ -66,6 +67,11 @@ const actionTypes = Object.keys(actionLabels) as WorkflowActionType[];
 const canvasWidth = 1520;
 const canvasHeight = 980;
 const nodeWidth = 248;
+/** The inspector floats beside the node it belongs to, so it needs fixed dims. */
+const inspectorWidth = 320;
+const inspectorGap = 16;
+const inspectorMargin = 12;
+const defaultInspectorHeight = 360;
 const nodeHeights = {
   trigger: 112,
   classifier: 112,
@@ -162,6 +168,28 @@ export function WorkflowBuilder({
   const [isPending, startTransition] = React.useTransition();
   const canvasRef = React.useRef<HTMLDivElement>(null);
   const dragState = React.useRef<DragState | null>(null);
+  const { confirm, ConfirmDialog } = useConfirmDialog();
+  const inspectorRef = React.useRef<HTMLDivElement | null>(null);
+  const [boardSize, setBoardSize] = React.useState({ width: 0, height: 0 });
+  const [inspectorHeight, setInspectorHeight] = React.useState(
+    defaultInspectorHeight
+  );
+  // Measures the inspector as it mounts and resizes so the placement maths
+  // knows how much room the panel actually needs.
+  const inspectorNodeRef = React.useCallback((node: HTMLDivElement) => {
+    inspectorRef.current = node;
+
+    const observer = new ResizeObserver(([entry]) => {
+      setInspectorHeight(entry.contentRect.height);
+    });
+
+    observer.observe(node);
+
+    return () => {
+      observer.disconnect();
+      inspectorRef.current = null;
+    };
+  }, []);
   const [workflowName, setWorkflowName] = React.useState(initialDraft.name);
   const [detail, setDetail] = React.useState(initialDraft.detail);
   const [ownerRole, setOwnerRole] = React.useState(initialDraft.ownerRole);
@@ -236,11 +264,50 @@ export function WorkflowBuilder({
     () => createCanvasEdges(outcomes, showWorkflowGraph),
     [outcomes, showWorkflowGraph]
   );
+  const selectedNode = React.useMemo(
+    () =>
+      canvasNodes.find(
+        (node) => moduleKey(node.module) === moduleKey(selectedModule)
+      ) ?? null,
+    [canvasNodes, selectedModule]
+  );
+  const inspectorPosition = selectedNode
+    ? inspectorScreenPosition({
+        nodePosition: selectedNode.position,
+        pan,
+        board: boardSize,
+        inspectorHeight,
+      })
+    : null;
 
   const basicsReady = Boolean(workflowName.trim()) && Boolean(detail.trim());
   const actionsReady =
     outcomes.length > 0 &&
-    outcomes.every((outcome) => outcome.actions.every(actionIsReady));
+    outcomes.every(
+      (outcome) =>
+        outcome.actions.length > 0 && outcome.actions.every(actionIsReady)
+    );
+
+  // The board measures itself so the inspector can flip sides and stay inside
+  // the visible area instead of hanging off the edge of the card.
+  React.useEffect(() => {
+    const board = canvasRef.current;
+
+    if (!board) {
+      return;
+    }
+
+    const observer = new ResizeObserver(([entry]) => {
+      setBoardSize({
+        width: entry.contentRect.width,
+        height: entry.contentRect.height,
+      });
+    });
+
+    observer.observe(board);
+
+    return () => observer.disconnect();
+  }, []);
 
   function updateOutcome(
     id: string,
@@ -332,18 +399,120 @@ export function WorkflowBuilder({
   function removeAction(outcomeId: string, actionId: string) {
     updateOutcome(outcomeId, (outcome) => ({
       ...outcome,
-      actions:
-        outcome.actions.length > 1
-          ? outcome.actions.filter((action) => action.id !== actionId)
-          : outcome.actions,
+      actions: outcome.actions.filter((action) => action.id !== actionId),
     }));
     setNodePositions((current) => {
       const next = { ...current };
       delete next[actionId];
       return next;
     });
-    setSelectedModule({ type: "outcome", outcomeId });
+    setConnectingFrom(null);
+    setSelectedModule(null);
   }
+
+  /** A branch takes its action nodes with it when it leaves the board. */
+  function removeOutcome(outcomeId: string) {
+    const removedOutcome = outcomes.find((outcome) => outcome.id === outcomeId);
+
+    setOutcomes((current) =>
+      current.filter((outcome) => outcome.id !== outcomeId)
+    );
+    setNodePositions((current) => {
+      const next = { ...current };
+
+      delete next[outcomeId];
+      removedOutcome?.actions.forEach((action) => {
+        delete next[action.id];
+      });
+
+      return next;
+    });
+    setConnectingFrom(null);
+    setSelectedModule(null);
+  }
+
+  const isConfirmingDelete = React.useRef(false);
+
+  async function deleteModule(module: SelectedModule) {
+    if (module.type === "action") {
+      removeAction(module.outcomeId, module.actionId);
+      return;
+    }
+
+    if (module.type !== "outcome") {
+      return;
+    }
+
+    const outcome = outcomes.find(
+      (current) => current.id === module.outcomeId
+    );
+
+    if (!outcome) {
+      return;
+    }
+
+    // Removing a branch cascades to its actions, so confirm when there is
+    // something to lose. A lone action node deletes straight away.
+    if (outcome.actions.length > 0) {
+      // A second Backspace while the dialog is open must not stack confirms.
+      if (isConfirmingDelete.current) {
+        return;
+      }
+
+      isConfirmingDelete.current = true;
+
+      const confirmed = await confirm({
+        title: "Delete this branch?",
+        description: `${
+          outcome.name.trim() || "This branch"
+        } and its ${outcome.actions.length} action${
+          outcome.actions.length === 1 ? "" : "s"
+        } will be removed from the flow.`,
+        confirmLabel: "Delete branch",
+      });
+
+      isConfirmingDelete.current = false;
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    removeOutcome(module.outcomeId);
+  }
+
+  const deleteModuleRef = React.useRef(deleteModule);
+
+  React.useEffect(() => {
+    deleteModuleRef.current = deleteModule;
+  });
+
+  // Backspace / Delete removes the selected node, as long as the keystroke is
+  // not meant for a field in the inspector.
+  React.useEffect(() => {
+    if (!selectedModule || !canDeleteModule(selectedModule)) {
+      return;
+    }
+
+    const moduleToDelete = selectedModule;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Backspace" && event.key !== "Delete") {
+        return;
+      }
+
+      if (isTextEntryTarget(event.target)) {
+        return;
+      }
+
+      event.preventDefault();
+      void deleteModuleRef.current(moduleToDelete);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedModule]);
 
   function currentDraft(): WorkflowDraft {
     return {
@@ -553,8 +722,30 @@ export function WorkflowBuilder({
         drag.element.style.transform = canvasPositionTransform(
           drag.nextPosition
         );
+        syncInspectorToPosition(drag.nodeId, drag.nextPosition);
       });
     }
+  }
+
+  /** Keeps the floating inspector glued to its node while the node is dragged. */
+  function syncInspectorToPosition(
+    nodeId: string,
+    position: CanvasNodePosition
+  ) {
+    const inspector = inspectorRef.current;
+
+    if (!inspector || selectedNode?.id !== nodeId) {
+      return;
+    }
+
+    inspector.style.transform = canvasPositionTransform(
+      inspectorScreenPosition({
+        nodePosition: position,
+        pan,
+        board: boardSize,
+        inspectorHeight,
+      })
+    );
   }
 
   function handleCanvasPointerUp() {
@@ -566,6 +757,7 @@ export function WorkflowBuilder({
         drag.element.style.transform = canvasPositionTransform(
           drag.nextPosition
         );
+        syncInspectorToPosition(drag.nodeId, drag.nextPosition);
       }
 
       setNodePositions((current) => ({
@@ -769,7 +961,6 @@ export function WorkflowBuilder({
 
           <NodePalette
             open={isPaletteOpen}
-            shifted={selectedModule !== null}
             canAddAction={outcomes.length > 0}
             onOpenChange={setIsPaletteOpen}
             onAddOutcome={() => {
@@ -786,10 +977,19 @@ export function WorkflowBuilder({
             }}
           />
 
-          {selectedModule ? (
+          {selectedModule && inspectorPosition ? (
             <NodeInspector
+              ref={inspectorNodeRef}
               module={selectedModule}
               title={moduleTitle(selectedModule, selectedOutcome, selectedAction)}
+              position={inspectorPosition}
+              maxHeight={Math.max(
+                200,
+                (boardSize.height || defaultInspectorHeight) -
+                  inspectorMargin * 2
+              )}
+              canDelete={canDeleteModule(selectedModule)}
+              onDelete={() => void deleteModule(selectedModule)}
               onClose={() => setSelectedModule(null)}
             >
               {selectedModule.type === "trigger" ? (
@@ -814,12 +1014,8 @@ export function WorkflowBuilder({
               selectedAction ? (
                 <ActionSettings
                   action={selectedAction}
-                  canRemove={selectedOutcome.actions.length > 1}
                   onChange={(updater) =>
                     updateAction(selectedOutcome.id, selectedAction.id, updater)
-                  }
-                  onRemove={() =>
-                    removeAction(selectedOutcome.id, selectedAction.id)
                   }
                 />
               ) : null}
@@ -827,6 +1023,8 @@ export function WorkflowBuilder({
           ) : null}
         </div>
       </Card>
+
+      <ConfirmDialog />
     </div>
   );
 }
@@ -844,15 +1042,12 @@ function formatWorkflowTimestamp(value: string) {
  */
 function NodePalette({
   open,
-  shifted,
   canAddAction,
   onOpenChange,
   onAddOutcome,
   onAddAction,
 }: {
   open: boolean;
-  /** Steps aside so the palette does not sit under the node inspector. */
-  shifted: boolean;
   canAddAction: boolean;
   onOpenChange: (open: boolean) => void;
   onAddOutcome: () => void;
@@ -860,12 +1055,9 @@ function NodePalette({
 }) {
   return (
     <div
-      className={cn(
-        // Spans the board's height so a tall list scrolls instead of being
-        // clipped, but only the panel and the button take clicks.
-        "pointer-events-none absolute inset-y-3 z-30 flex max-w-[calc(100%-1.5rem)] flex-col items-end justify-end gap-2 transition-[right]",
-        shifted ? "right-3 @min-[38rem]:right-[21.5rem]" : "right-3"
-      )}
+      // Spans the board's height so a tall list scrolls instead of being
+      // clipped, but only the panel and the button take clicks.
+      className="pointer-events-none absolute inset-y-3 right-3 z-30 flex max-w-[calc(100%-1.5rem)] flex-col items-end justify-end gap-2"
     >
       {open ? (
         <div className="pointer-events-auto min-h-0 w-64 max-w-full overflow-y-auto rounded-lg border bg-card p-2 shadow-lg">
@@ -971,20 +1163,44 @@ function PaletteItem({
   );
 }
 
-/** Settings for the selected node, floating over the right of the board. */
+/**
+ * Settings for the selected node, floating right beside that node like a
+ * popover rather than docking to the side of the page.
+ */
 function NodeInspector({
+  ref,
   module,
   title,
+  position,
+  maxHeight,
+  canDelete,
+  onDelete,
   onClose,
   children,
 }: {
+  ref: React.Ref<HTMLDivElement>;
   module: SelectedModule;
   title: string;
+  /** Board-relative pixels, already flipped and clamped to stay on screen. */
+  position: CanvasNodePosition;
+  maxHeight: number;
+  canDelete: boolean;
+  onDelete: () => void;
   onClose: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <div className="absolute right-3 top-3 bottom-16 z-20 flex w-80 max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-lg border bg-card shadow-lg @min-[38rem]:bottom-3">
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label={`${moduleLabel(module)} settings`}
+      className="absolute left-0 top-0 z-40 flex max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-lg border bg-card shadow-xl duration-150 animate-in fade-in-0 zoom-in-95"
+      style={{
+        width: inspectorWidth,
+        maxHeight,
+        transform: canvasPositionTransform(position),
+      }}
+    >
       <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <Badge variant="outline">{moduleLabel(module)}</Badge>
@@ -1002,6 +1218,23 @@ function NodeInspector({
         </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">{children}</div>
+      {canDelete ? (
+        <div className="flex items-center justify-between gap-2 border-t px-3 py-2">
+          <span className="text-xs text-muted-foreground">
+            Or press Backspace
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={onDelete}
+          >
+            <Trash2 className="size-4" />
+            Delete node
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1381,6 +1614,77 @@ function canvasPositionTransform(position: CanvasNodePosition) {
   return `translate3d(${position.x}px, ${position.y}px, 0)`;
 }
 
+/** Only the nodes a workflow can live without can be deleted. */
+function canDeleteModule(module: SelectedModule) {
+  return module.type === "outcome" || module.type === "action";
+}
+
+function isTextEntryTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return Boolean(
+    target.closest(
+      'input, textarea, select, [contenteditable="true"], [role="textbox"]'
+    )
+  );
+}
+
+/**
+ * Places the inspector beside its node in board pixels: to the right when it
+ * fits, flipped to the left when it does not, then nudged back inside the
+ * board so it is never half off the edge.
+ */
+function inspectorScreenPosition({
+  nodePosition,
+  pan,
+  board,
+  inspectorHeight,
+}: {
+  nodePosition: CanvasNodePosition;
+  pan: CanvasNodePosition;
+  board: { width: number; height: number };
+  inspectorHeight: number;
+}): CanvasNodePosition {
+  const nodeLeft = nodePosition.x + pan.x;
+  const nodeTop = nodePosition.y + pan.y;
+  const rightX = nodeLeft + nodeWidth + inspectorGap;
+  const leftX = nodeLeft - inspectorGap - inspectorWidth;
+
+  let x = rightX;
+
+  if (
+    board.width > 0 &&
+    rightX + inspectorWidth > board.width - inspectorMargin &&
+    leftX >= inspectorMargin
+  ) {
+    x = leftX;
+  }
+
+  if (board.width > 0) {
+    const maxX = Math.max(
+      inspectorMargin,
+      board.width - inspectorWidth - inspectorMargin
+    );
+
+    x = Math.min(Math.max(x, inspectorMargin), maxX);
+  }
+
+  let y = nodeTop;
+
+  if (board.height > 0) {
+    const maxY = Math.max(
+      inspectorMargin,
+      board.height - inspectorHeight - inspectorMargin
+    );
+
+    y = Math.min(Math.max(y, inspectorMargin), maxY);
+  }
+
+  return { x, y };
+}
+
 function moduleTitle(
   module: SelectedModule,
   outcome: WorkflowOutcome | undefined,
@@ -1494,14 +1798,10 @@ function OutcomeSettings({
 
 function ActionSettings({
   action,
-  canRemove,
   onChange,
-  onRemove,
 }: {
   action: WorkflowAction;
-  canRemove: boolean;
   onChange: (updater: (action: WorkflowAction) => WorkflowAction) => void;
-  onRemove: () => void;
 }) {
   const actionId = `selected-${action.id}`;
 
@@ -1531,16 +1831,6 @@ function ActionSettings({
             ))}
           </SelectContent>
         </Select>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          disabled={!canRemove}
-          onClick={onRemove}
-          aria-label="Remove action"
-        >
-          <Trash2 className="size-4" />
-        </Button>
       </div>
 
       {action.type === "apply_label" ? (

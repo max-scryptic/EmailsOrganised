@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored third-party agent tooling (the Impeccable skill and its
+    // detector). It is committed so the skill travels with the repo, but it is
+    // not our source and does not follow our lint rules.
+    ".claude/**",
   ]),
 ]);
 

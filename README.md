@@ -14,6 +14,23 @@ documents what came with the template and how to wire each piece up.
 Code (`CLAUDE.md` just imports it). `scripts/codex-setup.sh` is the setup
 script for the Codex environment — it runs `npm ci` and seeds `.env.local`.
 
+[Impeccable](https://impeccable.style) is installed at project scope, so
+cloning the repo is enough to get it — there is nothing to install for Claude
+Code. It adds design vocabulary and a detector that checks UI changes against
+this project's own design system:
+
+- `DESIGN.md` — the visual system: palette, type ramp, radius scale, elevation
+  rules, component specs, and the named rules worth citing.
+- `PRODUCT.md` — durable product truth: users, purpose, positioning, workflow
+  vocabulary, and what is deliberately undecided.
+- `.impeccable/design.json` — the machine-readable sidecar the detector and the
+  live panel read. Regenerated with `DESIGN.md`, never edited alone.
+- `npx impeccable detect src/` runs the detector by hand; it exits non-zero on
+  findings. The same detector runs automatically after UI edits in Claude Code.
+
+Contributors using Cursor, Codex, or Copilot run `npx impeccable install` once
+to wire the same skill into their own tool.
+
 ## Included
 
 - Semantic light/dark design tokens in `src/app/globals.css`

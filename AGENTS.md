@@ -31,6 +31,13 @@ place setup logic lives so the sandbox and a laptop agree.
 
 ## UI Decisions
 
+`DESIGN.md` is the visual authority — the palette, type ramp, radius scale,
+elevation rules, and component specs live there, along with the named rules
+worth citing back ("The Rationed Accent Rule", "The Depth-Belongs-To-The-Canvas
+Rule"). `PRODUCT.md` holds durable product truth: who the user is, what the
+product claims, the workflow vocabulary, and what is deliberately undecided.
+Read both before designing a surface. The bullets below are the short version.
+
 - Use Next.js App Router, TypeScript, Tailwind CSS v4, and shadcn/ui.
 - Use semantic tokens from `src/app/globals.css` for foundational color,
   radius, and typography decisions.
@@ -50,6 +57,32 @@ place setup logic lives so the sandbox and a laptop agree.
   states.
 - Destructive actions should go through `useConfirmDialog` or
   `AlertDialog`, not a generic dialog.
+
+## Design Workflow
+
+[Impeccable](https://impeccable.style) is installed at project scope, so it
+travels with the repo rather than living in one developer's home directory. It
+supplies design vocabulary the agent otherwise lacks, plus a deterministic
+detector that reads `DESIGN.md` and flags values that fall off the system.
+
+- `/impeccable` with no argument lists the commands. The useful ones here are
+  `audit`, `critique`, `polish`, `layout`, `clarify`, and `harden`, each taking
+  a target: `/impeccable audit workflows`.
+- `/impeccable document` regenerates `DESIGN.md` and `.impeccable/design.json`
+  after the visual system genuinely changes. Do not hand-edit `design.json`
+  without making the same change in `DESIGN.md` — the two are one artifact.
+- The detector runs automatically after UI edits (a hook in
+  `.claude/settings.json`) and can be run directly:
+  `npx impeccable detect src/`. It exits non-zero on findings, so it also works
+  in CI.
+- A finding against a value that is genuinely intentional is a signal to
+  document the value in `DESIGN.md`, not to silence the rule. Reach for
+  `npx impeccable ignores` only when the file is not ours to change.
+- Adding a token, a size step, or an elevation role means updating
+  `src/app/globals.css` **and** `DESIGN.md` in the same change. A design system
+  the detector cannot see is not enforced.
+- Contributors on other harnesses (Cursor, Codex, Copilot) run
+  `npx impeccable install` to get the same skill wired to their tool.
 
 ## Auth
 

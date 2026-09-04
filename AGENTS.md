@@ -46,6 +46,11 @@ place setup logic lives so the sandbox and a laptop agree.
   product-level components outside that folder.
 - Use the app shell, form field wrapper, table, state components, and confirm
   dialog hook before creating one-off replacements.
+- A workflow node's text settings take `{{variables}}` from the nodes before
+  it. Build them with `VariableInput` / `VariableTextarea`
+  (`src/components/workflows/variable-fields.tsx`) so the data panel can insert
+  into them, and declare what a node outputs in
+  `src/lib/workflow-variables.ts` — nowhere else.
 - Every async product view should have designed loading, empty, and error
   states.
 - Destructive actions should go through `useConfirmDialog` or

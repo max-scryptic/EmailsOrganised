@@ -23,7 +23,10 @@ import {
 import { useRouter } from "next/navigation";
 import { saveWorkflow } from "@/app/workflows/actions";
 import { InlineEditableText } from "@/components/workflows/inline-editable-text";
-import { NodeDataPanel } from "@/components/workflows/node-data-panel";
+import {
+  NodeOutputSummary,
+  UpstreamDataPanel,
+} from "@/components/workflows/node-data-panel";
 import {
   VariableInsertProvider,
   VariableInput,
@@ -77,8 +80,15 @@ const actionTypes = Object.keys(actionLabels) as WorkflowActionType[];
 const canvasWidth = 1520;
 const canvasHeight = 980;
 const nodeWidth = 248;
-/** The inspector floats beside the node it belongs to, so it needs fixed dims. */
-const inspectorWidth = 320;
+/**
+ * The inspector floats beside the node it belongs to, so it needs fixed dims.
+ * It is two columns: upstream data on the left, everything about the selected
+ * node on the right. A node with nothing before it drops the left column and
+ * the panel narrows to the settings alone.
+ */
+const inspectorSettingsWidth = 320;
+const inspectorDataWidth = 256;
+const inspectorWidth = inspectorDataWidth + inspectorSettingsWidth;
 const inspectorGap = 16;
 const inspectorMargin = 12;
 const defaultInspectorHeight = 360;
@@ -339,12 +349,21 @@ export function WorkflowBuilder({
         : { upstream: [], own: null },
     [canvasNodeMap, parentByNode, selectedNode]
   );
+  const hasUpstreamData = nodeData.upstream.length > 0;
+  // The panel is only as wide as it has columns to show, and never wider than
+  // the board it floats over.
+  const inspectorPanelWidth = Math.min(
+    hasUpstreamData ? inspectorWidth : inspectorSettingsWidth,
+    boardSize.width > 0
+      ? Math.max(inspectorSettingsWidth, boardSize.width - inspectorMargin * 2)
+      : Number.POSITIVE_INFINITY
+  );
   const inspectorPosition = selectedNode
     ? floatingPanelPosition({
         nodePosition: selectedNode.position,
         pan,
         board: boardSize,
-        panelWidth: inspectorWidth,
+        panelWidth: inspectorPanelWidth,
         panelHeight: inspectorHeight,
       })
     : null;
@@ -922,6 +941,9 @@ export function WorkflowBuilder({
       return;
     }
 
+    // The inspector is two columns wide now, so a node near the right edge
+    // would open its own settings on top of itself. Slide the board first.
+    revealPosition(node.position, node.kind);
     setSelectedModule(node.module);
   }
 
@@ -1020,7 +1042,7 @@ export function WorkflowBuilder({
         nodePosition: position,
         pan,
         board: boardSize,
-        panelWidth: inspectorWidth,
+        panelWidth: inspectorPanelWidth,
         panelHeight: inspectorHeight,
       })
     );
@@ -1061,6 +1083,7 @@ export function WorkflowBuilder({
 
     connectCanvasNodes(connectingFrom, targetNode);
     setConnectingFrom(null);
+    revealPosition(targetNode.position, targetNode.kind);
     setSelectedModule(targetNode.module);
   }
 
@@ -1245,22 +1268,34 @@ export function WorkflowBuilder({
           ) : null}
 
           {selectedModule && inspectorPosition ? (
-            <NodeInspector
-              ref={inspectorNodeRef}
-              module={selectedModule}
-              title={moduleTitle(selectedModule, selectedOutcome, selectedAction)}
-              position={inspectorPosition}
-              maxHeight={Math.max(
-                200,
-                (boardSize.height || defaultInspectorHeight) -
-                  inspectorMargin * 2
-              )}
-              canDelete={canDeleteModule(selectedModule)}
-              onDelete={() => void deleteModule(selectedModule)}
-              onClose={() => setSelectedModule(null)}
-            >
-              {/* Keyed so switching nodes forgets which field was last focused. */}
-              <VariableInsertProvider key={moduleKey(selectedModule)}>
+            // Wraps both columns: the data column inserts into the fields the
+            // settings column renders. Keyed so switching nodes forgets which
+            // field was last focused.
+            <VariableInsertProvider key={moduleKey(selectedModule)}>
+              <NodeInspector
+                ref={inspectorNodeRef}
+                module={selectedModule}
+                title={moduleTitle(
+                  selectedModule,
+                  selectedOutcome,
+                  selectedAction
+                )}
+                position={inspectorPosition}
+                maxHeight={Math.max(
+                  200,
+                  (boardSize.height || defaultInspectorHeight) -
+                    inspectorMargin * 2
+                )}
+                canDelete={canDeleteModule(selectedModule)}
+                onDelete={() => void deleteModule(selectedModule)}
+                onClose={() => setSelectedModule(null)}
+                width={inspectorPanelWidth}
+                dataPanel={
+                  hasUpstreamData ? (
+                    <UpstreamDataPanel upstream={nodeData.upstream} />
+                  ) : null
+                }
+              >
                 <div className="space-y-4">
                   {selectedModule.type === "trigger" ? (
                     <TriggerSettings
@@ -1296,13 +1331,12 @@ export function WorkflowBuilder({
                       }
                     />
                   ) : null}
-                  <NodeDataPanel
-                    upstream={nodeData.upstream}
-                    own={nodeData.own}
-                  />
+                  {nodeData.own ? (
+                    <NodeOutputSummary own={nodeData.own} />
+                  ) : null}
                 </div>
-              </VariableInsertProvider>
-            </NodeInspector>
+              </NodeInspector>
+            </VariableInsertProvider>
           ) : null}
         </div>
       </Card>
@@ -1556,14 +1590,21 @@ function NodeConnectMenu({
 /**
  * Settings for the selected node, floating right beside that node like a
  * popover rather than docking to the side of the page.
+ *
+ * Two columns under one header: the values earlier steps produced on the left,
+ * everything about the selected node — its settings, then what it outputs in
+ * turn — on the right. Reading left to right is the shape of the work: take a
+ * value from what came before, put it into this step.
  */
 function NodeInspector({
   ref,
   module,
   title,
   position,
+  width,
   maxHeight,
   canDelete,
+  dataPanel,
   onDelete,
   onClose,
   children,
@@ -1573,8 +1614,11 @@ function NodeInspector({
   title: string;
   /** Board-relative pixels, already flipped and clamped to stay on screen. */
   position: CanvasNodePosition;
+  width: number;
   maxHeight: number;
   canDelete: boolean;
+  /** The upstream data column, or null for a node with nothing before it. */
+  dataPanel: React.ReactNode;
   onDelete: () => void;
   onClose: () => void;
   children: React.ReactNode;
@@ -1586,7 +1630,7 @@ function NodeInspector({
       aria-label={`${moduleLabel(module)} settings`}
       className="absolute left-0 top-0 z-40 flex max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-lg border bg-card shadow-xl duration-150 animate-in fade-in-0 zoom-in-95"
       style={{
-        width: inspectorWidth,
+        width,
         maxHeight,
         transform: canvasPositionTransform(position),
       }}
@@ -1607,7 +1651,21 @@ function NodeInspector({
           <X className="size-4" />
         </Button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">{children}</div>
+      <div className="flex min-h-0 flex-1">
+        {dataPanel ? (
+          // A quieter surface than the settings beside it, so the column reads
+          // as material to draw from rather than another set of controls.
+          <div
+            className="flex min-h-0 shrink-0 flex-col border-r bg-muted/30"
+            style={{ width: inspectorDataWidth }}
+          >
+            {dataPanel}
+          </div>
+        ) : null}
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-3">
+          {children}
+        </div>
+      </div>
       {canDelete ? (
         <div className="flex items-center justify-between gap-2 border-t px-3 py-2">
           <span className="text-xs text-muted-foreground">

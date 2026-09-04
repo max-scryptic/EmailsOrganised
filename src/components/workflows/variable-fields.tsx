@@ -20,6 +20,7 @@ type VariableInsertValue = {
   /** Label of the field an insert would land in, or null when there is none. */
   activeLabel: string | null;
   register: (target: VariableTarget) => void;
+  focus: (id: string) => void;
   release: (id: string) => void;
   insert: (expression: string) => void;
 };
@@ -31,36 +32,56 @@ const VariableInsertContext = React.createContext<VariableInsertValue | null>(
 /**
  * Wraps a node's settings so the fields inside them can receive variables from
  * the data panel rendered alongside.
+ *
+ * Every field registers as it mounts, and the first one registered is the
+ * standing target. That is what keeps the data panel live before anything has
+ * been clicked into: a value always has somewhere to land, so no row in the
+ * panel is ever a dead control.
  */
 export function VariableInsertProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const targetRef = React.useRef<VariableTarget | null>(null);
-  const [activeLabel, setActiveLabel] = React.useState<string | null>(null);
+  const [targets, setTargets] = React.useState<VariableTarget[]>([]);
+  const [focusedId, setFocusedId] = React.useState<string | null>(null);
 
   const register = React.useCallback((target: VariableTarget) => {
-    targetRef.current = target;
-    setActiveLabel(target.label);
+    setTargets((current) => {
+      const index = current.findIndex((entry) => entry.id === target.id);
+
+      // Re-registering — a renamed label, say — must not reshuffle the order,
+      // because the first field is the fallback target.
+      if (index === -1) {
+        return [...current, target];
+      }
+
+      const next = current.slice();
+      next[index] = target;
+
+      return next;
+    });
   }, []);
+
+  const focus = React.useCallback((id: string) => setFocusedId(id), []);
 
   const release = React.useCallback((id: string) => {
-    if (targetRef.current?.id !== id) {
-      return;
-    }
-
-    targetRef.current = null;
-    setActiveLabel(null);
+    setTargets((current) => current.filter((entry) => entry.id !== id));
+    setFocusedId((current) => (current === id ? null : current));
   }, []);
 
-  const insert = React.useCallback((expression: string) => {
-    targetRef.current?.insert(expression);
-  }, []);
+  const activeTarget =
+    targets.find((entry) => entry.id === focusedId) ?? targets[0] ?? null;
 
   const value = React.useMemo(
-    () => ({ activeLabel, register, release, insert }),
-    [activeLabel, insert, register, release]
+    () => ({
+      activeLabel: activeTarget?.label ?? null,
+      register,
+      focus,
+      release,
+      insert: (expression: string) => activeTarget?.insert(expression),
+    }),
+    [activeTarget, focus, register, release]
   );
 
   return (
@@ -145,10 +166,18 @@ function useVariableField<
     });
   }, []);
 
+  const register = context?.register;
   const release = context?.release;
 
-  // A removed field must not stay the insert target — the panel would be
-  // pointing at settings that are no longer on screen.
+  // Registering on mount — not on first focus — is what gives the data panel a
+  // target from the moment the node opens.
+  React.useEffect(() => {
+    register?.({ id: fieldId, label, insert });
+  }, [fieldId, insert, label, register]);
+
+  // Releasing is strictly an unmount concern, kept apart from the registration
+  // above so a changed label re-registers without losing the field's place in
+  // the order — the first field is the standing target.
   React.useEffect(() => {
     if (!release) {
       return;
@@ -161,7 +190,7 @@ function useVariableField<
     ref: elementRef,
     onFocus: () => {
       rememberSelection();
-      context?.register({ id: fieldId, label, insert });
+      context?.focus(fieldId);
     },
     onSelect: rememberSelection,
     onKeyUp: rememberSelection,

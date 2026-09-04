@@ -367,19 +367,6 @@ export function WorkflowBuilder({
       </div>
 
       <aside className="space-y-4">
-        <WorkflowLibrary
-          activeWorkflowId={activeWorkflowId}
-          workflows={workflows}
-          onCreate={createNewWorkflow}
-          onDelete={requestDeleteWorkflow}
-          onSelect={(workflow) => {
-            setActiveWorkflowId(workflow.id);
-            loadWorkflow(workflow);
-            setLastSavedAt(formatWorkflowTimestamp(workflow.updatedAt));
-          }}
-          isPending={isPending}
-        />
-
         <Card>
           <CardHeader>
             <CardTitle>Module settings</CardTitle>
@@ -433,25 +420,17 @@ export function WorkflowBuilder({
             <Button
               type="button"
               className="w-full"
-<<<<<<< HEAD
               onClick={saveDraft}
-              disabled={isPending}
+              disabled={!basicsReady || isPending}
             >
               {isPending ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
                 <Save className="size-4" />
               )}
-              {activeWorkflowId ? "Save changes" : "Save workflow"}
-=======
-              disabled={!basicsReady}
-              onClick={saveDraft}
-            >
-              <Save className="size-4" />
               {mode === "new" && !lastSavedAt
                 ? "Create workflow"
                 : "Save workflow"}
->>>>>>> origin/main
             </Button>
             {!basicsReady ? (
               <p className="text-xs text-muted-foreground">
@@ -467,86 +446,7 @@ export function WorkflowBuilder({
         </Card>
       </aside>
       </div>
-      <ConfirmDialog />
     </>
-  );
-}
-
-function WorkflowLibrary({
-  activeWorkflowId,
-  workflows,
-  onCreate,
-  onDelete,
-  onSelect,
-  isPending,
-}: {
-  activeWorkflowId: string | null;
-  workflows: SavedWorkflow[];
-  onCreate: () => void;
-  onDelete: () => void;
-  onSelect: (workflow: SavedWorkflow) => void;
-  isPending: boolean;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Saved workflows</CardTitle>
-        <CardAction>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onCreate}
-              disabled={isPending}
-            >
-              <Plus className="size-4" />
-              New
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={onDelete}
-              disabled={isPending}
-              aria-label={activeWorkflowId ? "Delete workflow" : "Clear draft"}
-            >
-              <Trash2 className="size-4" />
-            </Button>
-          </div>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {workflows.length ? (
-          workflows.map((workflow) => (
-            <button
-              key={workflow.id}
-              type="button"
-              onClick={() => onSelect(workflow)}
-              className={cn(
-                "flex min-h-16 w-full items-start gap-3 rounded-md border bg-background p-3 text-left transition hover:bg-muted/60",
-                activeWorkflowId === workflow.id && "border-primary bg-primary/10"
-              )}
-            >
-              <Inbox className="mt-0.5 size-4 shrink-0 text-primary" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">
-                  {workflow.name}
-                </span>
-                <span className="mt-1 block truncate text-xs text-muted-foreground">
-                  Updated {formatWorkflowTimestamp(workflow.updatedAt)}
-                </span>
-              </span>
-              <Badge variant="secondary">{workflow.outcomes.length}</Badge>
-            </button>
-          ))
-        ) : (
-          <div className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-            No saved workflows yet.
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 

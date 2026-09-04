@@ -1,11 +1,12 @@
 "use client";
 
+import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Play, Trash2 } from "lucide-react";
+import { Loader2, Play, Trash2 } from "lucide-react";
+import { deleteWorkflow } from "@/app/workflows/actions";
 import { useConfirmDialog } from "@/components/use-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import type { SavedWorkflow } from "@/lib/workflow-data";
-import { deleteWorkflow, useWorkflowIsDeleted } from "@/lib/workflow-store";
 
 export function WorkflowDetailActions({
   workflow,
@@ -14,11 +15,7 @@ export function WorkflowDetailActions({
 }) {
   const router = useRouter();
   const { confirm, ConfirmDialog } = useConfirmDialog();
-  const isDeleted = useWorkflowIsDeleted(workflow.id);
-
-  if (isDeleted) {
-    return null;
-  }
+  const [isPending, startTransition] = React.useTransition();
 
   async function confirmDelete() {
     const confirmed = await confirm({
@@ -29,9 +26,16 @@ export function WorkflowDetailActions({
     });
 
     if (confirmed) {
-      deleteWorkflow(workflow.id);
-      // The detail page is gone now — don't leave it in the back stack.
-      router.replace("/workflows");
+      startTransition(() => {
+        void (async () => {
+          const result = await deleteWorkflow(workflow.id);
+
+          if (result.status === "success") {
+            // The detail page is gone now -- do not leave it in the back stack.
+            router.replace("/workflows");
+          }
+        })();
+      });
     }
   }
 
@@ -46,8 +50,13 @@ export function WorkflowDetailActions({
         variant="outline"
         className="text-destructive hover:text-destructive"
         onClick={confirmDelete}
+        disabled={isPending}
       >
-        <Trash2 className="size-4" />
+        {isPending ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <Trash2 className="size-4" />
+        )}
         Delete workflow
       </Button>
       <ConfirmDialog />

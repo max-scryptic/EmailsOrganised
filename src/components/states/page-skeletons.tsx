@@ -18,24 +18,6 @@ function ActionSkeletons({ count = 2 }: { count?: number }) {
   );
 }
 
-function MetricCardsSkeleton({ count = 4 }: { count?: number }) {
-  return (
-    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      {Array.from({ length: count }).map((_, index) => (
-        <Card key={index}>
-          <CardHeader className="gap-2 pb-2">
-            <Skeleton className="h-4 w-32" />
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Skeleton className="h-8 w-20" />
-            <Skeleton className="h-3 w-16" />
-          </CardContent>
-        </Card>
-      ))}
-    </section>
-  );
-}
-
 export function WorkflowsSkeleton() {
   return (
     <AppShell

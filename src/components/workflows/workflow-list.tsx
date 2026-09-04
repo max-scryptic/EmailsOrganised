@@ -4,12 +4,9 @@ import { Workflow } from "lucide-react";
 import { EmptyState } from "@/components/states/empty-state";
 import { WorkflowTable } from "@/components/workflows/workflow-table";
 import type { SavedWorkflow } from "@/lib/workflow-data";
-import { useVisibleWorkflows } from "@/lib/workflow-store";
 
 export function WorkflowList({ workflows }: { workflows: SavedWorkflow[] }) {
-  const visibleWorkflows = useVisibleWorkflows(workflows);
-
-  if (visibleWorkflows.length === 0) {
+  if (workflows.length === 0) {
     return (
       <EmptyState
         icon={Workflow}
@@ -20,5 +17,5 @@ export function WorkflowList({ workflows }: { workflows: SavedWorkflow[] }) {
     );
   }
 
-  return <WorkflowTable workflows={visibleWorkflows} />;
+  return <WorkflowTable workflows={workflows} />;
 }

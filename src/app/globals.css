@@ -12,6 +12,8 @@
   --font-heading: ui-sans-serif, system-ui, sans-serif;
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
+  --color-brand-glow: var(--brand-glow);
+  --animate-brand-glow-pulse: brand-glow-pulse 3.6s ease-in-out infinite;
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
@@ -62,6 +64,9 @@
   /* The envelope inside the mark stays white in both themes, and so does
      anything else painted on `--brand` — see `--primary-foreground`. */
   --brand-foreground: oklch(0.985 0 0);
+  /* Translucent brand orange for halos cast around a surface rather than
+     painted on it — the workflow canvas' initial node uses it. */
+  --brand-glow: oklch(0.77 0.166 63 / 0.4);
   --background: oklch(0.985 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -106,6 +111,9 @@
   /* Nudged lighter so the same orange keeps its punch on the dark background. */
   --brand: oklch(0.8 0.163 63);
   --brand-foreground: oklch(0.985 0 0);
+  /* A touch stronger on the dark canvas, where a halo has further to travel
+     before it reads. */
+  --brand-glow: oklch(0.8 0.163 63 / 0.5);
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -141,6 +149,22 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.68 0.15 63);
+}
+
+/* Slow breathing halo. Paired with `motion-safe:` at the call site so it stays
+   still for anyone who asked for reduced motion. */
+@keyframes brand-glow-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px var(--brand-glow),
+      0 0 16px -6px var(--brand-glow);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px var(--brand-glow),
+      0 0 30px -2px var(--brand-glow);
+  }
 }
 
 @layer base {

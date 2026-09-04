@@ -121,6 +121,10 @@ type DragState =
       startClientX: number;
       startClientY: number;
       startPosition: CanvasNodePosition;
+      nodeKind: CanvasNodeKind;
+      element: HTMLDivElement;
+      frame: number;
+      nextPosition: CanvasNodePosition;
     };
 
 type SelectedModule =
@@ -174,6 +178,8 @@ export function WorkflowBuilder({
     type: "workflow",
   });
   const [lastSavedAt, setLastSavedAt] = React.useState<string | null>(null);
+  const showWorkflowGraph =
+    mode === "edit" || outcomes.length > 0 || Boolean(classifierPrompt.trim());
   const [result, setResult] = React.useState<WorkflowResult>(null);
 
   const selectedOutcome =
@@ -209,16 +215,24 @@ export function WorkflowBuilder({
         outcomes,
         exampleCount,
         nodePositions,
+        showWorkflowGraph,
       }),
-    [classifierPrompt, exampleCount, nodePositions, outcomes, trigger]
+    [
+      classifierPrompt,
+      exampleCount,
+      nodePositions,
+      outcomes,
+      showWorkflowGraph,
+      trigger,
+    ]
   );
   const canvasNodeMap = React.useMemo(
     () => new Map(canvasNodes.map((node) => [node.id, node])),
     [canvasNodes]
   );
   const canvasEdges = React.useMemo(
-    () => createCanvasEdges(outcomes),
-    [outcomes]
+    () => createCanvasEdges(outcomes, showWorkflowGraph),
+    [outcomes, showWorkflowGraph]
   );
 
   const basicsReady = Boolean(workflowName.trim()) && Boolean(detail.trim());
@@ -498,6 +512,10 @@ export function WorkflowBuilder({
       startClientX: event.clientX,
       startClientY: event.clientY,
       startPosition: node.position,
+      nodeKind: node.kind,
+      element: event.currentTarget,
+      frame: 0,
+      nextPosition: node.position,
     };
     setSelectedModule(node.module);
   }
@@ -517,25 +535,41 @@ export function WorkflowBuilder({
       return;
     }
 
-    const node = canvasNodeMap.get(drag.nodeId);
+    drag.nextPosition = clampCanvasPosition(
+      {
+        x: drag.startPosition.x + event.clientX - drag.startClientX,
+        y: drag.startPosition.y + event.clientY - drag.startClientY,
+      },
+      drag.nodeKind
+    );
 
-    if (!node) {
-      return;
+    if (drag.frame === 0) {
+      drag.frame = window.requestAnimationFrame(() => {
+        drag.frame = 0;
+        drag.element.style.transform = canvasPositionTransform(
+          drag.nextPosition
+        );
+      });
     }
-
-    setNodePositions((current) => ({
-      ...current,
-      [drag.nodeId]: clampCanvasPosition(
-        {
-          x: drag.startPosition.x + event.clientX - drag.startClientX,
-          y: drag.startPosition.y + event.clientY - drag.startClientY,
-        },
-        node.kind
-      ),
-    }));
   }
 
   function handleCanvasPointerUp() {
+    const drag = dragState.current;
+
+    if (drag?.type === "node") {
+      if (drag.frame !== 0) {
+        window.cancelAnimationFrame(drag.frame);
+        drag.element.style.transform = canvasPositionTransform(
+          drag.nextPosition
+        );
+      }
+
+      setNodePositions((current) => ({
+        ...current,
+        [drag.nodeId]: drag.nextPosition,
+      }));
+    }
+
     dragState.current = null;
   }
 
@@ -668,7 +702,7 @@ export function WorkflowBuilder({
                 style={{
                   width: canvasWidth,
                   height: canvasHeight,
-                  transform: `translate(${pan.x}px, ${pan.y}px)`,
+                  transform: canvasPositionTransform(pan),
                 }}
                 onPointerDown={handleCanvasPointerDown}
               >
@@ -915,7 +949,7 @@ function CanvasNode({
       }}
       onPointerDown={onPointerDown}
       className={cn(
-        "absolute rounded-md border bg-card p-3 text-card-foreground shadow-sm transition",
+        "absolute rounded-md border bg-card p-3 text-card-foreground shadow-sm transition-colors",
         "cursor-grab select-none active:cursor-grabbing",
         selected && "border-primary shadow-md ring-2 ring-primary/20",
         connecting && "border-primary bg-primary/10",
@@ -924,7 +958,7 @@ function CanvasNode({
       style={{
         width: nodeWidth,
         minHeight: height,
-        transform: `translate(${node.position.x}px, ${node.position.y}px)`,
+        transform: canvasPositionTransform(node.position),
       }}
     >
       {node.kind !== "trigger" ? (
@@ -1102,37 +1136,44 @@ function createCanvasNodes({
   outcomes,
   exampleCount,
   nodePositions,
+  showWorkflowGraph,
 }: {
   trigger: string;
   classifierPrompt: string;
   outcomes: WorkflowOutcome[];
   exampleCount: number;
   nodePositions: CanvasPositions;
+  showWorkflowGraph: boolean;
 }) {
   const nodes: FlowCanvasNode[] = [
     {
       id: "trigger",
       kind: "trigger",
       module: { type: "trigger" },
-      title: "Email arrives",
+      title: "Email watcher",
       detail: trigger || "Mailbox trigger",
-      meta: "Trigger",
+      meta: "Initial node",
       icon: Inbox,
       position: nodePositions.trigger ?? { x: 72, y: 390 },
       ready: Boolean(trigger.trim()),
     },
-    {
-      id: "classifier",
-      kind: "classifier",
-      module: { type: "classifier" },
-      title: "Classify with AI",
-      detail: classifierPrompt || "AI classification prompt",
-      meta: `${outcomes.length} branches, ${exampleCount} examples`,
-      icon: Filter,
-      position: nodePositions.classifier ?? { x: 382, y: 390 },
-      ready: Boolean(classifierPrompt.trim()) && exampleCount > 0,
-    },
   ];
+
+  if (!showWorkflowGraph) {
+    return nodes;
+  }
+
+  nodes.push({
+    id: "classifier",
+    kind: "classifier",
+    module: { type: "classifier" },
+    title: "Classify with AI",
+    detail: classifierPrompt || "AI classification prompt",
+    meta: `${outcomes.length} branches, ${exampleCount} examples`,
+    icon: Filter,
+    position: nodePositions.classifier ?? { x: 382, y: 390 },
+    ready: Boolean(classifierPrompt.trim()) && exampleCount > 0,
+  });
 
   outcomes.forEach((outcome, outcomeIndex) => {
     nodes.push({
@@ -1182,7 +1223,14 @@ function createCanvasNodes({
   return nodes;
 }
 
-function createCanvasEdges(outcomes: WorkflowOutcome[]) {
+function createCanvasEdges(
+  outcomes: WorkflowOutcome[],
+  showWorkflowGraph: boolean
+) {
+  if (!showWorkflowGraph) {
+    return [];
+  }
+
   const edges: CanvasEdge[] = [{ from: "trigger", to: "classifier" }];
 
   outcomes.forEach((outcome) => {
@@ -1223,6 +1271,10 @@ function moduleKey(module: SelectedModule) {
   }
 
   return module.type;
+}
+
+function canvasPositionTransform(position: CanvasNodePosition) {
+  return `translate3d(${position.x}px, ${position.y}px, 0)`;
 }
 
 function WorkflowSettings({

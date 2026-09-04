@@ -11,7 +11,7 @@ export const appConfig = {
 };
 
 export const appNavItems = [
-  { title: "Workflows", href: "/", icon: Workflow },
+  { title: "Workflows", href: "/workflows", icon: Workflow },
 ];
 
 export const settingsSections = [

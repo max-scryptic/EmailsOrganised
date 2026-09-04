@@ -34,9 +34,15 @@ export default async function WorkflowDetailPage({
         { title: "Workflows", href: "/workflows" },
         { title: workflow.draft.name },
       ]}
-      actions={<WorkflowDetailActions workflow={workflow} />}
+      // The builder owns the heading so the name and detail stay editable, and
+      // the board fills everything under it.
+      hideHeading
+      fill
     >
-      <WorkflowDetail workflow={workflow} />
+      <WorkflowDetail
+        workflow={workflow}
+        actions={<WorkflowDetailActions workflow={workflow} />}
+      />
     </AppShell>
   );
 }

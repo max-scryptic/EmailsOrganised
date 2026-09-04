@@ -14,28 +14,23 @@ import {
   MailCheck,
   MousePointer2,
   Move,
+  Plus,
   Save,
-  Settings2,
   Sparkles,
   Tag,
   Trash2,
   TriangleAlert,
+  X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { saveWorkflow } from "@/app/workflows/actions";
+import { InlineEditableText } from "@/components/workflows/inline-editable-text";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -90,7 +85,7 @@ type CanvasPositions = Record<string, CanvasNodePosition>;
 type FlowCanvasNode = {
   id: string;
   kind: CanvasNodeKind;
-  module: Exclude<SelectedModule, { type: "workflow" }>;
+  module: SelectedModule;
   title: string;
   detail: string;
   meta: string;
@@ -127,8 +122,12 @@ type DragState =
       nextPosition: CanvasNodePosition;
     };
 
+/**
+ * The node whose settings the board's inspector is showing. `null` is a board
+ * with nothing selected — workflow-level fields live in the page heading now,
+ * not in a panel.
+ */
 type SelectedModule =
-  | { type: "workflow" }
   | { type: "trigger" }
   | { type: "classifier" }
   | { type: "outcome"; outcomeId: string }
@@ -140,6 +139,8 @@ type WorkflowBuilderProps = {
   status?: WorkflowStatus;
   /** "new" starts from a blank draft and asks for a name before saving. */
   mode?: "edit" | "new";
+  /** Page-level buttons (run, delete) rendered beside Save in the heading. */
+  actions?: React.ReactNode;
 };
 
 type WorkflowResult =
@@ -155,6 +156,7 @@ export function WorkflowBuilder({
   workflowId,
   status = "draft",
   mode = "edit",
+  actions,
 }: WorkflowBuilderProps) {
   const router = useRouter();
   const [isPending, startTransition] = React.useTransition();
@@ -174,20 +176,20 @@ export function WorkflowBuilder({
   const [pan, setPan] = React.useState<CanvasNodePosition>({ x: 8, y: 8 });
   const [connectingFrom, setConnectingFrom] =
     React.useState<FlowCanvasNode | null>(null);
-  const [selectedModule, setSelectedModule] = React.useState<SelectedModule>({
-    type: "workflow",
-  });
+  const [selectedModule, setSelectedModule] =
+    React.useState<SelectedModule | null>(null);
+  const [isPaletteOpen, setIsPaletteOpen] = React.useState(false);
   const [lastSavedAt, setLastSavedAt] = React.useState<string | null>(null);
   const showWorkflowGraph =
     mode === "edit" || outcomes.length > 0 || Boolean(classifierPrompt.trim());
   const [result, setResult] = React.useState<WorkflowResult>(null);
 
   const selectedOutcome =
-    "outcomeId" in selectedModule
+    selectedModule && "outcomeId" in selectedModule
       ? outcomes.find((outcome) => outcome.id === selectedModule.outcomeId)
       : undefined;
   const selectedAction =
-    selectedModule.type === "action"
+    selectedModule?.type === "action"
       ? selectedOutcome?.actions.find(
           (action) => action.id === selectedModule.actionId
         )
@@ -443,7 +445,7 @@ export function WorkflowBuilder({
       return nearestOutcome.outcome.id;
     }
 
-    if ("outcomeId" in selectedModule) {
+    if (selectedModule && "outcomeId" in selectedModule) {
       return selectedModule.outcomeId;
     }
 
@@ -494,6 +496,8 @@ export function WorkflowBuilder({
       startPan: pan,
     };
     setConnectingFrom(null);
+    // Clicking the board itself is how you dismiss the node inspector.
+    setSelectedModule(null);
   }
 
   function handleNodePointerDown(
@@ -622,171 +626,52 @@ export function WorkflowBuilder({
   }
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <div className="space-y-4">
-        {result ? (
-          <Alert
-            variant={result.status === "error" ? "destructive" : "default"}
-          >
-            {result.status === "error" ? (
-              <TriangleAlert className="size-4" />
-            ) : (
-              <CheckCircle2 className="size-4" />
-            )}
-            <AlertTitle>{result.title}</AlertTitle>
-            <AlertDescription>{result.description}</AlertDescription>
-          </Alert>
-        ) : null}
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      {result ? (
+        <Alert variant={result.status === "error" ? "destructive" : "default"}>
+          {result.status === "error" ? (
+            <TriangleAlert className="size-4" />
+          ) : (
+            <CheckCircle2 className="size-4" />
+          )}
+          <AlertTitle>{result.title}</AlertTitle>
+          <AlertDescription>{result.description}</AlertDescription>
+        </Alert>
+      ) : null}
 
-        <Card className="overflow-hidden">
-          <CardHeader className="border-b">
-            <CardTitle>Flow builder</CardTitle>
-            <CardAction className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant={selectedModule.type === "workflow" ? "default" : "outline"}
-                onClick={() => setSelectedModule({ type: "workflow" })}
-            >
-              <Settings2 className="size-4" />
-              Workflow
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={() => setPan({ x: 8, y: 8 })}
-              aria-label="Reset canvas position"
-              title="Reset canvas position"
-            >
-              <Move className="size-4" />
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent className="grid min-h-[720px] gap-0 p-0 lg:grid-cols-[232px_minmax(0,1fr)]">
-          <WidgetPalette
-            selectedModule={selectedModule}
-            onSelectWorkflow={() => setSelectedModule({ type: "workflow" })}
-            onAddOutcome={() => addOutcome()}
-            onAddAction={(type) => {
-              const outcomeId = selectedOutcomeIdForWidgetDrop({ x: 0, y: 0 });
-
-              if (outcomeId) {
-                addAction(outcomeId, type);
-              }
-            }}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1">
+          <InlineEditableText
+            value={workflowName}
+            onChange={setWorkflowName}
+            label="workflow name"
+            placeholder="Name this workflow"
+            className="text-2xl font-semibold tracking-normal sm:text-3xl"
           />
-          <div className="flex min-w-0 flex-col">
-            <div className="grid gap-3 border-b bg-muted/20 p-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
-              <ReadinessRow label="Basics" ready={basicsReady} />
-              <ReadinessRow label="Trigger" ready={Boolean(trigger.trim())} />
-              <ReadinessRow
-                label="Classifier"
-                ready={Boolean(classifierPrompt.trim()) && exampleCount > 0}
-              />
-              <ReadinessRow label="Actions" ready={actionsReady} />
-            </div>
-            <div
-              ref={canvasRef}
-              className={cn(
-                "relative min-h-[640px] flex-1 overflow-hidden bg-background",
-                "bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-[size:28px_28px]"
-              )}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={handleCanvasDrop}
-              onPointerMove={handleCanvasPointerMove}
-              onPointerUp={handleCanvasPointerUp}
-              onPointerCancel={handleCanvasPointerUp}
-            >
-              <div
-                className="absolute left-0 top-0 cursor-grab active:cursor-grabbing"
-                style={{
-                  width: canvasWidth,
-                  height: canvasHeight,
-                  transform: canvasPositionTransform(pan),
-                }}
-                onPointerDown={handleCanvasPointerDown}
-              >
-                <FlowEdges edges={canvasEdges} nodes={canvasNodeMap} />
-                {canvasNodes.map((node) => (
-                  <CanvasNode
-                    key={node.id}
-                    node={node}
-                    selected={moduleKey(selectedModule) === moduleKey(node.module)}
-                    connecting={connectingFrom?.id === node.id}
-                    canReceiveConnection={Boolean(
-                      connectingFrom && connectingFrom.id !== node.id
-                    )}
-                    onPointerDown={(event) => handleNodePointerDown(event, node)}
-                    onSelect={() => setSelectedModule(node.module)}
-                    onStartConnection={() => setConnectingFrom(node)}
-                    onCompleteConnection={() => handleConnectionTarget(node)}
-                  />
-                ))}
-              </div>
-              <div className="pointer-events-none absolute bottom-3 left-3 flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 text-xs text-muted-foreground shadow-sm">
-                <MousePointer2 className="size-3.5" />
-                <span>{connectingFrom ? "Choose a target node" : "Canvas ready"}</span>
-              </div>
-            </div>
+          <InlineEditableText
+            value={detail}
+            onChange={setDetail}
+            label="workflow detail"
+            placeholder="Describe in one line what this workflow does"
+            multiline
+            className="max-w-2xl text-sm text-muted-foreground"
+          />
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <span className="pl-1">Owner</span>
+            <InlineEditableText
+              value={ownerRole}
+              onChange={setOwnerRole}
+              label="workflow owner"
+              placeholder="Everyone"
+              className="text-xs"
+            />
           </div>
-        </CardContent>
-      </Card>
-    </div>
-
-      <aside className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Module settings</CardTitle>
-            <CardAction>
-              <Badge variant="outline">{moduleLabel(selectedModule)}</Badge>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {selectedModule.type === "workflow" ? (
-              <WorkflowSettings
-                workflowName={workflowName}
-                detail={detail}
-                ownerRole={ownerRole}
-                onWorkflowNameChange={setWorkflowName}
-                onDetailChange={setDetail}
-                onOwnerRoleChange={setOwnerRole}
-              />
-            ) : null}
-            {selectedModule.type === "trigger" ? (
-              <TriggerSettings trigger={trigger} onTriggerChange={setTrigger} />
-            ) : null}
-            {selectedModule.type === "classifier" ? (
-              <ClassifierSettings
-                classifierPrompt={classifierPrompt}
-                onClassifierPromptChange={setClassifierPrompt}
-              />
-            ) : null}
-            {selectedModule.type === "outcome" && selectedOutcome ? (
-              <OutcomeSettings
-                outcome={selectedOutcome}
-                onChange={(updater) =>
-                  updateOutcome(selectedOutcome.id, updater)
-                }
-              />
-            ) : null}
-            {selectedModule.type === "action" &&
-            selectedOutcome &&
-            selectedAction ? (
-              <ActionSettings
-                action={selectedAction}
-                canRemove={selectedOutcome.actions.length > 1}
-                onChange={(updater) =>
-                  updateAction(selectedOutcome.id, selectedAction.id, updater)
-                }
-                onRemove={() =>
-                  removeAction(selectedOutcome.id, selectedAction.id)
-                }
-              />
-            ) : null}
-            <Separator />
+        </div>
+        <div className="flex shrink-0 flex-col gap-1 lg:items-end">
+          <div className="flex flex-wrap items-center gap-2">
+            {actions}
             <Button
               type="button"
-              className="w-full"
               onClick={saveDraft}
               disabled={!basicsReady || isPending}
             >
@@ -799,19 +684,149 @@ export function WorkflowBuilder({
                 ? "Create workflow"
                 : "Save workflow"}
             </Button>
-            {!basicsReady ? (
-              <p className="text-xs text-muted-foreground">
-                Give the workflow a name and a one-line detail in Settings
-                before saving it.
-              </p>
-            ) : lastSavedAt ? (
-              <p className="text-xs text-muted-foreground">
-                Draft saved at {lastSavedAt}.
-              </p>
-            ) : null}
-          </CardContent>
-        </Card>
-      </aside>
+          </div>
+          {!basicsReady ? (
+            <p className="text-xs text-muted-foreground">
+              Name the workflow and add a one-line detail before saving it.
+            </p>
+          ) : lastSavedAt ? (
+            <p className="text-xs text-muted-foreground">
+              Draft saved at {lastSavedAt}.
+            </p>
+          ) : null}
+        </div>
+      </div>
+
+      <Card className="min-h-0 flex-1 gap-0 overflow-hidden py-0">
+        <div
+          ref={canvasRef}
+          className={cn(
+            // A container so the floating panels lay themselves out against the
+            // board's own width, not the viewport's.
+            "@container relative min-h-0 flex-1 overflow-hidden bg-background",
+            "bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-[size:28px_28px]"
+          )}
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={handleCanvasDrop}
+          onPointerMove={handleCanvasPointerMove}
+          onPointerUp={handleCanvasPointerUp}
+          onPointerCancel={handleCanvasPointerUp}
+        >
+          <div
+            className="absolute left-0 top-0 cursor-grab active:cursor-grabbing"
+            style={{
+              width: canvasWidth,
+              height: canvasHeight,
+              transform: canvasPositionTransform(pan),
+            }}
+            onPointerDown={handleCanvasPointerDown}
+          >
+            <FlowEdges edges={canvasEdges} nodes={canvasNodeMap} />
+            {canvasNodes.map((node) => (
+              <CanvasNode
+                key={node.id}
+                node={node}
+                selected={moduleKey(selectedModule) === moduleKey(node.module)}
+                connecting={connectingFrom?.id === node.id}
+                canReceiveConnection={Boolean(
+                  connectingFrom && connectingFrom.id !== node.id
+                )}
+                onPointerDown={(event) => handleNodePointerDown(event, node)}
+                onSelect={() => setSelectedModule(node.module)}
+                onStartConnection={() => setConnectingFrom(node)}
+                onCompleteConnection={() => handleConnectionTarget(node)}
+              />
+            ))}
+          </div>
+
+          <div className="pointer-events-none absolute left-3 top-3 z-10 flex flex-wrap items-center gap-2">
+            <ReadinessChip label="Basics" ready={basicsReady} />
+            <ReadinessChip label="Trigger" ready={Boolean(trigger.trim())} />
+            <ReadinessChip
+              label="Classifier"
+              ready={Boolean(classifierPrompt.trim()) && exampleCount > 0}
+            />
+            <ReadinessChip label="Actions" ready={actionsReady} />
+          </div>
+
+          <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="bg-background/95 shadow-sm"
+              onClick={() => setPan({ x: 8, y: 8 })}
+              aria-label="Reset board position"
+              title="Reset board position"
+            >
+              <Move className="size-4" />
+            </Button>
+            <span className="pointer-events-none flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 text-xs text-muted-foreground shadow-sm">
+              <MousePointer2 className="size-3.5" />
+              {connectingFrom ? "Choose a target node" : "Board ready"}
+            </span>
+          </div>
+
+          <NodePalette
+            open={isPaletteOpen}
+            shifted={selectedModule !== null}
+            canAddAction={outcomes.length > 0}
+            onOpenChange={setIsPaletteOpen}
+            onAddOutcome={() => {
+              addOutcome();
+              setIsPaletteOpen(false);
+            }}
+            onAddAction={(type) => {
+              const outcomeId = selectedOutcomeIdForWidgetDrop({ x: 0, y: 0 });
+
+              if (outcomeId) {
+                addAction(outcomeId, type);
+                setIsPaletteOpen(false);
+              }
+            }}
+          />
+
+          {selectedModule ? (
+            <NodeInspector
+              module={selectedModule}
+              title={moduleTitle(selectedModule, selectedOutcome, selectedAction)}
+              onClose={() => setSelectedModule(null)}
+            >
+              {selectedModule.type === "trigger" ? (
+                <TriggerSettings trigger={trigger} onTriggerChange={setTrigger} />
+              ) : null}
+              {selectedModule.type === "classifier" ? (
+                <ClassifierSettings
+                  classifierPrompt={classifierPrompt}
+                  onClassifierPromptChange={setClassifierPrompt}
+                />
+              ) : null}
+              {selectedModule.type === "outcome" && selectedOutcome ? (
+                <OutcomeSettings
+                  outcome={selectedOutcome}
+                  onChange={(updater) =>
+                    updateOutcome(selectedOutcome.id, updater)
+                  }
+                />
+              ) : null}
+              {selectedModule.type === "action" &&
+              selectedOutcome &&
+              selectedAction ? (
+                <ActionSettings
+                  action={selectedAction}
+                  canRemove={selectedOutcome.actions.length > 1}
+                  onChange={(updater) =>
+                    updateAction(selectedOutcome.id, selectedAction.id, updater)
+                  }
+                  onRemove={() =>
+                    removeAction(selectedOutcome.id, selectedAction.id)
+                  }
+                />
+              ) : null}
+            </NodeInspector>
+          ) : null}
+        </div>
+      </Card>
     </div>
   );
 }
@@ -823,55 +838,91 @@ function formatWorkflowTimestamp(value: string) {
   }).format(new Date(value));
 }
 
-function WidgetPalette({
-  selectedModule,
-  onSelectWorkflow,
+/**
+ * The board's own add-node control: a button in the bottom-right corner that
+ * expands into the list of nodes you can click or drag onto the board.
+ */
+function NodePalette({
+  open,
+  shifted,
+  canAddAction,
+  onOpenChange,
   onAddOutcome,
   onAddAction,
 }: {
-  selectedModule: SelectedModule;
-  onSelectWorkflow: () => void;
+  open: boolean;
+  /** Steps aside so the palette does not sit under the node inspector. */
+  shifted: boolean;
+  canAddAction: boolean;
+  onOpenChange: (open: boolean) => void;
   onAddOutcome: () => void;
   onAddAction: (type: WorkflowActionType) => void;
 }) {
   return (
-    <div className="border-b bg-muted/20 p-3 lg:border-b-0 lg:border-r">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="text-sm font-medium">Widgets</div>
-        <Button
-          type="button"
-          variant={selectedModule.type === "workflow" ? "default" : "ghost"}
-          size="icon"
-          onClick={onSelectWorkflow}
-          aria-label="Workflow settings"
-          title="Workflow settings"
-        >
-          <Settings2 className="size-4" />
-        </Button>
-      </div>
-      <div className="space-y-2">
-        <PaletteItem
-          title="Branch"
-          detail="Classification outcome"
-          icon={GitBranch}
-          widgetType="outcome"
-          onAdd={onAddOutcome}
-        />
-        {actionTypes.map((type) => {
-          const Icon = actionIcons[type];
-
-          return (
+    <div
+      className={cn(
+        // Spans the board's height so a tall list scrolls instead of being
+        // clipped, but only the panel and the button take clicks.
+        "pointer-events-none absolute inset-y-3 z-30 flex max-w-[calc(100%-1.5rem)] flex-col items-end justify-end gap-2 transition-[right]",
+        shifted ? "right-3 @min-[38rem]:right-[21.5rem]" : "right-3"
+      )}
+    >
+      {open ? (
+        <div className="pointer-events-auto min-h-0 w-64 max-w-full overflow-y-auto rounded-lg border bg-card p-2 shadow-lg">
+          <div className="flex items-center justify-between gap-2 px-1 pb-2">
+            <span className="text-sm font-medium">Add a node</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              onClick={() => onOpenChange(false)}
+              aria-label="Close node list"
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+          <div className="space-y-2">
             <PaletteItem
-              key={type}
-              title={actionLabels[type]}
-              detail="Action node"
-              icon={Icon}
-              widgetType={type}
-              onAdd={() => onAddAction(type)}
+              title="Branch"
+              detail="Classification outcome"
+              icon={GitBranch}
+              widgetType="outcome"
+              onAdd={onAddOutcome}
             />
-          );
-        })}
-      </div>
+            {actionTypes.map((type) => {
+              const Icon = actionIcons[type];
+
+              return (
+                <PaletteItem
+                  key={type}
+                  title={actionLabels[type]}
+                  detail="Action node"
+                  icon={Icon}
+                  widgetType={type}
+                  disabled={!canAddAction}
+                  disabledHint="Add a branch before adding actions"
+                  onAdd={() => onAddAction(type)}
+                />
+              );
+            })}
+          </div>
+          <p className="px-1 pt-2 text-xs text-muted-foreground">
+            Click to drop it on the board, or drag it where you want it.
+          </p>
+        </div>
+      ) : null}
+      <Button
+        type="button"
+        size="icon"
+        className="pointer-events-auto size-11 shrink-0 rounded-full shadow-lg"
+        aria-expanded={open}
+        aria-label={open ? "Hide the node list" : "Show the node list"}
+        title={open ? "Hide the node list" : "Show the node list"}
+        onClick={() => onOpenChange(!open)}
+      >
+        {open ? <X className="size-5" /> : <Plus className="size-5" />}
+      </Button>
     </div>
   );
 }
@@ -881,24 +932,30 @@ function PaletteItem({
   detail,
   icon: Icon,
   widgetType,
+  disabled = false,
+  disabledHint,
   onAdd,
 }: {
   title: string;
   detail: string;
   icon: React.ComponentType<{ className?: string }>;
   widgetType: PaletteWidgetType;
+  disabled?: boolean;
+  disabledHint?: string;
   onAdd: () => void;
 }) {
   return (
     <button
       type="button"
-      draggable
+      draggable={!disabled}
+      disabled={disabled}
+      title={disabled ? disabledHint : undefined}
       onClick={onAdd}
       onDragStart={(event) => {
         event.dataTransfer.setData("application/x-workflow-widget", widgetType);
         event.dataTransfer.effectAllowed = "copy";
       }}
-      className="flex min-h-16 w-full items-center gap-3 rounded-md border bg-background px-3 py-2 text-left shadow-sm transition hover:border-primary/60 hover:bg-primary/5"
+      className="flex min-h-14 w-full items-center gap-3 rounded-md border bg-background px-3 py-2 text-left shadow-sm transition hover:border-primary/60 hover:bg-primary/5 disabled:pointer-events-none disabled:opacity-50"
     >
       <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
         <Icon className="size-4" />
@@ -911,6 +968,41 @@ function PaletteItem({
       </span>
       <Grip className="size-4 shrink-0 text-muted-foreground" />
     </button>
+  );
+}
+
+/** Settings for the selected node, floating over the right of the board. */
+function NodeInspector({
+  module,
+  title,
+  onClose,
+  children,
+}: {
+  module: SelectedModule;
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="absolute right-3 top-3 bottom-16 z-20 flex w-80 max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-lg border bg-card shadow-lg @min-[38rem]:bottom-3">
+      <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Badge variant="outline">{moduleLabel(module)}</Badge>
+          <span className="truncate text-sm font-medium">{title}</span>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-7 shrink-0"
+          onClick={onClose}
+          aria-label="Close node settings"
+        >
+          <X className="size-4" />
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">{children}</div>
+    </div>
   );
 }
 
@@ -1081,14 +1173,22 @@ function FlowEdges({
   );
 }
 
-function ReadinessRow({ label, ready }: { label: string; ready: boolean }) {
+function ReadinessChip({ label, ready }: { label: string; ready: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md border bg-background px-3 py-2">
-      <span>{label}</span>
-      <Badge variant={ready ? "outline" : "destructive"}>
-        {ready ? "Ready" : "Needs input"}
-      </Badge>
-    </div>
+    <span
+      className={cn(
+        "flex items-center gap-1.5 rounded-full border bg-background/95 px-2.5 py-1 text-xs shadow-sm",
+        ready ? "text-muted-foreground" : "border-destructive/40 text-destructive"
+      )}
+    >
+      {ready ? (
+        <CircleDot className="size-3 text-success" />
+      ) : (
+        <TriangleAlert className="size-3" />
+      )}
+      {label}
+      <span className="sr-only">{ready ? "ready" : "needs input"}</span>
+    </span>
   );
 }
 
@@ -1261,7 +1361,11 @@ function isPaletteWidgetType(value: string): value is PaletteWidgetType {
   return value === "outcome" || actionTypes.includes(value as WorkflowActionType);
 }
 
-function moduleKey(module: SelectedModule) {
+function moduleKey(module: SelectedModule | null) {
+  if (!module) {
+    return "none";
+  }
+
   if (module.type === "outcome") {
     return `${module.type}:${module.outcomeId}`;
   }
@@ -1277,57 +1381,24 @@ function canvasPositionTransform(position: CanvasNodePosition) {
   return `translate3d(${position.x}px, ${position.y}px, 0)`;
 }
 
-function WorkflowSettings({
-  workflowName,
-  detail,
-  ownerRole,
-  onWorkflowNameChange,
-  onDetailChange,
-  onOwnerRoleChange,
-}: {
-  workflowName: string;
-  detail: string;
-  ownerRole: string;
-  onWorkflowNameChange: (value: string) => void;
-  onDetailChange: (value: string) => void;
-  onOwnerRoleChange: (value: string) => void;
-}) {
-  return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="workflow-name">Name</Label>
-        <Input
-          id="workflow-name"
-          value={workflowName}
-          placeholder="CEO inbox triage"
-          onChange={(event) => onWorkflowNameChange(event.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="workflow-detail">Detail</Label>
-        <Textarea
-          id="workflow-detail"
-          value={detail}
-          placeholder="Routes investor, finance, and escalation mail out of the inbox before it needs a read."
-          onChange={(event) => onDetailChange(event.target.value)}
-          className="min-h-24"
-        />
-        <p className="text-xs text-muted-foreground">
-          One line describing what this workflow does. It is what the workflows
-          list shows next to the name.
-        </p>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="owner-role">Owner</Label>
-        <Input
-          id="owner-role"
-          value={ownerRole}
-          placeholder="Everyone"
-          onChange={(event) => onOwnerRoleChange(event.target.value)}
-        />
-      </div>
-    </div>
-  );
+function moduleTitle(
+  module: SelectedModule,
+  outcome: WorkflowOutcome | undefined,
+  action: WorkflowAction | undefined
+) {
+  if (module.type === "trigger") {
+    return "Email watcher";
+  }
+
+  if (module.type === "classifier") {
+    return "Classify with AI";
+  }
+
+  if (module.type === "outcome") {
+    return outcome?.name || "Branch";
+  }
+
+  return action ? actionLabels[action.type] : "Action";
 }
 
 function TriggerSettings({
@@ -1694,10 +1765,6 @@ function ArchiveFields({ action, actionId, onChange }: ActionFieldProps) {
 }
 
 function moduleLabel(module: SelectedModule) {
-  if (module.type === "workflow") {
-    return "Workflow";
-  }
-
   if (module.type === "trigger") {
     return "Trigger";
   }

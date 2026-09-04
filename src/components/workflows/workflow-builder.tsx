@@ -1232,6 +1232,8 @@ function CanvasNode({
 }) {
   const Icon = node.icon;
   const height = nodeHeights[node.kind];
+  /** The workflow always starts here, so the node wears a soft brand halo. */
+  const isInitialNode = node.kind === "trigger";
 
   return (
     <div
@@ -1248,6 +1250,8 @@ function CanvasNode({
       className={cn(
         "absolute rounded-md border bg-card p-3 text-card-foreground shadow-sm transition-colors",
         "cursor-grab select-none active:cursor-grabbing",
+        isInitialNode &&
+          "border-primary/45 motion-safe:animate-brand-glow-pulse motion-reduce:shadow-[0_0_0_1px_var(--brand-glow),0_0_22px_-6px_var(--brand-glow)]",
         selected && "border-primary shadow-md ring-2 ring-primary/20",
         connecting && "border-primary bg-primary/10",
         canReceiveConnection && "ring-2 ring-muted-foreground/20"
@@ -1293,7 +1297,12 @@ function CanvasNode({
       </button>
 
       <div className="flex items-start gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+        <span
+          className={cn(
+            "flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary",
+            isInitialNode && "bg-primary/15 ring-1 ring-primary/25"
+          )}
+        >
           <Icon className="size-5" />
         </span>
         <span className="min-w-0 flex-1">

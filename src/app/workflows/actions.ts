@@ -29,6 +29,8 @@ type WorkflowMutationResult =
 type WorkflowMutationRow = {
   id: string;
   name: string;
+  detail: string;
+  status: "live" | "paused" | "draft";
   owner_role: string;
   trigger: string;
   classifier_prompt: string;
@@ -64,6 +66,8 @@ export async function saveWorkflow(
   const supabase = await createClient();
   const values = {
     name: parsed.data.name,
+    detail: parsed.data.detail,
+    status: parsed.data.status ?? "draft",
     owner_role: parsed.data.ownerRole,
     trigger: parsed.data.trigger,
     classifier_prompt: parsed.data.classifierPrompt,
@@ -80,7 +84,7 @@ export async function saveWorkflow(
 
   const { data, error } = await query
     .select(
-      "id, name, owner_role, trigger, classifier_prompt, outcomes, created_at, updated_at"
+      "id, name, detail, status, owner_role, trigger, classifier_prompt, outcomes, created_at, updated_at"
     )
     .single();
 
@@ -93,6 +97,9 @@ export async function saveWorkflow(
   }
 
   revalidatePath("/workflows");
+  if (parsed.data.id) {
+    revalidatePath(`/workflows/${parsed.data.id}`);
+  }
 
   return {
     status: "success",
@@ -141,6 +148,7 @@ export async function deleteWorkflow(
   }
 
   revalidatePath("/workflows");
+  revalidatePath(`/workflows/${parsedId.data}`);
 
   return {
     status: "success",

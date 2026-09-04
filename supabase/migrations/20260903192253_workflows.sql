@@ -4,6 +4,8 @@ create table if not exists public.workflows (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users (id) on delete cascade,
   name text not null,
+  detail text not null default '',
+  status text not null default 'draft',
   owner_role text not null default '',
   trigger text not null default '',
   classifier_prompt text not null default '',
@@ -11,6 +13,7 @@ create table if not exists public.workflows (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint workflows_name_not_blank check (length(btrim(name)) > 0),
+  constraint workflows_status_valid check (status in ('live', 'paused', 'draft')),
   constraint workflows_outcomes_is_array check (jsonb_typeof(outcomes) = 'array')
 );
 

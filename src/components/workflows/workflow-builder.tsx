@@ -5,9 +5,10 @@ import {
   Archive,
   ArrowDown,
   ArrowRight,
-  Bot,
   CheckCircle2,
+  Filter,
   Forward,
+  GitBranch,
   Inbox,
   Loader2,
   MailCheck,
@@ -20,8 +21,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { deleteWorkflow, saveWorkflow } from "@/app/workflows/actions";
-import { useConfirmDialog } from "@/components/use-confirm-dialog";
+import { saveWorkflow } from "@/app/workflows/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,11 +48,11 @@ import { cn } from "@/lib/utils";
 import {
   actionLabels,
   createWorkflowAction,
-  type SavedWorkflow,
   type WorkflowAction,
   type WorkflowActionType,
   type WorkflowDraft,
   type WorkflowOutcome,
+  type WorkflowStatus,
 } from "@/lib/workflow-data";
 
 const actionIcons = {
@@ -76,8 +76,10 @@ type SelectedModule =
 
 type WorkflowBuilderProps = {
   initialDraft: WorkflowDraft;
-  initialWorkflows: SavedWorkflow[];
-  newWorkflowRequest?: number;
+  workflowId?: string;
+  status?: WorkflowStatus;
+  /** "new" starts from a blank draft and asks for a name before saving. */
+  mode?: "edit" | "new";
 };
 
 type WorkflowResult =
@@ -90,62 +92,25 @@ type WorkflowResult =
 
 export function WorkflowBuilder({
   initialDraft,
-  initialWorkflows,
-  newWorkflowRequest = 0,
+  workflowId,
+  status = "draft",
+  mode = "edit",
 }: WorkflowBuilderProps) {
   const router = useRouter();
-  const { confirm, ConfirmDialog } = useConfirmDialog();
   const [isPending, startTransition] = React.useTransition();
-  const [workflows, setWorkflows] = React.useState(initialWorkflows);
-  const [activeWorkflowId, setActiveWorkflowId] = React.useState<string | null>(
-    initialWorkflows[0]?.id ?? null
-  );
-  const [workflowName, setWorkflowName] = React.useState(
-    initialWorkflows[0]?.name ?? initialDraft.name
-  );
-  const [ownerRole, setOwnerRole] = React.useState(
-    initialWorkflows[0]?.ownerRole ?? initialDraft.ownerRole
-  );
-  const [trigger, setTrigger] = React.useState(
-    initialWorkflows[0]?.trigger ?? initialDraft.trigger
-  );
+  const [workflowName, setWorkflowName] = React.useState(initialDraft.name);
+  const [detail, setDetail] = React.useState(initialDraft.detail);
+  const [ownerRole, setOwnerRole] = React.useState(initialDraft.ownerRole);
+  const [trigger, setTrigger] = React.useState(initialDraft.trigger);
   const [classifierPrompt, setClassifierPrompt] = React.useState(
-    initialWorkflows[0]?.classifierPrompt ?? initialDraft.classifierPrompt
+    initialDraft.classifierPrompt
   );
-  const [outcomes, setOutcomes] = React.useState(
-    initialWorkflows[0]?.outcomes ?? initialDraft.outcomes
-  );
+  const [outcomes, setOutcomes] = React.useState(initialDraft.outcomes);
   const [selectedModule, setSelectedModule] = React.useState<SelectedModule>({
     type: "workflow",
   });
   const [lastSavedAt, setLastSavedAt] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<WorkflowResult>(null);
-  const lastNewWorkflowRequestRef = React.useRef(newWorkflowRequest);
-
-  const loadWorkflow = React.useCallback((workflow: WorkflowDraft) => {
-    setWorkflowName(workflow.name);
-    setOwnerRole(workflow.ownerRole);
-    setTrigger(workflow.trigger);
-    setClassifierPrompt(workflow.classifierPrompt);
-    setOutcomes(workflow.outcomes);
-    setSelectedModule({ type: "workflow" });
-    setResult(null);
-  }, []);
-
-  const createNewWorkflow = React.useCallback(() => {
-    setActiveWorkflowId(null);
-    loadWorkflow(initialDraft);
-    setLastSavedAt(null);
-  }, [initialDraft, loadWorkflow]);
-
-  React.useEffect(() => {
-    if (newWorkflowRequest === lastNewWorkflowRequestRef.current) {
-      return;
-    }
-
-    lastNewWorkflowRequestRef.current = newWorkflowRequest;
-    createNewWorkflow();
-  }, [createNewWorkflow, newWorkflowRequest]);
 
   const selectedOutcome =
     "outcomeId" in selectedModule
@@ -171,6 +136,11 @@ export function WorkflowBuilder({
       ),
     [outcomes]
   );
+
+  const basicsReady = Boolean(workflowName.trim()) && Boolean(detail.trim());
+  const actionsReady =
+    outcomes.length > 0 &&
+    outcomes.every((outcome) => outcome.actions.every(actionIsReady));
 
   function updateOutcome(
     id: string,
@@ -235,6 +205,7 @@ export function WorkflowBuilder({
   function currentDraft(): WorkflowDraft {
     return {
       name: workflowName,
+      detail,
       ownerRole,
       trigger,
       classifierPrompt,
@@ -246,7 +217,8 @@ export function WorkflowBuilder({
     startTransition(() => {
       void (async () => {
         const response = await saveWorkflow({
-          id: activeWorkflowId ?? undefined,
+          id: workflowId,
+          status,
           ...currentDraft(),
         });
 
@@ -255,63 +227,13 @@ export function WorkflowBuilder({
         if (response.status === "success" && response.workflow) {
           const savedWorkflow = response.workflow;
 
-          setActiveWorkflowId(savedWorkflow.id);
           setLastSavedAt(formatWorkflowTimestamp(savedWorkflow.updatedAt));
-          setWorkflows((current) => {
-            const withoutSaved = current.filter(
-              (workflow) => workflow.id !== savedWorkflow.id
-            );
 
-            return [savedWorkflow, ...withoutSaved];
-          });
-          router.refresh();
-        }
-      })();
-    });
-  }
-
-  async function requestDeleteWorkflow() {
-    if (!activeWorkflowId) {
-      createNewWorkflow();
-      return;
-    }
-
-    const confirmed = await confirm({
-      title: "Delete workflow?",
-      description:
-        "This removes the workflow from the database. You cannot undo this.",
-      confirmLabel: "Delete workflow",
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    const workflowId = activeWorkflowId;
-
-    startTransition(() => {
-      void (async () => {
-        const response = await deleteWorkflow(workflowId);
-
-        setResult(response);
-
-        if (response.status === "success") {
-          const remaining = workflows.filter(
-            (workflow) => workflow.id !== workflowId
-          );
-          const nextWorkflow = remaining[0];
-
-          setWorkflows(remaining);
-
-          if (nextWorkflow) {
-            setActiveWorkflowId(nextWorkflow.id);
-            loadWorkflow(nextWorkflow);
-            setLastSavedAt(formatWorkflowTimestamp(nextWorkflow.updatedAt));
+          if (!workflowId) {
+            router.replace(`/workflows/${savedWorkflow.id}`);
           } else {
-            createNewWorkflow();
+            router.refresh();
           }
-
-          router.refresh();
         }
       })();
     });
@@ -350,36 +272,56 @@ export function WorkflowBuilder({
             </CardAction>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center">
+            <div className="mx-auto flex w-full max-w-2xl flex-col items-center">
               <FlowModuleButton
                 title="Email arrives"
                 detail={trigger}
                 icon={Inbox}
                 selected={selectedModule.type === "trigger"}
                 onClick={() => setSelectedModule({ type: "trigger" })}
+                className="max-w-md"
               />
-              <ArrowRight className="mx-auto hidden size-5 text-muted-foreground lg:block" />
+              <FlowConnector label="new email" />
               <FlowModuleButton
-                title="Classify with AI"
+                title="Filter incoming email"
                 detail={`${outcomes.length} outcomes, ${exampleCount} examples`}
-                icon={Bot}
+                icon={Filter}
                 selected={selectedModule.type === "classifier"}
                 onClick={() => setSelectedModule({ type: "classifier" })}
+                className="max-w-md"
               />
             </div>
 
             <div className="flex justify-center">
-              <ArrowDown className="size-5 text-muted-foreground" />
+              <BranchSplit />
             </div>
 
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <div className="font-medium">Classification branches</div>
+                <div className="font-medium">Filter branches</div>
                 <Button type="button" variant="outline" onClick={addOutcome}>
                   <Plus className="size-4" />
                   Add branch
                 </Button>
               </div>
+
+              {outcomes.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 rounded-md border border-dashed px-6 py-10 text-center">
+                  <GitBranch className="size-5 text-muted-foreground" />
+                  <div className="space-y-1">
+                    <p className="font-medium">No branches yet</p>
+                    <p className="max-w-sm text-sm text-muted-foreground">
+                      A branch is one thing the filter can decide an email is.
+                      Add one, describe the mail it should catch, then choose
+                      what happens to it.
+                    </p>
+                  </div>
+                  <Button type="button" onClick={addOutcome}>
+                    <Plus className="size-4" />
+                    Add first branch
+                  </Button>
+                </div>
+              ) : null}
 
               <div className="grid gap-3">
                 {outcomes.map((outcome) => (
@@ -412,18 +354,14 @@ export function WorkflowBuilder({
           <CardHeader>
             <CardTitle>Ready Check</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 text-sm md:grid-cols-3">
+          <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <ReadinessRow label="Basics" ready={basicsReady} />
             <ReadinessRow label="Trigger" ready={Boolean(trigger.trim())} />
             <ReadinessRow
               label="Classifier"
               ready={Boolean(classifierPrompt.trim()) && exampleCount > 0}
             />
-            <ReadinessRow
-              label="Actions"
-              ready={outcomes.every((outcome) =>
-                outcome.actions.every(actionIsReady)
-              )}
-            />
+            <ReadinessRow label="Actions" ready={actionsReady} />
           </CardContent>
         </Card>
       </div>
@@ -453,8 +391,10 @@ export function WorkflowBuilder({
             {selectedModule.type === "workflow" ? (
               <WorkflowSettings
                 workflowName={workflowName}
+                detail={detail}
                 ownerRole={ownerRole}
                 onWorkflowNameChange={setWorkflowName}
+                onDetailChange={setDetail}
                 onOwnerRoleChange={setOwnerRole}
               />
             ) : null}
@@ -493,6 +433,7 @@ export function WorkflowBuilder({
             <Button
               type="button"
               className="w-full"
+<<<<<<< HEAD
               onClick={saveDraft}
               disabled={isPending}
             >
@@ -502,8 +443,22 @@ export function WorkflowBuilder({
                 <Save className="size-4" />
               )}
               {activeWorkflowId ? "Save changes" : "Save workflow"}
+=======
+              disabled={!basicsReady}
+              onClick={saveDraft}
+            >
+              <Save className="size-4" />
+              {mode === "new" && !lastSavedAt
+                ? "Create workflow"
+                : "Save workflow"}
+>>>>>>> origin/main
             </Button>
-            {lastSavedAt ? (
+            {!basicsReady ? (
+              <p className="text-xs text-muted-foreground">
+                Give the workflow a name and a one-line detail in Settings
+                before saving it.
+              </p>
+            ) : lastSavedAt ? (
               <p className="text-xs text-muted-foreground">
                 Draft saved at {lastSavedAt}.
               </p>
@@ -690,13 +645,17 @@ function OutcomeBranch({
 
 function WorkflowSettings({
   workflowName,
+  detail,
   ownerRole,
   onWorkflowNameChange,
+  onDetailChange,
   onOwnerRoleChange,
 }: {
   workflowName: string;
+  detail: string;
   ownerRole: string;
   onWorkflowNameChange: (value: string) => void;
+  onDetailChange: (value: string) => void;
   onOwnerRoleChange: (value: string) => void;
 }) {
   return (
@@ -706,14 +665,30 @@ function WorkflowSettings({
         <Input
           id="workflow-name"
           value={workflowName}
+          placeholder="CEO inbox triage"
           onChange={(event) => onWorkflowNameChange(event.target.value)}
         />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="workflow-detail">Detail</Label>
+        <Textarea
+          id="workflow-detail"
+          value={detail}
+          placeholder="Routes investor, finance, and escalation mail out of the inbox before it needs a read."
+          onChange={(event) => onDetailChange(event.target.value)}
+          className="min-h-24"
+        />
+        <p className="text-xs text-muted-foreground">
+          One line describing what this workflow does. It is what the workflows
+          list shows next to the name.
+        </p>
       </div>
       <div className="space-y-2">
         <Label htmlFor="owner-role">Owner</Label>
         <Input
           id="owner-role"
           value={ownerRole}
+          placeholder="Everyone"
           onChange={(event) => onOwnerRoleChange(event.target.value)}
         />
       </div>
@@ -723,7 +698,6 @@ function WorkflowSettings({
 
 function TriggerSettings({
   trigger,
-  onTriggerChange,
 }: {
   trigger: string;
   onTriggerChange: (value: string) => void;
@@ -731,11 +705,10 @@ function TriggerSettings({
   return (
     <div className="space-y-2">
       <Label htmlFor="trigger">Trigger</Label>
-      <Input
-        id="trigger"
-        value={trigger}
-        onChange={(event) => onTriggerChange(event.target.value)}
-      />
+      <Input id="trigger" value={trigger} disabled readOnly />
+      <p className="text-xs text-muted-foreground">
+        Every workflow starts from this fixed email event.
+      </p>
     </div>
   );
 }
@@ -749,7 +722,7 @@ function ClassifierSettings({
 }) {
   return (
     <div className="space-y-2">
-      <Label htmlFor="classifier-prompt">AI grounding</Label>
+      <Label htmlFor="classifier-prompt">Filter instructions</Label>
       <Textarea
         id="classifier-prompt"
         value={classifierPrompt}
@@ -1092,12 +1065,14 @@ function FlowModuleButton({
   icon: Icon,
   selected,
   onClick,
+  className,
 }: {
   title: string;
   detail: string;
   icon: React.ComponentType<{ className?: string }>;
   selected: boolean;
   onClick: () => void;
+  className?: string;
 }) {
   return (
     <button
@@ -1105,7 +1080,8 @@ function FlowModuleButton({
       onClick={onClick}
       className={cn(
         "flex min-h-24 w-full items-start gap-3 rounded-md border bg-background p-4 text-left transition hover:bg-muted/60",
-        selected && "border-primary bg-primary/10"
+        selected && "border-primary bg-primary/10",
+        className
       )}
     >
       <Icon className="mt-0.5 size-5 shrink-0 text-primary" />
@@ -1116,6 +1092,30 @@ function FlowModuleButton({
         </span>
       </span>
     </button>
+  );
+}
+
+function FlowConnector({ label }: { label: string }) {
+  return (
+    <div className="flex h-16 flex-col items-center justify-center">
+      <div className="h-8 w-px bg-border" />
+      <span className="rounded-md border bg-background px-2 py-1 text-xs text-muted-foreground">
+        {label}
+      </span>
+      <div className="h-8 w-px bg-border" />
+    </div>
+  );
+}
+
+function BranchSplit() {
+  return (
+    <div className="flex h-14 flex-col items-center justify-center">
+      <div className="h-5 w-px bg-border" />
+      <span className="flex size-8 items-center justify-center rounded-md border bg-background text-primary">
+        <GitBranch className="size-4" />
+      </span>
+      <ArrowDown className="mt-1 size-4 text-muted-foreground" />
+    </div>
   );
 }
 
@@ -1157,7 +1157,7 @@ function moduleLabel(module: SelectedModule) {
   }
 
   if (module.type === "classifier") {
-    return "Classifier";
+    return "Filter";
   }
 
   if (module.type === "outcome") {

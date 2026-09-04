@@ -34,6 +34,7 @@ export const workflowOutcomeSchema = z.object({
 
 export const workflowDraftSchema = z.object({
   name: z.string().trim().min(1, "Name is required."),
+  detail: z.string(),
   ownerRole: z.string(),
   trigger: z.string(),
   classifierPrompt: z.string(),
@@ -42,6 +43,7 @@ export const workflowDraftSchema = z.object({
 
 export const saveWorkflowInputSchema = workflowDraftSchema.extend({
   id: workflowIdSchema.optional(),
+  status: z.enum(["live", "paused", "draft"]).optional(),
 });
 
 export type SaveWorkflowInput = z.infer<typeof saveWorkflowInputSchema>;

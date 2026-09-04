@@ -174,6 +174,9 @@ export function WorkflowBuilder({
   const [isPending, startTransition] = React.useTransition();
   const canvasRef = React.useRef<HTMLDivElement>(null);
   const dragState = React.useRef<DragState | null>(null);
+  // Edges are redrawn straight on the DOM while a node is dragged, so they
+  // track the node frame by frame instead of waiting for the drag to end.
+  const edgePathRefs = React.useRef(new Map<string, SVGPathElement>());
   const { confirm, ConfirmDialog } = useConfirmDialog();
   const inspectorRef = React.useRef<HTMLDivElement | null>(null);
   const [boardSize, setBoardSize] = React.useState({ width: 0, height: 0 });
@@ -185,6 +188,17 @@ export function WorkflowBuilder({
     useMeasuredHeight(defaultConnectMenuHeight);
   // The inspector is also moved directly during a node drag, so it keeps a ref
   // alongside the measurement.
+  const registerEdgePath = React.useCallback(
+    (key: string, element: SVGPathElement | null) => {
+      if (element) {
+        edgePathRefs.current.set(key, element);
+        return;
+      }
+
+      edgePathRefs.current.delete(key);
+    },
+    []
+  );
   const inspectorNodeRef = React.useCallback(
     (node: HTMLDivElement) => {
       inspectorRef.current = node;
@@ -900,9 +914,39 @@ export function WorkflowBuilder({
         drag.element.style.transform = canvasPositionTransform(
           drag.nextPosition
         );
+        syncEdgesToPosition(drag.nodeId, drag.nextPosition);
         syncInspectorToPosition(drag.nodeId, drag.nextPosition);
       });
     }
+  }
+
+  /**
+   * Redraws the edges that touch the dragged node. The node itself is moved
+   * on the DOM during a drag, so the paths are too — committing every frame to
+   * React state instead would re-render the whole board on each pointer move.
+   */
+  function syncEdgesToPosition(nodeId: string, position: CanvasNodePosition) {
+    canvasEdges.forEach((edge) => {
+      if (edge.from !== nodeId && edge.to !== nodeId) {
+        return;
+      }
+
+      const path = edgePathRefs.current.get(edgeKey(edge));
+      const fromNode = canvasNodeMap.get(edge.from);
+      const toNode = canvasNodeMap.get(edge.to);
+
+      if (!path || !fromNode || !toNode) {
+        return;
+      }
+
+      path.setAttribute(
+        "d",
+        edgePathDefinition(
+          edge.from === nodeId ? { ...fromNode, position } : fromNode,
+          edge.to === nodeId ? { ...toNode, position } : toNode
+        )
+      );
+    });
   }
 
   /** Keeps the floating inspector glued to its node while the node is dragged. */
@@ -936,6 +980,7 @@ export function WorkflowBuilder({
         drag.element.style.transform = canvasPositionTransform(
           drag.nextPosition
         );
+        syncEdgesToPosition(drag.nodeId, drag.nextPosition);
         syncInspectorToPosition(drag.nodeId, drag.nextPosition);
       }
 
@@ -1066,7 +1111,11 @@ export function WorkflowBuilder({
             }}
             onPointerDown={handleCanvasPointerDown}
           >
-            <FlowEdges edges={canvasEdges} nodes={canvasNodeMap} />
+            <FlowEdges
+              edges={canvasEdges}
+              nodes={canvasNodeMap}
+              registerPath={registerEdgePath}
+            />
             {canvasNodes.map((node) => (
               <CanvasNode
                 key={node.id}
@@ -1650,9 +1699,12 @@ function CanvasNode({
 function FlowEdges({
   edges,
   nodes,
+  registerPath,
 }: {
   edges: CanvasEdge[];
   nodes: Map<string, FlowCanvasNode>;
+  /** Hands each path to the board so a node drag can redraw it directly. */
+  registerPath: (key: string, element: SVGPathElement | null) => void;
 }) {
   return (
     <svg
@@ -1682,22 +1734,17 @@ function FlowEdges({
           return null;
         }
 
-        const from = {
-          x: fromNode.position.x + nodeWidth,
-          y: fromNode.position.y + nodeHeights[fromNode.kind] / 2,
-        };
-        const to = {
-          x: toNode.position.x,
-          y: toNode.position.y + nodeHeights[toNode.kind] / 2,
-        };
-        const bend = Math.max(72, Math.abs(to.x - from.x) * 0.42);
+        const key = edgeKey(edge);
 
         return (
           <path
-            key={`${edge.from}-${edge.to}`}
-            d={`M ${from.x} ${from.y} C ${from.x + bend} ${from.y}, ${
-              to.x - bend
-            } ${to.y}, ${to.x} ${to.y}`}
+            key={key}
+            ref={(element) => {
+              registerPath(key, element);
+
+              return () => registerPath(key, null);
+            }}
+            d={edgePathDefinition(fromNode, toNode)}
             className="fill-none stroke-current stroke-[2]"
             markerEnd="url(#workflow-builder-arrow)"
           />
@@ -1705,6 +1752,34 @@ function FlowEdges({
       })}
     </svg>
   );
+}
+
+function edgeKey(edge: CanvasEdge) {
+  return `${edge.from}-${edge.to}`;
+}
+
+/**
+ * The curve between two nodes, from the right edge of one to the left edge of
+ * the next. Shared so a dragged node's edges are redrawn exactly as React
+ * would draw them once the drag is committed.
+ */
+function edgePathDefinition(
+  fromNode: { position: CanvasNodePosition; kind: CanvasNodeKind },
+  toNode: { position: CanvasNodePosition; kind: CanvasNodeKind }
+) {
+  const from = {
+    x: fromNode.position.x + nodeWidth,
+    y: fromNode.position.y + nodeHeights[fromNode.kind] / 2,
+  };
+  const to = {
+    x: toNode.position.x,
+    y: toNode.position.y + nodeHeights[toNode.kind] / 2,
+  };
+  const bend = Math.max(72, Math.abs(to.x - from.x) * 0.42);
+
+  return `M ${from.x} ${from.y} C ${from.x + bend} ${from.y}, ${
+    to.x - bend
+  } ${to.y}, ${to.x} ${to.y}`;
 }
 
 function ActionSwitch({

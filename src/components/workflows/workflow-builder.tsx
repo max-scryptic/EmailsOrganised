@@ -937,6 +937,9 @@ export function WorkflowBuilder({
       }
 
       drag.moved = true;
+      // Set on the DOM rather than in React state: the node is already moved
+      // this way during a drag, and a state flip would re-render the board.
+      drag.element.dataset.dragging = "true";
     }
 
     drag.nextPosition = clampCanvasPosition(
@@ -1023,6 +1026,8 @@ export function WorkflowBuilder({
         syncInspectorToPosition(drag.nodeId, drag.nextPosition);
       }
 
+      // React never set this attribute, so it will not clear it on re-render.
+      delete drag.element.dataset.dragging;
       setNodePositions((current) => ({
         ...current,
         [drag.nodeId]: drag.nextPosition,
@@ -1640,13 +1645,22 @@ function CanvasNode({
       }}
       onPointerDown={onPointerDown}
       className={cn(
-        "absolute rounded-md border bg-card p-3 text-card-foreground shadow-sm transition-colors",
+        "absolute rounded-md border bg-card p-3 text-card-foreground shadow-sm",
+        // Not `transition-all`: the position is a transform written straight to
+        // the DOM every frame of a drag, and easing that would lag the pointer.
+        "transition-[background-color,border-color,box-shadow,color]",
         "cursor-grab select-none active:cursor-grabbing",
+        // The trigger's idle glow animates box-shadow, which would outrank the
+        // drag ring below — so it steps aside while the node is being dragged.
         isInitialNode &&
-          "border-primary/45 motion-safe:animate-brand-glow-pulse motion-reduce:shadow-[0_0_0_1px_var(--brand-glow),0_0_22px_-6px_var(--brand-glow)]",
+          "border-primary/45 not-data-[dragging=true]:motion-safe:animate-brand-glow-pulse not-data-[dragging=true]:motion-reduce:shadow-[0_0_0_1px_var(--brand-glow),0_0_22px_-6px_var(--brand-glow)]",
         selected && "border-primary shadow-md ring-2 ring-primary/20",
         connecting && "border-primary bg-primary/10",
-        canReceiveConnection && "ring-2 ring-muted-foreground/20"
+        canReceiveConnection && "ring-2 ring-muted-foreground/20",
+        // Set on the DOM by the drag handlers, not by React. A dragged node
+        // lifts off the board: brand ring, deeper shadow, and above its
+        // neighbours so it never slides underneath one.
+        "data-[dragging=true]:z-20 data-[dragging=true]:border-primary data-[dragging=true]:bg-primary/5 data-[dragging=true]:shadow-lg data-[dragging=true]:ring-2 data-[dragging=true]:ring-primary/35"
       )}
       style={{
         width: nodeWidth,

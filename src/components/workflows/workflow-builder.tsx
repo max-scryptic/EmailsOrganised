@@ -1051,7 +1051,7 @@ function createCanvasNodes({
       title: "Classify with AI",
       detail: classifierPrompt || "AI classification prompt",
       meta: `${outcomes.length} branches, ${exampleCount} examples`,
-      icon: Bot,
+      icon: Filter,
       position: nodePositions.classifier ?? { x: 382, y: 390 },
       ready: Boolean(classifierPrompt.trim()) && exampleCount > 0,
     },

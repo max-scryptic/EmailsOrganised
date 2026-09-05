@@ -2112,10 +2112,11 @@ function CanvasNode({
         // The trigger's idle glow animates box-shadow, which would outrank the
         // drag ring below — so it steps aside while the node is being dragged.
         // The halo also steps aside for a test run, where the lit node is
-        // whichever step the run is on.
+        // whichever step the run is on. The glow alone marks the node out; it
+        // keeps the same neutral border as its neighbours.
         isInitialNode &&
           !debugState &&
-          "border-primary/45 not-data-[dragging=true]:motion-safe:animate-brand-glow-pulse not-data-[dragging=true]:motion-reduce:shadow-[0_0_0_1px_var(--brand-glow),0_0_22px_-6px_var(--brand-glow)]",
+          "not-data-[dragging=true]:motion-safe:animate-brand-glow-pulse not-data-[dragging=true]:motion-reduce:shadow-[0_0_0_1px_var(--brand-glow),0_0_22px_-6px_var(--brand-glow)]",
         selected && "border-primary shadow-md ring-2 ring-primary/20",
         connecting && "border-primary bg-primary/10",
         canReceiveConnection && "ring-2 ring-muted-foreground/20",

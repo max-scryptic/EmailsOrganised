@@ -112,6 +112,17 @@ const nodeBaseHeight = 60;
 const branchRowHeight = 26;
 const branchListPaddingBottom = 10;
 /**
+ * Edge geometry. A wire runs straight out of its outlet for `edgeStubLength`
+ * before it is allowed to turn, so an outlet always reads as pointing forwards;
+ * `edgeBranchLaneStep` is how far apart two branches of the same classification
+ * make their vertical step, so a fan reads as separate wires; and
+ * `edgeBacktrackLane` is the clear channel below both nodes that a wire drops
+ * into when its target sits beside or behind its source.
+ */
+const edgeStubLength = 18;
+const edgeBranchLaneStep = 10;
+const edgeBacktrackLane = 34;
+/**
  * How far the board can be scaled. The floor keeps a node's label readable;
  * the ceiling is about as close as you can get before the grid stops helping.
  */
@@ -147,9 +158,14 @@ const nodeDragThreshold = 4;
 /** Gap the auto-placed node leaves after the node it was added from. */
 const autoPlaceGap = 78;
 const autoPlaceStep = 96;
-/** Where the fixed spine sits before anyone drags it. */
+/**
+ * Where the fixed spine sits before anyone drags it. The two share a y so the
+ * trigger's outlet and the classifier's inlet are level and the wire between
+ * them is one straight run — the same alignment `branchActionPosition` gives
+ * every auto-placed action.
+ */
 const defaultTriggerPosition = { x: 96, y: 300 };
-const defaultClassifierPosition = { x: 400, y: 288 };
+const defaultClassifierPosition = { x: 400, y: 300 };
 
 type CanvasNodeKind = "trigger" | "classifier" | "action";
 
@@ -2391,12 +2407,20 @@ function edgeKey(edge: CanvasEdge) {
 }
 
 /**
- * The curve between two nodes, from the right edge of one to the left edge of
+ * The wire between two nodes, from the right edge of one to the left edge of
  * the next. Shared so a dragged node's edges are redrawn exactly as React
  * would draw them once the drag is committed.
  *
+ * Edges are orthogonal: a run out of the outlet, one vertical step, a run into
+ * the inlet. Right angles rather than a curve, because the board is a grid and
+ * a wire that only travels along it is easier to trace back to its outlet —
+ * the same reason the radius scale keeps corners cut rather than round.
+ *
  * An edge leaving a classification branch starts at that branch's row rather
  * than at the middle of the node, so the fan-out reads as one outlet per label.
+ * Each branch also turns in its own vertical lane: square wires that turned at
+ * the same x would lay their vertical runs on top of one another and a fan of
+ * three would read as one wire.
  */
 function edgePathDefinition(
   fromNode: { position: CanvasNodePosition; height: number },
@@ -2417,11 +2441,78 @@ function edgePathDefinition(
     // always half a base node down.
     y: toNode.position.y + nodeBaseHeight / 2,
   };
-  const bend = Math.max(72, Math.abs(to.x - from.x) * 0.42);
 
-  return `M ${from.x} ${from.y} C ${from.x + bend} ${from.y}, ${
-    to.x - bend
-  } ${to.y}, ${to.x} ${to.y}`;
+  const points: CanvasNodePosition[] = [from];
+
+  if (to.x - from.x >= edgeStubLength * 2) {
+    // The ordinary case: the target sits ahead of the source, so the wire turns
+    // once in the space between them and lands level with the inlet.
+    if (to.y !== from.y) {
+      const turnX = edgeTurnX(from.x, to.x, fromBranchIndex);
+
+      points.push({ x: turnX, y: from.y }, { x: turnX, y: to.y });
+    }
+  } else {
+    // The target sits beside or behind the source, so there is no room to turn
+    // between them. Leave the outlet forwards anyway, drop into a clear lane
+    // under both nodes, and come back to the inlet from the left — a wire that
+    // reversed on the spot would run back through the node it just left.
+    const laneY =
+      Math.max(
+        fromNode.position.y + fromNode.height,
+        toNode.position.y + nodeBaseHeight
+      ) + edgeBacktrackLane;
+    const exitX = from.x + edgeStubLength;
+    const approachX = to.x - edgeStubLength;
+
+    points.push(
+      { x: exitX, y: from.y },
+      { x: exitX, y: laneY },
+      { x: approachX, y: laneY },
+      { x: approachX, y: to.y }
+    );
+  }
+
+  points.push(to);
+
+  return points
+    .map(
+      (point, index) =>
+        `${index === 0 ? "M" : "L"} ${roundCoordinate(
+          point.x
+        )} ${roundCoordinate(point.y)}`
+    )
+    .join(" ");
+}
+
+/**
+ * Where a wire makes its vertical step. An ordinary wire turns halfway across
+ * the gap. A wire off a classification branch takes a lane of its own, counted
+ * back from the inlet so that a lower branch turns earlier than the one above
+ * it: the fan then nests instead of crossing, because every branch's horizontal
+ * run ends before the next branch up drops through that row. The lanes are
+ * held inside the gap, so nodes parked close together bundle rather than let a
+ * wire double back through a node.
+ */
+function edgeTurnX(fromX: number, toX: number, fromBranchIndex?: number) {
+  const midX = (fromX + toX) / 2;
+
+  if (fromBranchIndex === undefined) {
+    return midX;
+  }
+
+  return Math.min(
+    Math.max(
+      toX - edgeStubLength - fromBranchIndex * edgeBranchLaneStep,
+      fromX + edgeStubLength
+    ),
+    toX - edgeStubLength
+  );
+}
+
+/** Keeps a midpoint turn from writing a float with a tail of digits into `d`. */
+function roundCoordinate(value: number) {
+  return Math.round(value * 10) / 10;
 }
 
 function ActionSwitch({

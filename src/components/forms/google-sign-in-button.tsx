@@ -29,11 +29,23 @@ function GoogleMark({ className }: { className?: string }) {
   );
 }
 
-export function GoogleSignInButton({ label }: { label: string }) {
+export function GoogleSignInButton({
+  label,
+  disabled = false,
+}: {
+  label: string;
+  /** Set when auth is not configured, so the button agrees with the notice. */
+  disabled?: boolean;
+}) {
   const { pending } = useFormStatus();
 
   return (
-    <Button type="submit" className="w-full" size="lg" disabled={pending}>
+    <Button
+      type="submit"
+      className="w-full"
+      size="lg"
+      disabled={disabled || pending}
+    >
       {pending ? (
         <Loader2 className="size-4 animate-spin" />
       ) : (

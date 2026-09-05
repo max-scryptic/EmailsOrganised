@@ -6,6 +6,7 @@ import {
 } from "@/lib/ai/classify-email";
 import { requireUser } from "@/lib/auth/session";
 import {
+  fetchAttachmentBytes,
   fetchNewInboxMessage,
   getMailboxAddress,
   GmailRequestError,
@@ -13,21 +14,25 @@ import {
 import { getGoogleAccessToken } from "@/lib/google/token-store";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { applyVariables } from "@/lib/workflow-variables";
+import { formatBytes } from "@/lib/workflow-debug";
 import type { DebugClassification, DebugEmail } from "@/lib/workflow-debug";
 import {
+  debugAttachmentSchema,
   debugClassifySchema,
   debugWatchPollSchema,
+  type DebugAttachmentInput,
   type DebugClassifyInput,
   type DebugWatchPollInput,
 } from "@/lib/workflow-validation";
 
 /**
- * The server half of debug mode: listening to the mailbox, and asking the model
- * which branch this email takes.
+ * The server half of debug mode: listening to the mailbox, asking the model
+ * which branch this email takes, and pulling an attachment's bytes when the
+ * user asks for one.
  *
- * Nothing here writes. The mailbox actions only ever read, and stepping through
- * the workflow is done in the browser against the draft on the board, so no
- * action a workflow describes is ever performed.
+ * Nothing here writes. Every mailbox call is a read, and stepping through the
+ * workflow is done in the browser against the draft on the board, so no action
+ * a workflow describes is ever performed.
  */
 
 /** Why listening could not start, so the dialog can offer the right way out. */
@@ -154,6 +159,103 @@ export async function pollDebugWatch(
     return email ? { status: "received", email } : { status: "waiting" };
   } catch (error) {
     return requestFailed(error);
+  }
+}
+
+/**
+ * How much of an attachment is handed back to the browser.
+ *
+ * The bytes travel inside the server action's response as base64, which costs a
+ * third again on the way, and they land in a panel floating over the canvas.
+ * Anything past this is fetched by a live run on the server, where nothing has
+ * to cross to the browser to be attached to an email.
+ */
+const maxInspectableAttachmentBytes = 10 * 1024 * 1024;
+
+export type FetchDebugAttachmentResult =
+  | {
+      status: "fetched";
+      /** Standard base64, ready for a Blob in the browser. */
+      content: string;
+      /** Size of the decoded file, which is what the panel reports. */
+      size: number;
+    }
+  | { status: "error"; description: string };
+
+/**
+ * Pulls one attachment's bytes out of Gmail so a test run can show what a live
+ * run would be working with.
+ *
+ * This is still a read: `users.messages.attachments.get` hands over a copy of
+ * the file and leaves the message alone.
+ */
+export async function fetchDebugAttachment(
+  input: DebugAttachmentInput
+): Promise<FetchDebugAttachmentResult> {
+  const parsed = debugAttachmentSchema.safeParse(input);
+
+  if (!parsed.success) {
+    return {
+      status: "error",
+      description:
+        parsed.error.issues[0]?.message ??
+        "That attachment cannot be located on the message.",
+    };
+  }
+
+  if (!isSupabaseConfigured) {
+    return {
+      status: "error",
+      description:
+        "There is no connected mailbox in this environment, so there is nothing to download.",
+    };
+  }
+
+  const user = await requireUser();
+  const accessToken = await getGoogleAccessToken(user.id);
+
+  if (!accessToken) {
+    return {
+      status: "error",
+      description:
+        "We do not hold mailbox access for your Google account any more. Sign in again to reconnect.",
+    };
+  }
+
+  try {
+    const bytes = await fetchAttachmentBytes({
+      accessToken,
+      messageId: parsed.data.messageId,
+      attachmentId: parsed.data.attachmentId,
+      partId: parsed.data.partId,
+    });
+
+    if (bytes.byteLength > maxInspectableAttachmentBytes) {
+      return {
+        status: "error",
+        description: `This file is ${formatBytes(bytes.byteLength)}. Test mode shows files up to ${formatBytes(
+          maxInspectableAttachmentBytes
+        )}; a live run has no such limit.`,
+      };
+    }
+
+    return {
+      status: "fetched",
+      content: bytes.toString("base64"),
+      size: bytes.byteLength,
+    };
+  } catch (error) {
+    const status = error instanceof GmailRequestError ? error.status : null;
+
+    return {
+      status: "error",
+      description:
+        status === 401 || status === 403
+          ? "Google refused the request. Sign in again to reconnect your mailbox."
+          : status === 404
+            ? "Gmail no longer has that attachment. Listen for another email and try again."
+            : "Gmail did not hand the file over. Try again in a moment.",
+    };
   }
 }
 

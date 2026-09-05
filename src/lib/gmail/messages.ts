@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { DebugEmail } from "@/lib/workflow-debug";
+import type { DebugAttachment, DebugEmail } from "@/lib/workflow-debug";
 
 /**
  * The read side of Gmail, used by debug mode to hear an email arrive and pull
@@ -8,7 +8,8 @@ import type { DebugEmail } from "@/lib/workflow-debug";
  *
  * Reading only: nothing in this module writes to a mailbox. Access tokens come
  * from `@/lib/google/token-store`, which is the only place they are stored or
- * refreshed.
+ * refreshed. Fetching an attachment's bytes is a read like any other — it is
+ * `users.messages.attachments.get`, not a change to the message.
  */
 
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me";
@@ -30,10 +31,12 @@ const maxBodyLength = 20_000;
 type GmailHeader = { name?: string; value?: string };
 
 type GmailPart = {
+  /** Gmail's address for this part in the MIME tree, e.g. `"1.2"`. */
+  partId?: string;
   mimeType?: string;
   filename?: string;
   headers?: GmailHeader[];
-  body?: { size?: number; data?: string };
+  body?: { size?: number; data?: string; attachmentId?: string };
   parts?: GmailPart[];
 };
 
@@ -110,6 +113,76 @@ async function getMessage(accessToken: string, id: string) {
 }
 
 /**
+ * The bytes of one attachment.
+ *
+ * Gmail splits this two ways. A part large enough to be stored separately
+ * carries an `attachmentId` and its body has to be asked for by that id; a
+ * small one (a signature image, a short text file) is handed over inside the
+ * message itself, and `partId` is the only way back to it. `toDebugEmail`
+ * records both, so a caller passes whichever the attachment has.
+ */
+export async function fetchAttachmentBytes({
+  accessToken,
+  messageId,
+  attachmentId,
+  partId,
+}: {
+  accessToken: string;
+  messageId: string;
+  /** Gmail's id for the stored body, blank when the bytes came inline. */
+  attachmentId: string;
+  /** The part's address in the MIME tree, used when there is no id. */
+  partId: string;
+}): Promise<Buffer> {
+  if (attachmentId) {
+    const attachment = (await gmailFetch(
+      accessToken,
+      `/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(
+        attachmentId
+      )}`
+    )) as { size?: number; data?: string };
+
+    return Buffer.from(attachment.data ?? "", "base64url");
+  }
+
+  const message = await getMessage(accessToken, messageId);
+  const part = findPart(message.payload, partId);
+
+  if (!part?.body?.data) {
+    throw new GmailRequestError(
+      404,
+      "That attachment is no longer part of the message."
+    );
+  }
+
+  return Buffer.from(part.body.data, "base64url");
+}
+
+/** The part at `partId`, walking the MIME tree the same way bodies are found. */
+function findPart(
+  part: GmailPart | undefined,
+  partId: string
+): GmailPart | null {
+  if (!part) {
+    return null;
+  }
+
+  if (part.partId === partId) {
+    return part;
+  }
+
+  for (const child of part.parts ?? []) {
+    const found = findPart(child, partId);
+
+    if (found) {
+      return found;
+    }
+  }
+
+  return null;
+}
+
+/**
  * The newest inbox message that arrived after `sinceMs` and has not been
  * handed back already, or null while nothing new has landed.
  */
@@ -172,7 +245,7 @@ export function toDebugEmail(
     ).toISOString(),
     labels: message.labelIds ?? [],
     isUnread: (message.labelIds ?? []).includes("UNREAD"),
-    attachments: findAttachmentNames(message.payload),
+    attachments: collectAttachments(message.payload),
     mailbox,
   };
 }
@@ -225,15 +298,45 @@ function findBody(part: GmailPart | undefined, mimeType: string): string {
   return "";
 }
 
-function findAttachmentNames(part: GmailPart | undefined): string[] {
+/**
+ * Every attachment in the message, in MIME order, with what it takes to ask
+ * for its bytes later.
+ *
+ * A named part is an attachment: that is the same test the names-only version
+ * of this used, so an inline signature image is still counted — it is just
+ * marked, because the panel showing three attachments when the user sent one
+ * is a question rather than a bug.
+ */
+function collectAttachments(part: GmailPart | undefined): DebugAttachment[] {
   if (!part) {
     return [];
   }
 
-  const own = part.filename ? [part.filename] : [];
-  const nested = (part.parts ?? []).flatMap(findAttachmentNames);
+  const own: DebugAttachment[] = part.filename
+    ? [
+        {
+          attachmentId: part.body?.attachmentId ?? "",
+          partId: part.partId ?? "",
+          filename: part.filename,
+          mimeType: part.mimeType ?? "application/octet-stream",
+          size: part.body?.size ?? 0,
+          inline: isInlinePart(part),
+        },
+      ]
+    : [];
+  const nested = (part.parts ?? []).flatMap(collectAttachments);
 
   return [...own, ...nested];
+}
+
+/** A part the HTML body references rather than one hung off the message. */
+function isInlinePart(part: GmailPart) {
+  const headers = part.headers ?? [];
+
+  return (
+    header(headers, "Content-Disposition").toLowerCase().startsWith("inline") ||
+    Boolean(header(headers, "Content-ID"))
+  );
 }
 
 function decodeBase64Url(data: string) {

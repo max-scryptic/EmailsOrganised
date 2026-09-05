@@ -13,6 +13,12 @@ export type WorkflowAction = {
   note: string;
   signature: string;
   includeOriginalThread: boolean;
+  /**
+   * Whether the action takes the email's files with it. Only forwarding and
+   * drafting a reply can — tagging and archiving leave the message where its
+   * attachments already are.
+   */
+  includeAttachments: boolean;
   markHandled: boolean;
   draftInstructions: string;
   draftTone: string;
@@ -86,6 +92,9 @@ export function createWorkflowAction(
     note: "",
     signature: "",
     includeOriginalThread: true,
+    // On by default: a forward that silently drops the invoice is the bug, not
+    // the feature.
+    includeAttachments: true,
     markHandled: false,
     draftInstructions: "",
     draftTone: "Professional and concise",

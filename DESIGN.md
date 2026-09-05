@@ -414,20 +414,6 @@ editor popover, which is where they can be changed. A node missing something it
 cannot run without carries a single 14px Caution triangle at its right edge;
 what is missing is named in the node's accessible label and fixed in its panel.
 
-**A wire says whether it stops anything.** Between two nodes, the middle of the
-edge carries that wire's filter. With no rule on it, it is a 16px hairline
-circle that grows to 24px and fills with Signal Orange on hover — the connector
-handle's vocabulary, because it is the same kind of thing: an affordance, not an
-object. Once a rule is set it becomes a 20px chip on the Surface fill — a 12px
-funnel glyph, then the filter's name in 12px medium, capped at 112px and
-truncated — because a route that stops some mail and not other mail cannot be
-read from the wire alone. Chips draw above the nodes so a wire dragged short
-still shows what it is holding back, and auto-placed nodes leave a 132px gap so
-a chip sits on the wire rather than across either end of it. During a test the
-chip takes the run's state: Signal Orange ring while it is the step in view,
-an Affirm border once the email is through, and a Danger border with a strike
-glyph on the one that stopped it.
-
 **The classification node is the one node that grows.** Below its title it
 carries a 26px row per output label — the label name in 12px muted type, right
 aligned, with that branch's connector dot on the node's edge — and 10px of
@@ -435,6 +421,30 @@ padding under the last one. Edges leave from those dots rather than from the
 middle of the node, so the fan-out reads as one outlet per answer. With no
 outputs the node still shows one row, reading "No outputs yet", so an unfinished
 classification never looks finished.
+
+**Edges are square, not curved.** A 2px wire runs 18px straight out of its
+outlet, turns at a right angle, and runs straight into the inlet — never a
+bezier. The board is a grid and the corners of everything on it are cut, so a
+wire that only travels along the grid's axes is the one that belongs on it, and
+a fan of them stays traceable back to the outlet each left. A target sitting
+beside or behind its source gets the same treatment: the wire leaves forwards,
+drops into a 34px lane below both nodes, and comes back to the inlet from the
+left rather than reversing through the node it just left.
+
+**A wire says whether it stops anything.** Half way along its run — measured
+along the wire itself, so a turning wire's marker still sits on it — an edge
+carries that wire's filter. With no rule on it, it is a 16px hairline circle
+that grows to 24px and fills with Signal Orange on hover: the connector
+handle's vocabulary, because it is the same kind of thing — an affordance, not
+an object. Once a rule is set it becomes a 20px chip on the Surface fill, a
+12px funnel glyph then the filter's name in 12px medium, capped at 112px and
+truncated, because a route that stops some mail and not other mail cannot be
+read from the wire alone. Chips draw above the nodes so a wire dragged short
+still shows what it is holding back, and auto-placed nodes leave a 132px gap so
+a chip sits along the wire rather than across either end of it. During a test
+the chip takes the run's state: a Signal Orange ring while it is the step in
+view, an Affirm border once the email is through, and a Danger border with a
+strike glyph on the one that stopped it.
 
 ## Do's and Don'ts
 

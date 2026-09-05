@@ -388,6 +388,30 @@ export function usedVariableTokens(value: string) {
 }
 
 /**
+ * Fills `{{tokens}}` from the values earlier steps produced. An unknown token
+ * resolves to nothing and is reported, because a field quietly rendering the
+ * literal `{{draft.body}}` is the exact bug a test run exists to surface.
+ *
+ * This is what a *run* does with a field; `applyVariables` below is what the
+ * builder does with one, where a token nothing filled is left as written.
+ */
+export function resolveTemplate(template: string, values: Map<string, string>) {
+  const missing: string[] = [];
+  const value = template.replace(variablePattern, (_full, token: string) => {
+    const resolved = values.get(token);
+
+    if (resolved === undefined) {
+      missing.push(token);
+      return "";
+    }
+
+    return resolved;
+  });
+
+  return { value, missing };
+}
+
+/**
  * Swaps every `{{token}}` this run has a value for. A token with no value is
  * left as it was written rather than blanked, so a prompt sent to the model
  * still reads as the user wrote it instead of quietly losing a clause.

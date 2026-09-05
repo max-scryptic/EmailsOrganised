@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   ArrowLeft,
   ArrowRight,
+  Ban,
   CircleCheck,
   CircleSlash,
   Download,
@@ -34,6 +35,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import {
+  evaluateFilter,
+  filterOperators,
+  type FilterConditionResult,
+  type FilterResult,
+} from "@/lib/workflow-filters";
 import {
   buildDebugRun,
   emailVariableValues,
@@ -242,10 +249,18 @@ export function useWorkflowDebug(draft: WorkflowDraft) {
       const labels = usableClassificationLabels(current.labels).map((label) =>
         label.name.trim()
       );
+      // The filter on the wire into the classification decides whether the
+      // model is asked at all. Evaluating it here rather than inside the run is
+      // what makes a test spend nothing on mail that wire would have stopped —
+      // which is most of the reason to put a filter there.
+      const reachesClassifier = evaluateFilter(
+        current.classifierFilter,
+        new Map(Object.entries(emailVariableValues(emailToClassify)))
+      ).passed;
       // Nothing to ask is not a failure — the classification is simply not
       // finished being built, and the run says so on its own step.
       const result =
-        current.classifierPrompt.trim() && labels.length > 0
+        reachesClassifier && current.classifierPrompt.trim() && labels.length > 0
           ? await classifyDebugEmail({
               prompt: current.classifierPrompt,
               labels,
@@ -671,7 +686,9 @@ export function WorkflowDebugStepPanel({
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
         <div className="flex items-start gap-2">
-          {step.simulated ? (
+          {step.filter && !step.filter.passed ? (
+            <Ban className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+          ) : step.simulated ? (
             <CircleSlash className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
           ) : (
             <CircleCheck className="mt-0.5 size-3.5 shrink-0 text-success" />
@@ -684,6 +701,8 @@ export function WorkflowDebugStepPanel({
             Simulated. Your mailbox is not touched by a test run.
           </p>
         ) : null}
+
+        {step.filter ? <FilterChecks result={step.filter} /> : null}
 
         {step.branches ? (
           <BranchPicker
@@ -810,6 +829,81 @@ function OutputRow({ output }: { output: DebugValue }) {
       </p>
     </div>
   );
+}
+
+/**
+ * Every condition the wire's filter checked, and what each one came out as.
+ *
+ * A filter is written against values that only exist mid-run, so the useful
+ * thing to show is not the rule but the reading: the left side as it resolved,
+ * the comparison, and whether it held.
+ */
+function FilterChecks({ result }: { result: FilterResult }) {
+  return (
+    <DebugSection
+      title={
+        result.conditions.length === 1
+          ? "Condition"
+          : result.match === "all"
+            ? "Conditions — all have to hold"
+            : "Conditions — any one has to hold"
+      }
+    >
+      {result.conditions.map((condition) => (
+        <div
+          key={condition.id}
+          className={cn(
+            "rounded-md border px-2 py-1.5",
+            condition.passed ? "border-success/40" : "border-destructive/40"
+          )}
+        >
+          <div className="flex items-start gap-2">
+            {condition.passed ? (
+              <CircleCheck className="mt-0.5 size-3.5 shrink-0 text-success" />
+            ) : (
+              <Ban className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+            )}
+            <p className="min-w-0 flex-1 break-words font-mono text-xs">
+              {conditionReading(condition)}
+            </p>
+          </div>
+          {condition.left.template !== condition.left.value ? (
+            <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+              from {condition.left.template}
+            </p>
+          ) : null}
+          {condition.problem ? (
+            <p className="mt-1 text-xs text-destructive">{condition.problem}</p>
+          ) : null}
+          {condition.left.missing.length > 0 ||
+          condition.right.missing.length > 0 ? (
+            <p className="mt-1 text-xs text-destructive">
+              {[...condition.left.missing, ...condition.right.missing]
+                .map((token) => `{{${token}}}`)
+                .join(", ")}{" "}
+              had no value at this point in the run.
+            </p>
+          ) : null}
+        </div>
+      ))}
+      {result.skippedCount > 0 ? (
+        <p className="rounded-md border border-dashed px-2 py-1.5 text-xs text-muted-foreground">
+          {result.skippedCount} unfinished condition
+          {result.skippedCount === 1 ? " was" : "s were"} skipped.
+        </p>
+      ) : null}
+    </DebugSection>
+  );
+}
+
+/** One condition as the run read it: resolved value, comparison, and value. */
+function conditionReading(condition: FilterConditionResult) {
+  const spec = filterOperators[condition.operator];
+  const left = condition.left.value.trim() || "(empty)";
+
+  return spec.takesValue
+    ? `${left} ${spec.label} ${condition.right.value.trim() || "(empty)"}`
+    : `${left} ${spec.label}`;
 }
 
 /**

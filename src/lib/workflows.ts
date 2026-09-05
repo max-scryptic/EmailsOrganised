@@ -21,6 +21,12 @@ type WorkflowRow = {
   trigger: string;
   classifier_prompt: string;
   /**
+   * The filter on the wire from the trigger to the classification. Every other
+   * wire's filter is stored on the action it feeds, so it rides inside
+   * `outcomes` — this is the one wire whose downstream node is a column.
+   */
+  classifier_filter: unknown;
+  /**
    * The classification node's output labels. The column is still called
    * `outcomes` from when a classification was a node of its own — the shape it
    * holds is `ClassificationLabel[]`, and the mapping happens here and in
@@ -41,7 +47,7 @@ export async function listWorkflows(): Promise<SavedWorkflow[]> {
   const { data, error } = await supabase
     .from("workflows")
     .select(
-      "id, name, status, owner_role, trigger, classifier_prompt, outcomes, created_at, updated_at"
+      "id, name, status, owner_role, trigger, classifier_prompt, classifier_filter, outcomes, created_at, updated_at"
     )
     .eq("user_id", user.id)
     .order("updated_at", { ascending: false });
@@ -59,6 +65,7 @@ export function workflowFromRow(row: WorkflowRow): SavedWorkflow {
     ownerRole: row.owner_role,
     trigger: row.trigger,
     classifierPrompt: row.classifier_prompt,
+    classifierFilter: row.classifier_filter,
     // Rows written before labels moved into the classification node also carry
     // `description` and `examples` per entry; the schema drops them.
     labels: row.outcomes,
@@ -91,7 +98,7 @@ export async function getWorkflow(id: string): Promise<SavedWorkflow | null> {
   const { data, error } = await supabase
     .from("workflows")
     .select(
-      "id, name, status, owner_role, trigger, classifier_prompt, outcomes, created_at, updated_at"
+      "id, name, status, owner_role, trigger, classifier_prompt, classifier_filter, outcomes, created_at, updated_at"
     )
     .eq("id", parsedId.data)
     .eq("user_id", user.id)

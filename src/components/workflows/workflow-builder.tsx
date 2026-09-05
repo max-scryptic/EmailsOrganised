@@ -3,10 +3,13 @@
 import * as React from "react";
 import {
   Archive,
+  Ban,
   CheckCircle2,
   ChevronRight,
   FlaskConical,
   Forward,
+  Funnel,
+  FunnelPlus,
   Grip,
   Inbox,
   Link2,
@@ -54,7 +57,9 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -74,6 +79,22 @@ import {
   type WorkflowDraft,
   type WorkflowStatus,
 } from "@/lib/workflow-data";
+import { filterStepNodeId } from "@/lib/workflow-debug";
+import {
+  conditionSummary,
+  createFilterCondition,
+  createWorkflowFilter,
+  filterLabel,
+  filterNeeds,
+  filterOperatorGroups,
+  filterOperators,
+  isFilterActive,
+  isFilterSet,
+  usableFilterConditions,
+  type FilterCondition,
+  type FilterOperator,
+  type WorkflowFilter,
+} from "@/lib/workflow-filters";
 import {
   chainNodeOutputTitle,
   chainOutputFields,
@@ -144,12 +165,16 @@ const defaultConnectMenuHeight = 340;
  * node; above it the node moves and the inspector stays closed.
  */
 const nodeDragThreshold = 4;
-/** Gap the auto-placed node leaves after the node it was added from. */
-const autoPlaceGap = 78;
+/**
+ * Gap the auto-placed node leaves after the node it was added from. It is wide
+ * enough for the wire between them to carry a filter chip without that chip
+ * lying across either node.
+ */
+const autoPlaceGap = 132;
 const autoPlaceStep = 96;
-/** Where the fixed spine sits before anyone drags it. */
+/** Where the fixed spine sits before anyone drags it, on the same gap. */
 const defaultTriggerPosition = { x: 96, y: 300 };
-const defaultClassifierPosition = { x: 400, y: 288 };
+const defaultClassifierPosition = { x: 480, y: 288 };
 
 type CanvasNodeKind = "trigger" | "classifier" | "action";
 
@@ -165,6 +190,12 @@ type CanvasBranch = {
  * ones still to come, and the ones this email never reaches.
  */
 type DebugNodeState = "listening" | "active" | "passed" | "ahead" | "muted";
+
+/**
+ * How a wire's filter reads during a test. It borrows the node states and adds
+ * the one only a wire has: the email got this far and went no further.
+ */
+type DebugWireState = "active" | "passed" | "blocked" | "ahead" | "muted";
 
 type CanvasNodePosition = {
   x: number;
@@ -203,11 +234,23 @@ type FlowCanvasNode = {
   actionType?: WorkflowActionType;
 };
 
+/**
+ * Which wire a filter sits on, named by the node the wire feeds. Every node has
+ * exactly one node before it, so naming the downstream end names the wire — and
+ * it is also where the filter is stored on the draft.
+ */
+type FilterTarget =
+  | { type: "classifier" }
+  | { type: "action"; labelId: string; actionId: string };
+
 type CanvasEdge = {
   from: string;
   to: string;
   /** Set when the edge leaves a classification branch rather than a node edge. */
   fromBranchIndex?: number;
+  /** Where this wire's filter is stored, and the filter itself. */
+  target: FilterTarget;
+  filter: WorkflowFilter;
 };
 
 /**
@@ -250,7 +293,9 @@ type DragState =
 type SelectedModule =
   | { type: "trigger" }
   | { type: "classifier" }
-  | { type: "action"; labelId: string; actionId: string };
+  | { type: "action"; labelId: string; actionId: string }
+  /** A wire rather than a node: the filter guarding the node it feeds. */
+  | { type: "filter"; target: FilterTarget };
 
 type WorkflowBuilderProps = {
   initialDraft: WorkflowDraft;
@@ -284,6 +329,9 @@ export function WorkflowBuilder({
   // Edges are redrawn straight on the DOM while a node is dragged, so they
   // track the node frame by frame instead of waiting for the drag to end.
   const edgePathRefs = React.useRef(new Map<string, SVGPathElement>());
+  // The filter markers ride the middle of their wire, so they are moved during
+  // a drag for the same reason the paths under them are.
+  const edgeMarkerRefs = React.useRef(new Map<string, HTMLDivElement>());
   // Set when a node drag ends, so the trailing click does not open the
   // inspector for the node that was just moved.
   const ignoreNodeClick = React.useRef(false);
@@ -304,6 +352,17 @@ export function WorkflowBuilder({
       }
 
       edgePathRefs.current.delete(key);
+    },
+    []
+  );
+  const registerEdgeMarker = React.useCallback(
+    (key: string, element: HTMLDivElement | null) => {
+      if (element) {
+        edgeMarkerRefs.current.set(key, element);
+        return;
+      }
+
+      edgeMarkerRefs.current.delete(key);
     },
     []
   );
@@ -329,6 +388,10 @@ export function WorkflowBuilder({
   const [trigger, setTrigger] = React.useState(initialDraft.trigger);
   const [classifierPrompt, setClassifierPrompt] = React.useState(
     initialDraft.classifierPrompt
+  );
+  // The filter on the one wire whose downstream node is not an action.
+  const [classifierFilter, setClassifierFilter] = React.useState(
+    initialDraft.classifierFilter
   );
   const [labels, setLabels] = React.useState(initialDraft.labels);
   const [nodePositions, setNodePositions] = React.useState<CanvasPositions>(
@@ -361,9 +424,17 @@ export function WorkflowBuilder({
       ownerRole,
       trigger,
       classifierPrompt,
+      classifierFilter,
       labels,
     }),
-    [classifierPrompt, labels, ownerRole, trigger, workflowName]
+    [
+      classifierFilter,
+      classifierPrompt,
+      labels,
+      ownerRole,
+      trigger,
+      workflowName,
+    ]
   );
   /**
    * A test run works on the draft that is on the board, not on the saved row,
@@ -398,13 +469,32 @@ export function WorkflowBuilder({
     () => new Map(canvasNodes.map((node) => [node.id, node])),
     [canvasNodes]
   );
-  const canvasEdges = React.useMemo(() => createCanvasEdges(labels), [labels]);
+  const canvasEdges = React.useMemo(
+    () => createCanvasEdges(labels, classifierFilter),
+    [classifierFilter, labels]
+  );
   const selectedNode = React.useMemo(
     () =>
       canvasNodes.find(
         (node) => moduleKey(node.module) === moduleKey(selectedModule)
       ) ?? null,
     [canvasNodes, selectedModule]
+  );
+  const selectedEdge =
+    selectedModule?.type === "filter"
+      ? canvasEdges.find(
+          (edge) => filterTargetKey(edge.target) === filterTargetKey(selectedModule.target)
+        ) ?? null
+      : null;
+  /**
+   * Where every floating panel can hang from: the nodes by id, and each wire's
+   * filter by the id its run step carries. A filter is not a node, so this is
+   * what lets the inspector and the test panel float beside a wire the same way
+   * they float beside a node.
+   */
+  const panelAnchors = React.useMemo(
+    () => createPanelAnchors(canvasNodes, canvasEdges),
+    [canvasEdges, canvasNodes]
   );
   // Each node has exactly one node feeding it, so the run that reaches the
   // selected node — and with it the data that node can read — is the path back
@@ -420,18 +510,37 @@ export function WorkflowBuilder({
 
     return parents;
   }, [canvasEdges]);
+  // A wire's filter reads from the node the wire leaves, so that node is what
+  // the data column is built from when a filter is selected.
+  const dataAnchorNode = selectedEdge
+    ? canvasNodeMap.get(selectedEdge.from) ?? null
+    : selectedNode;
   const nodeData = React.useMemo(
     () =>
-      selectedNode
+      dataAnchorNode
         ? nodeDataGroups({
-            node: selectedNode,
+            node: dataAnchorNode,
             nodes: canvasNodeMap,
             parents: parentByNode,
           })
         : { upstream: [], own: null },
-    [canvasNodeMap, parentByNode, selectedNode]
+    [canvasNodeMap, dataAnchorNode, parentByNode]
   );
-  const hasUpstreamData = nodeData.upstream.length > 0;
+  // Everything the source node has produced by then is material a filter can
+  // read — including the source node's own outputs, which for a node's own
+  // settings would be values it has not made yet.
+  const upstreamData = selectedEdge
+    ? [...nodeData.upstream, ...(nodeData.own ? [nodeData.own] : [])]
+    : nodeData.upstream;
+  /** A filter publishes nothing: it only decides whether the run carries on. */
+  const ownData = selectedEdge ? null : nodeData.own;
+  const hasUpstreamData = upstreamData.length > 0;
+  // An unnamed filter is headed by the wire it guards, so the panel says what
+  // it is looking at rather than repeating the word on its own badge.
+  const selectedFilterTitle = selectedEdge
+    ? selectedEdge.filter.name.trim() ||
+      `To ${canvasNodeMap.get(selectedEdge.to)?.title ?? "the next node"}`
+    : undefined;
   // The panel is only as wide as it has columns to show, and never wider than
   // the board it floats over.
   const inspectorPanelWidth = Math.min(
@@ -440,9 +549,12 @@ export function WorkflowBuilder({
       ? Math.max(inspectorSettingsWidth, boardSize.width - inspectorMargin * 2)
       : Number.POSITIVE_INFINITY
   );
-  const inspectorPosition = selectedNode
+  const inspectorAnchor = selectedModule
+    ? panelAnchors.get(moduleAnchorId(selectedModule)) ?? null
+    : null;
+  const inspectorPosition = inspectorAnchor
     ? floatingPanelPosition({
-        nodePosition: selectedNode.position,
+        anchor: inspectorAnchor,
         view,
         board: boardSize,
         panelWidth: inspectorPanelWidth,
@@ -457,7 +569,11 @@ export function WorkflowBuilder({
     : null;
   const connectMenuPosition = connectMenuOutlet
     ? floatingPanelPosition({
-        nodePosition: outletPosition(connectMenuOutlet),
+        anchor: {
+          position: outletPosition(connectMenuOutlet),
+          width: nodeWidth,
+          height: nodeBaseHeight,
+        },
         view,
         board: boardSize,
         panelWidth: connectMenuWidth,
@@ -465,10 +581,11 @@ export function WorkflowBuilder({
       })
     : null;
 
-  // The step panel floats beside the node the run is on, exactly the way the
-  // settings inspector floats beside the node you are editing.
-  const debugNode = debug.step
-    ? canvasNodeMap.get(debug.step.nodeId) ?? null
+  // The step panel floats beside whatever the run is on, exactly the way the
+  // settings inspector floats beside the node you are editing — and a filter
+  // step is on a wire, which is why both read the same anchor map.
+  const debugAnchor = debug.step
+    ? panelAnchors.get(debug.step.nodeId) ?? null
     : null;
   const debugPanelWidth = Math.min(
     inspectorSettingsWidth,
@@ -476,9 +593,9 @@ export function WorkflowBuilder({
       ? Math.max(240, boardSize.width - inspectorMargin * 2)
       : Number.POSITIVE_INFINITY
   );
-  const debugPanelPosition = debugNode
+  const debugPanelPosition = debugAnchor
     ? floatingPanelPosition({
-        nodePosition: debugNode.position,
+        anchor: debugAnchor,
         view,
         board: boardSize,
         panelWidth: debugPanelWidth,
@@ -614,9 +731,23 @@ export function WorkflowBuilder({
     });
     setConnectingFrom(null);
     setConnectMenu(null);
-    setSelectedModule((current) =>
-      current?.type === "action" && current.labelId === labelId ? null : current
-    );
+    setSelectedModule((current) => {
+      // The branch takes its actions with it, and with them the wires into
+      // those actions — so a filter panel open on one of them goes too.
+      if (current?.type === "action" && current.labelId === labelId) {
+        return null;
+      }
+
+      if (
+        current?.type === "filter" &&
+        current.target.type === "action" &&
+        current.target.labelId === labelId
+      ) {
+        return null;
+      }
+
+      return current;
+    });
   }
 
   async function confirmRemoveLabel(labelId: string) {
@@ -718,9 +849,70 @@ export function WorkflowBuilder({
     setSelectedModule(null);
   }
 
+  /**
+   * Edits the filter on one wire, wherever that wire keeps it — on the action
+   * it feeds, or on the draft for the one wire into the classification.
+   */
+  function updateFilter(
+    target: FilterTarget,
+    updater: (filter: WorkflowFilter) => WorkflowFilter
+  ) {
+    if (target.type === "classifier") {
+      setClassifierFilter(updater);
+      return;
+    }
+
+    updateAction(target.labelId, target.actionId, (action) => ({
+      ...action,
+      filter: updater(action.filter),
+    }));
+  }
+
+  /** Takes the filter off a wire entirely, leaving the wire itself alone. */
+  function clearFilter(target: FilterTarget) {
+    updateFilter(target, () => createWorkflowFilter());
+  }
+
+  async function confirmClearFilter(target: FilterTarget) {
+    const filter = filterFor(target);
+
+    // Conditions are written by hand and there is no undo on the board, so
+    // throwing them away is a decision, not a click.
+    if (filter && usableFilterConditions(filter).length > 0) {
+      const confirmed = await confirm({
+        title: "Remove this filter?",
+        description: `${
+          filter.name.trim() || "This filter"
+        } will stop guarding the wire, and every email that reaches it will pass.`,
+        confirmLabel: "Remove filter",
+      });
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    clearFilter(target);
+  }
+
+  /** The filter on one wire, read from wherever that wire keeps it. */
+  function filterFor(target: FilterTarget) {
+    if (target.type === "classifier") {
+      return classifierFilter;
+    }
+
+    return labels
+      .find((label) => label.id === target.labelId)
+      ?.actions.find((action) => action.id === target.actionId)?.filter;
+  }
+
   function deleteModule(module: SelectedModule) {
     if (module.type === "action") {
       removeAction(module.labelId, module.actionId);
+    }
+
+    if (module.type === "filter") {
+      void confirmClearFilter(module.target);
     }
   }
 
@@ -928,13 +1120,10 @@ export function WorkflowBuilder({
   }
 
   /**
-   * Slides the board just far enough to bring a node into view, leaving room
-   * on the right for the inspector that opens beside it.
+   * Slides the board just far enough to bring a node — or a wire's filter —
+   * into view, leaving room on the right for the panel that opens beside it.
    */
-  function revealPosition(
-    position: CanvasNodePosition,
-    nodeHeight: number
-  ) {
+  function revealAnchor(anchor: PanelAnchor) {
     const margin = 24;
 
     if (boardSize.width === 0 || boardSize.height === 0) {
@@ -942,12 +1131,12 @@ export function WorkflowBuilder({
     }
 
     setView((current) => {
-      // The node's footprint on screen, which shrinks and grows with the zoom
+      // The anchor's footprint on screen, which shrinks and grows with the zoom
       // even though the panel beside it does not.
-      const left = position.x * current.zoom;
-      const top = position.y * current.zoom;
-      const width = nodeWidth * current.zoom;
-      const height = nodeHeight * current.zoom;
+      const left = anchor.position.x * current.zoom;
+      const top = anchor.position.y * current.zoom;
+      const width = anchor.width * current.zoom;
+      const height = anchor.height * current.zoom;
       const rightEdge = Math.max(
         width + margin,
         boardSize.width - margin - inspectorWidth - inspectorGap
@@ -975,27 +1164,28 @@ export function WorkflowBuilder({
   }
 
   // Both are read from effects that must not re-run when the board re-renders.
-  const revealPositionRef = React.useRef(revealPosition);
-  const canvasNodeMapRef = React.useRef(canvasNodeMap);
+  const revealAnchorRef = React.useRef(revealAnchor);
+  const panelAnchorsRef = React.useRef(panelAnchors);
 
   React.useEffect(() => {
-    revealPositionRef.current = revealPosition;
-    canvasNodeMapRef.current = canvasNodeMap;
+    revealAnchorRef.current = revealAnchor;
+    panelAnchorsRef.current = panelAnchors;
   });
 
   const debugNodeId = debug.isRunning ? debug.step?.nodeId ?? null : null;
 
-  // Stepping the run slides the board to the node the step belongs to, so the
-  // panel is never explaining a node that is off screen.
+  // Stepping the run slides the board to whatever the step belongs to — a node,
+  // or the wire a filter guards — so the panel is never explaining something
+  // that is off screen.
   React.useEffect(() => {
     if (!debugNodeId) {
       return;
     }
 
-    const node = canvasNodeMapRef.current.get(debugNodeId);
+    const anchor = panelAnchorsRef.current.get(debugNodeId);
 
-    if (node) {
-      revealPositionRef.current(node.position, node.height);
+    if (anchor) {
+      revealAnchorRef.current(anchor);
     }
   }, [boardSize.height, boardSize.width, debugNodeId]);
 
@@ -1039,6 +1229,35 @@ export function WorkflowBuilder({
     return index < debug.stepIndex ? "passed" : "ahead";
   }
 
+  /** Where a wire's filter stands in the test, or undefined when none is on. */
+  function wireDebugState(edge: CanvasEdge): DebugWireState | undefined {
+    if (!debug.isRunning || !debug.run) {
+      return undefined;
+    }
+
+    const stepNodeId = filterStepNodeId(filterTargetKey(edge.target));
+    const index = debug.run.steps.findIndex(
+      (item) => item.nodeId === stepNodeId
+    );
+
+    if (index === -1) {
+      // Either this wire has no filter to run, or the email stopped before it.
+      return isFilterActive(edge.filter) ? "muted" : undefined;
+    }
+
+    // Where the email stopped outranks where the cursor is: a blocked wire is
+    // the answer to what happened to this email, at every step of the run.
+    if (debug.run.blockedAtNodeId === stepNodeId) {
+      return "blocked";
+    }
+
+    if (debug.step?.nodeId === stepNodeId) {
+      return "active";
+    }
+
+    return index < debug.stepIndex ? "passed" : "ahead";
+  }
+
   /**
    * Adds the picked action straight after the outlet whose handle opened the
    * menu, so it arrives already wired into that branch's sequence.
@@ -1047,7 +1266,7 @@ export function WorkflowBuilder({
     const position = placeNodeAfter({ outlet, occupied: canvasNodes });
 
     setConnectMenu(null);
-    revealPosition(position, nodeBaseHeight);
+    revealAnchor({ position, width: nodeWidth, height: nodeBaseHeight });
 
     if (outlet.node.kind === "classifier") {
       const labelId =
@@ -1160,8 +1379,35 @@ export function WorkflowBuilder({
 
     // The inspector is two columns wide now, so a node near the right edge
     // would open its own settings on top of itself. Slide the board first.
-    revealPosition(node.position, node.height);
+    revealAnchor(nodeAnchor(node));
     setSelectedModule(node.module);
+  }
+
+  /**
+   * Opens a wire's filter, or jumps to what that filter did during a test. The
+   * marker is the only way onto a wire, so it carries both readings of a click
+   * the same way a node does.
+   */
+  function handleWireClick(edge: CanvasEdge) {
+    if (debug.isDebugging) {
+      if (debug.isRunning) {
+        debug.goToNode(filterStepNodeId(filterTargetKey(edge.target)));
+      }
+
+      return;
+    }
+
+    const anchor = panelAnchors.get(
+      filterStepNodeId(filterTargetKey(edge.target))
+    );
+
+    if (anchor) {
+      revealAnchor(anchor);
+    }
+
+    setConnectMenu(null);
+    setConnectingFrom(null);
+    setSelectedModule({ type: "filter", target: edge.target });
   }
 
   function handleCanvasPointerMove(event: React.PointerEvent<HTMLDivElement>) {
@@ -1218,9 +1464,10 @@ export function WorkflowBuilder({
   }
 
   /**
-   * Redraws the edges that touch the dragged node. The node itself is moved
-   * on the DOM during a drag, so the paths are too — committing every frame to
-   * React state instead would re-render the whole board on each pointer move.
+   * Redraws the edges that touch the dragged node, and slides each one's filter
+   * marker back to the middle of the wire. The node itself is moved on the DOM
+   * during a drag, so these are too — committing every frame to React state
+   * instead would re-render the whole board on each pointer move.
    */
   function syncEdgesToPosition(nodeId: string, position: CanvasNodePosition) {
     canvasEdges.forEach((edge) => {
@@ -1228,44 +1475,91 @@ export function WorkflowBuilder({
         return;
       }
 
-      const path = edgePathRefs.current.get(edgeKey(edge));
       const fromNode = canvasNodeMap.get(edge.from);
       const toNode = canvasNodeMap.get(edge.to);
 
-      if (!path || !fromNode || !toNode) {
+      if (!fromNode || !toNode) {
         return;
       }
 
-      path.setAttribute(
+      const from = edge.from === nodeId ? { ...fromNode, position } : fromNode;
+      const to = edge.to === nodeId ? { ...toNode, position } : toNode;
+      const path = edgePathRefs.current.get(edgeKey(edge));
+      const marker = edgeMarkerRefs.current.get(edgeKey(edge));
+
+      path?.setAttribute(
         "d",
-        edgePathDefinition(
-          edge.from === nodeId ? { ...fromNode, position } : fromNode,
-          edge.to === nodeId ? { ...toNode, position } : toNode,
-          edge.fromBranchIndex
-        )
+        edgePathDefinition(from, to, edge.fromBranchIndex)
       );
+
+      if (marker) {
+        marker.style.transform = canvasPositionTransform(
+          edgeMidpoint(from, to, edge.fromBranchIndex)
+        );
+      }
     });
   }
 
-  /** Keeps the floating inspector glued to its node while the node is dragged. */
+  /**
+   * Keeps the floating inspector glued to what it belongs to while a node is
+   * dragged — the node itself, or, for a wire's filter, the middle of a wire
+   * that moves when either end does.
+   */
   function syncInspectorToPosition(
     nodeId: string,
     position: CanvasNodePosition
   ) {
     const inspector = inspectorRef.current;
+    const anchor = draggedAnchor(nodeId, position);
 
-    if (!inspector || selectedNode?.id !== nodeId) {
+    if (!inspector || !anchor) {
       return;
     }
 
     inspector.style.transform = canvasPositionTransform(
       floatingPanelPosition({
-        nodePosition: position,
+        anchor,
         view,
         board: boardSize,
         panelWidth: inspectorPanelWidth,
         panelHeight: inspectorHeight,
       })
+    );
+  }
+
+  /**
+   * Where the open inspector hangs from mid-drag, or null when the dragged node
+   * is not what it is pointing at.
+   */
+  function draggedAnchor(
+    nodeId: string,
+    position: CanvasNodePosition
+  ): PanelAnchor | null {
+    if (selectedNode) {
+      return selectedNode.id === nodeId
+        ? { ...nodeAnchor(selectedNode), position }
+        : null;
+    }
+
+    if (!selectedEdge) {
+      return null;
+    }
+
+    const fromNode = canvasNodeMap.get(selectedEdge.from);
+    const toNode = canvasNodeMap.get(selectedEdge.to);
+
+    if (!fromNode || !toNode) {
+      return null;
+    }
+
+    if (selectedEdge.from !== nodeId && selectedEdge.to !== nodeId) {
+      return null;
+    }
+
+    return wireAnchor(
+      selectedEdge.from === nodeId ? { ...fromNode, position } : fromNode,
+      selectedEdge.to === nodeId ? { ...toNode, position } : toNode,
+      selectedEdge.fromBranchIndex
     );
   }
 
@@ -1305,7 +1599,7 @@ export function WorkflowBuilder({
 
     connectCanvasNodes(connectingFrom, targetNode);
     setConnectingFrom(null);
-    revealPosition(targetNode.position, targetNode.height);
+    revealAnchor(nodeAnchor(targetNode));
     setSelectedModule(targetNode.module);
   }
 
@@ -1503,6 +1797,42 @@ export function WorkflowBuilder({
                 onCompleteConnection={() => handleConnectionTarget(node)}
               />
             ))}
+            {/* Above the nodes rather than under them: a wire the user has
+                dragged short still has to show what it is stopping. A node
+                being dragged takes its own layer and passes over these. */}
+            {canvasEdges.map((edge) => {
+              const from = canvasNodeMap.get(edge.from);
+              const to = canvasNodeMap.get(edge.to);
+
+              if (!from || !to) {
+                return null;
+              }
+
+              return (
+                <WireFilterMarker
+                  key={edgeKey(edge)}
+                  ref={(element) => {
+                    registerEdgeMarker(edgeKey(edge), element);
+
+                    return () => registerEdgeMarker(edgeKey(edge), null);
+                  }}
+                  filter={edge.filter}
+                  position={edgeMidpoint(from, to, edge.fromBranchIndex)}
+                  fromTitle={from.title}
+                  toTitle={to.title}
+                  // A test reads the board rather than edits it, so a wire with
+                  // no filter offers nothing while one is running.
+                  canEdit={!debug.isDebugging}
+                  selected={
+                    selectedModule?.type === "filter" &&
+                    filterTargetKey(selectedModule.target) ===
+                      filterTargetKey(edge.target)
+                  }
+                  debugState={wireDebugState(edge)}
+                  onSelect={() => handleWireClick(edge)}
+                />
+              );
+            })}
           </div>
 
           <ZoomControls
@@ -1576,20 +1906,40 @@ export function WorkflowBuilder({
               <NodeInspector
                 ref={inspectorNodeRef}
                 module={selectedModule}
-                title={moduleTitle(selectedModule, selectedAction)}
+                title={moduleTitle(
+                  selectedModule,
+                  selectedAction,
+                  selectedFilterTitle
+                )}
                 position={inspectorPosition}
                 maxHeight={Math.max(
                   200,
                   (boardSize.height || defaultInspectorHeight) -
                     inspectorMargin * 2
                 )}
-                canDelete={canDeleteModule(selectedModule)}
+                canDelete={
+                  canDeleteModule(selectedModule) ||
+                  (selectedModule.type === "filter" &&
+                    isFilterSet(
+                      filterFor(selectedModule.target) ?? createWorkflowFilter()
+                    ))
+                }
+                deleteLabel={
+                  selectedModule.type === "filter"
+                    ? "Remove filter"
+                    : "Delete node"
+                }
+                deleteHint={
+                  selectedModule.type === "filter"
+                    ? "The wire stays; the rule goes."
+                    : "Or press Backspace"
+                }
                 onDelete={() => deleteModule(selectedModule)}
                 onClose={() => setSelectedModule(null)}
                 width={inspectorPanelWidth}
                 dataPanel={
                   hasUpstreamData ? (
-                    <UpstreamDataPanel upstream={nodeData.upstream} />
+                    <UpstreamDataPanel upstream={upstreamData} />
                   ) : null
                 }
               >
@@ -1628,9 +1978,21 @@ export function WorkflowBuilder({
                       }
                     />
                   ) : null}
-                  {nodeData.own ? (
-                    <NodeOutputSummary own={nodeData.own} />
+                  {selectedModule.type === "filter" && selectedEdge ? (
+                    <FilterSettings
+                      filter={selectedEdge.filter}
+                      fromTitle={
+                        canvasNodeMap.get(selectedEdge.from)?.title ?? "before"
+                      }
+                      toTitle={
+                        canvasNodeMap.get(selectedEdge.to)?.title ?? "next"
+                      }
+                      onChange={(updater) =>
+                        updateFilter(selectedEdge.target, updater)
+                      }
+                    />
                   ) : null}
+                  {ownData ? <NodeOutputSummary own={ownData} /> : null}
                 </div>
               </NodeInspector>
             </VariableInsertProvider>
@@ -1954,6 +2316,8 @@ function NodeInspector({
   width,
   maxHeight,
   canDelete,
+  deleteLabel,
+  deleteHint,
   dataPanel,
   onDelete,
   onClose,
@@ -1967,6 +2331,10 @@ function NodeInspector({
   width: number;
   maxHeight: number;
   canDelete: boolean;
+  /** What the footer's destructive button says, e.g. "Delete node". */
+  deleteLabel: string;
+  /** The line beside it — the keyboard shortcut, or what removal leaves behind. */
+  deleteHint: string;
   /** The upstream data column, or null for a node with nothing before it. */
   dataPanel: React.ReactNode;
   onDelete: () => void;
@@ -2019,9 +2387,7 @@ function NodeInspector({
       </div>
       {canDelete ? (
         <div className="flex items-center justify-between gap-2 border-t px-3 py-2">
-          <span className="text-xs text-muted-foreground">
-            Or press Backspace
-          </span>
+          <span className="text-xs text-muted-foreground">{deleteHint}</span>
           <Button
             type="button"
             variant="ghost"
@@ -2030,7 +2396,7 @@ function NodeInspector({
             onClick={onDelete}
           >
             <Trash2 className="size-4" />
-            Delete node
+            {deleteLabel}
           </Button>
         </div>
       ) : null}
@@ -2272,6 +2638,137 @@ const debugBadge = {
 >;
 
 /**
+ * The filter on one wire, drawn at the middle of that wire.
+ *
+ * A wire with no filter is a hairline dot that only names itself on hover — the
+ * same vocabulary as a connector handle, because it is the same kind of thing:
+ * an affordance on the board rather than an object on it. Once a wire has a
+ * rule it becomes a chip carrying that rule's name, because a route that stops
+ * some mail and not other mail cannot be read from the wire alone.
+ */
+function WireFilterMarker({
+  ref,
+  filter,
+  position,
+  fromTitle,
+  toTitle,
+  selected,
+  canEdit,
+  debugState,
+  onSelect,
+}: {
+  ref: React.Ref<HTMLDivElement>;
+  filter: WorkflowFilter;
+  /** Board pixels: the middle of the wire this filter guards. */
+  position: CanvasNodePosition;
+  fromTitle: string;
+  toTitle: string;
+  selected: boolean;
+  /** False while a test runs, which hides the bare wires' add affordance. */
+  canEdit: boolean;
+  debugState?: DebugWireState;
+  onSelect: () => void;
+}) {
+  const set = isFilterSet(filter);
+  const needs = filterNeeds(filter);
+  const wire = `the wire from ${fromTitle} to ${toTitle}`;
+
+  // Nothing to say and nothing to add: during a test, a wire with no rule on it
+  // is just a wire.
+  if (!set && !canEdit) {
+    return null;
+  }
+
+  return (
+    <div
+      ref={ref}
+      className="absolute left-0 top-0"
+      style={{ transform: canvasPositionTransform(position) }}
+    >
+      <button
+        type="button"
+        // Its own control: pressing it must not start a pan of the board.
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect();
+        }}
+        aria-label={
+          set
+            ? `Filter on ${wire}: ${filterSummaryLabel(filter)}`
+            : `Add a filter to ${wire}`
+        }
+        title={
+          set ? filterSummaryLabel(filter) : `Add a filter to ${wire}`
+        }
+        className={cn(
+          "group/wire flex -translate-x-1/2 -translate-y-1/2 items-center justify-center border bg-card transition-all",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          set
+            ? "h-5 max-w-28 gap-1 rounded-md px-1.5 shadow-sm hover:border-primary/60"
+            : "size-4 rounded-full text-muted-foreground hover:size-6 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-md",
+          !set &&
+            "focus-visible:size-6 focus-visible:border-primary focus-visible:bg-primary focus-visible:text-primary-foreground",
+          // A disabled filter is still on the board — it just is not doing
+          // anything, and reads as a rule set aside rather than a rule missing.
+          set && !filter.enabled && "border-dashed text-muted-foreground",
+          selected && "border-primary ring-2 ring-primary/20",
+          debugState === "active" && "border-primary ring-2 ring-primary/30",
+          debugState === "passed" && "border-success/50",
+          // Border and text carry the block rather than a tinted fill: the chip
+          // sits on top of its own wire, so it has to stay opaque.
+          debugState === "blocked" &&
+            "border-destructive text-destructive ring-2 ring-destructive/20",
+          debugState === "muted" && "opacity-40"
+        )}
+      >
+        {set ? (
+          <>
+            {debugState === "blocked" ? (
+              <Ban aria-hidden="true" className="size-3 shrink-0" />
+            ) : (
+              <Funnel aria-hidden="true" className="size-3 shrink-0" />
+            )}
+            <span className="min-w-0 truncate text-xs font-medium">
+              {filterLabel(filter)}
+            </span>
+            {needs ? (
+              <TriangleAlert
+                aria-hidden="true"
+                className="size-3 shrink-0 text-warning"
+              />
+            ) : null}
+          </>
+        ) : (
+          <FunnelPlus
+            aria-hidden="true"
+            className={cn(
+              "size-3.5 scale-0 opacity-0 transition-transform duration-150",
+              "group-hover/wire:scale-100 group-hover/wire:opacity-100",
+              "group-focus-visible/wire:scale-100 group-focus-visible/wire:opacity-100"
+            )}
+          />
+        )}
+      </button>
+    </div>
+  );
+}
+
+/** What a wire's marker says it does, for its tooltip and its label. */
+function filterSummaryLabel(filter: WorkflowFilter) {
+  if (!filter.enabled) {
+    return "Turned off — every email passes this wire.";
+  }
+
+  const usable = usableFilterConditions(filter);
+  const joiner = filter.match === "all" ? " and " : " or ";
+
+  return usable.length === 0
+    ? "No finished condition yet — every email passes this wire."
+    : `Continues when ${usable.map(conditionSummary).join(joiner)}.`;
+}
+
+/**
  * The outlet an edge leaves from, and the button that adds what comes next.
  * Positioned against whatever it is nested in unless `offsetY` places it
  * against the node instead.
@@ -2403,20 +2900,7 @@ function edgePathDefinition(
   toNode: { position: CanvasNodePosition },
   fromBranchIndex?: number
 ) {
-  const from = {
-    x: fromNode.position.x + nodeWidth,
-    y:
-      fromNode.position.y +
-      (fromBranchIndex === undefined
-        ? fromNode.height / 2
-        : branchAnchorY(fromBranchIndex)),
-  };
-  const to = {
-    x: toNode.position.x,
-    // Every node an edge lands on is a plain one-line node, so its inlet is
-    // always half a base node down.
-    y: toNode.position.y + nodeBaseHeight / 2,
-  };
+  const { from, to } = edgeEndpoints(fromNode, toNode, fromBranchIndex);
   const bend = Math.max(72, Math.abs(to.x - from.x) * 0.42);
 
   return `M ${from.x} ${from.y} C ${from.x + bend} ${from.y}, ${
@@ -2424,7 +2908,48 @@ function edgePathDefinition(
   } ${to.y}, ${to.x} ${to.y}`;
 }
 
-function ActionSwitch({
+/** Where an edge leaves one node and lands on the next, in board pixels. */
+function edgeEndpoints(
+  fromNode: { position: CanvasNodePosition; height: number },
+  toNode: { position: CanvasNodePosition },
+  fromBranchIndex?: number
+) {
+  return {
+    from: {
+      x: fromNode.position.x + nodeWidth,
+      y:
+        fromNode.position.y +
+        (fromBranchIndex === undefined
+          ? fromNode.height / 2
+          : branchAnchorY(fromBranchIndex)),
+    },
+    to: {
+      x: toNode.position.x,
+      // Every node an edge lands on is a plain one-line node, so its inlet is
+      // always half a base node down.
+      y: toNode.position.y + nodeBaseHeight / 2,
+    },
+  };
+}
+
+/**
+ * The middle of the drawn curve, where a wire's filter marker sits.
+ *
+ * Both control points of the curve sit `bend` out from their own endpoint, in
+ * opposite directions, so at the halfway point they cancel exactly — the middle
+ * of the curve is the middle of its endpoints, whatever the bend.
+ */
+function edgeMidpoint(
+  fromNode: { position: CanvasNodePosition; height: number },
+  toNode: { position: CanvasNodePosition },
+  fromBranchIndex?: number
+) {
+  const { from, to } = edgeEndpoints(fromNode, toNode, fromBranchIndex);
+
+  return { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+}
+
+function SettingSwitch({
   title,
   checked,
   onCheckedChange,
@@ -2579,20 +3104,115 @@ function classificationNeeds(
   return undefined;
 }
 
-function createCanvasEdges(labels: ClassificationLabel[]) {
-  const edges: CanvasEdge[] = [{ from: "trigger", to: "classifier" }];
+function createCanvasEdges(
+  labels: ClassificationLabel[],
+  classifierFilter: WorkflowFilter
+) {
+  const edges: CanvasEdge[] = [
+    {
+      from: "trigger",
+      to: "classifier",
+      target: { type: "classifier" },
+      filter: classifierFilter,
+    },
+  ];
 
   labels.forEach((label, branchIndex) => {
     label.actions.forEach((action, actionIndex) => {
+      // Each wire carries the filter of the node it feeds, which is the node it
+      // arrives at — so an action's filter travels with the action, however the
+      // board is rewired around it.
+      const wire = {
+        target: {
+          type: "action" as const,
+          labelId: label.id,
+          actionId: action.id,
+        },
+        filter: action.filter,
+      };
+
       edges.push(
         actionIndex === 0
-          ? { from: "classifier", to: action.id, fromBranchIndex: branchIndex }
-          : { from: label.actions[actionIndex - 1].id, to: action.id }
+          ? {
+              from: "classifier",
+              to: action.id,
+              fromBranchIndex: branchIndex,
+              ...wire,
+            }
+          : { from: label.actions[actionIndex - 1].id, to: action.id, ...wire }
       );
     });
   });
 
   return edges;
+}
+
+/** The wire a filter sits on, as one string. */
+function filterTargetKey(target: FilterTarget) {
+  return target.type === "classifier" ? "classifier" : target.actionId;
+}
+
+/**
+ * What a floating panel hangs from: a footprint in board pixels. Nodes give
+ * their own; a wire's filter gives the middle of the wire, which has no width
+ * of its own to sit beside.
+ */
+type PanelAnchor = {
+  position: CanvasNodePosition;
+  width: number;
+  height: number;
+};
+
+function nodeAnchor(node: FlowCanvasNode): PanelAnchor {
+  return { position: node.position, width: nodeWidth, height: node.height };
+}
+
+function wireAnchor(
+  fromNode: { position: CanvasNodePosition; height: number },
+  toNode: { position: CanvasNodePosition },
+  fromBranchIndex?: number
+): PanelAnchor {
+  return {
+    position: edgeMidpoint(fromNode, toNode, fromBranchIndex),
+    width: 0,
+    height: 0,
+  };
+}
+
+/**
+ * Everything a floating panel can be pinned to, keyed the way the run names it:
+ * nodes by their own id, wires by the id their filter step carries. Both the
+ * settings inspector and the test panel read this, so a filter opens beside its
+ * wire exactly the way a node's settings open beside the node.
+ */
+function createPanelAnchors(nodes: FlowCanvasNode[], edges: CanvasEdge[]) {
+  const anchors = new Map<string, PanelAnchor>();
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+
+  nodes.forEach((node) => anchors.set(node.id, nodeAnchor(node)));
+
+  edges.forEach((edge) => {
+    const from = nodesById.get(edge.from);
+    const to = nodesById.get(edge.to);
+
+    if (from && to) {
+      anchors.set(
+        filterStepNodeId(filterTargetKey(edge.target)),
+        wireAnchor(from, to, edge.fromBranchIndex)
+      );
+    }
+  });
+
+  return anchors;
+}
+
+/** Which anchor an open panel belongs to: a node's id, or a wire's. */
+function moduleAnchorId(module: SelectedModule) {
+  if (module.type === "filter") {
+    return filterStepNodeId(filterTargetKey(module.target));
+  }
+
+  return module.type === "action" ? module.actionId : module.type;
 }
 
 /**
@@ -2679,6 +3299,10 @@ function moduleKey(module: SelectedModule | null) {
     return `${module.type}:${module.labelId}:${module.actionId}`;
   }
 
+  if (module.type === "filter") {
+    return `filter:${filterTargetKey(module.target)}`;
+  }
+
   return module.type;
 }
 
@@ -2762,13 +3386,13 @@ function isTextEntryTarget(target: EventTarget | null) {
  * board so it is never half off the edge.
  */
 function floatingPanelPosition({
-  nodePosition,
+  anchor,
   view,
   board,
   panelWidth,
   panelHeight,
 }: {
-  nodePosition: CanvasNodePosition;
+  anchor: PanelAnchor;
   view: CanvasView;
   board: { width: number; height: number };
   panelWidth: number;
@@ -2777,9 +3401,9 @@ function floatingPanelPosition({
   // The panel floats over the board rather than inside it, so it is never
   // scaled — only the node it points at is, and that is what has to be
   // converted from board pixels to the ones the panel is placed in.
-  const nodeLeft = nodePosition.x * view.zoom + view.x;
-  const nodeTop = nodePosition.y * view.zoom + view.y;
-  const rightX = nodeLeft + nodeWidth * view.zoom + inspectorGap;
+  const nodeLeft = anchor.position.x * view.zoom + view.x;
+  const nodeTop = anchor.position.y * view.zoom + view.y;
+  const rightX = nodeLeft + anchor.width * view.zoom + inspectorGap;
   const leftX = nodeLeft - inspectorGap - panelWidth;
 
   let x = rightX;
@@ -2918,7 +3542,9 @@ function nodesOverlap(
 
 function moduleTitle(
   module: SelectedModule,
-  action: WorkflowAction | undefined
+  action: WorkflowAction | undefined,
+  /** A filter's own heading: its name, or the wire it guards. */
+  filterTitle: string | undefined
 ) {
   if (module.type === "trigger") {
     return "Email watcher";
@@ -2926,6 +3552,10 @@ function moduleTitle(
 
   if (module.type === "classifier") {
     return "Classification";
+  }
+
+  if (module.type === "filter") {
+    return filterTitle ?? "Filter";
   }
 
   return action ? actionLabels[action.type] : "Action";
@@ -3187,6 +3817,260 @@ function ClassificationTest({
   );
 }
 
+/**
+ * A wire's filter: the rule an email has to meet to travel that wire at all.
+ *
+ * It reads as one sentence with a gap in it — continue when *these* hold — so
+ * the conditions are the body of the panel and everything else (a name for the
+ * board, the case rule, the on switch) sits around them.
+ */
+function FilterSettings({
+  filter,
+  fromTitle,
+  toTitle,
+  onChange,
+}: {
+  filter: WorkflowFilter;
+  /** The node the wire leaves, so the panel can say what it is guarding. */
+  fromTitle: string;
+  /** The node the wire feeds — the one an email is stopped short of. */
+  toTitle: string;
+  onChange: (updater: (filter: WorkflowFilter) => WorkflowFilter) => void;
+}) {
+  const fieldId = React.useId();
+
+  function updateCondition(
+    conditionId: string,
+    updater: (condition: FilterCondition) => FilterCondition
+  ) {
+    onChange((current) => ({
+      ...current,
+      conditions: current.conditions.map((condition) =>
+        condition.id === conditionId ? updater(condition) : condition
+      ),
+    }));
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">
+        An email reaching {fromTitle} carries on to {toTitle} only when this
+        holds. Everything else stops on this wire.
+      </p>
+
+      <div className="space-y-2">
+        <Label htmlFor={`${fieldId}-name`}>Name</Label>
+        <Input
+          id={`${fieldId}-name`}
+          value={filter.name}
+          placeholder="From a customer"
+          onChange={(event) =>
+            onChange((current) => ({ ...current, name: event.target.value }))
+          }
+        />
+        <p className="text-xs text-muted-foreground">
+          What the wire is called on the board.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor={`${fieldId}-match`}>Continue when</Label>
+        <Select
+          value={filter.match}
+          onValueChange={(value) =>
+            onChange((current) => ({
+              ...current,
+              match: value as WorkflowFilter["match"],
+            }))
+          }
+        >
+          <SelectTrigger id={`${fieldId}-match`} className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Every condition holds</SelectItem>
+            <SelectItem value="any">Any one condition holds</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Conditions</Label>
+        {filter.conditions.length === 0 ? (
+          <p className="rounded-md border border-dashed px-2 py-3 text-center text-xs text-muted-foreground">
+            No conditions yet, so every email passes this wire.
+          </p>
+        ) : null}
+        <div className="space-y-2">
+          {filter.conditions.map((condition, index) => (
+            <React.Fragment key={condition.id}>
+              {index > 0 ? (
+                <p className="text-center text-xs text-muted-foreground">
+                  {filter.match === "all" ? "and" : "or"}
+                </p>
+              ) : null}
+              <FilterConditionFields
+                condition={condition}
+                index={index}
+                onChange={(updater) => updateCondition(condition.id, updater)}
+                onRemove={() =>
+                  onChange((current) => ({
+                    ...current,
+                    conditions: current.conditions.filter(
+                      (entry) => entry.id !== condition.id
+                    ),
+                  }))
+                }
+              />
+            </React.Fragment>
+          ))}
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            onChange((current) => ({
+              ...current,
+              conditions: [...current.conditions, createFilterCondition()],
+            }))
+          }
+        >
+          <Plus className="size-4" />
+          Add condition
+        </Button>
+      </div>
+
+      <SettingSwitch
+        title="Match case"
+        checked={filter.caseSensitive}
+        onCheckedChange={(checked) =>
+          onChange((current) => ({ ...current, caseSensitive: checked }))
+        }
+      />
+      <SettingSwitch
+        title="Filter is on"
+        checked={filter.enabled}
+        onCheckedChange={(checked) =>
+          onChange((current) => ({ ...current, enabled: checked }))
+        }
+      />
+      {filter.enabled ? null : (
+        <p className="text-xs text-muted-foreground">
+          Switched off, so every email passes. The conditions are kept.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One comparison, stacked rather than laid out in a row: the panel is 320px
+ * wide and a value, a comparison, and a second value do not fit across it
+ * without every field becoming too narrow to read what is in it.
+ */
+function FilterConditionFields({
+  condition,
+  index,
+  onChange,
+  onRemove,
+}: {
+  condition: FilterCondition;
+  /** Its place in the list, which is how the fields are named to a reader. */
+  index: number;
+  onChange: (updater: (condition: FilterCondition) => FilterCondition) => void;
+  onRemove: () => void;
+}) {
+  const fieldId = React.useId();
+  const spec = filterOperators[condition.operator];
+  const position = index + 1;
+
+  return (
+    <div className="space-y-2 rounded-md border p-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-muted-foreground">
+          Condition {position}
+        </span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-7 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          onClick={onRemove}
+          aria-label={`Remove condition ${position}`}
+        >
+          <X className="size-4" />
+        </Button>
+      </div>
+
+      <VariableInput
+        id={`${fieldId}-left`}
+        fieldLabel={`Condition ${position} value`}
+        aria-label={`Condition ${position} value`}
+        value={condition.left}
+        placeholder="{{email.from.address}}"
+        onValueChange={(value) =>
+          onChange((current) => ({ ...current, left: value }))
+        }
+      />
+
+      <Select
+        value={condition.operator}
+        onValueChange={(value) =>
+          onChange((current) => ({
+            ...current,
+            operator: value as FilterOperator,
+          }))
+        }
+      >
+        <SelectTrigger
+          id={`${fieldId}-operator`}
+          aria-label={`Condition ${position} comparison`}
+          className="w-full"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {filterOperatorGroups.map((group) => (
+            <SelectGroup key={group}>
+              <SelectLabel>{group}</SelectLabel>
+              {operatorsInGroup(group).map((operator) => (
+                <SelectItem key={operator} value={operator}>
+                  {filterOperators[operator].label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {spec.takesValue ? (
+        <VariableInput
+          id={`${fieldId}-right`}
+          fieldLabel={`Condition ${position} comparison value`}
+          aria-label={`Condition ${position} comparison value`}
+          value={condition.right}
+          placeholder={spec.placeholder}
+          onValueChange={(value) =>
+            onChange((current) => ({ ...current, right: value }))
+          }
+        />
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          This comparison asks about the value on its own.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** The operators one group of the picker offers, in the order declared. */
+function operatorsInGroup(group: (typeof filterOperatorGroups)[number]) {
+  return (Object.keys(filterOperators) as FilterOperator[]).filter(
+    (operator) => filterOperators[operator].group === group
+  );
+}
+
 function ActionSettings({
   action,
   onChange,
@@ -3208,6 +4092,9 @@ function ActionSettings({
               type: value as WorkflowActionType,
               note: current.note,
               signature: current.signature,
+              // The filter belongs to the wire, not to what the node does with
+              // what reaches it — swapping the action must not clear it.
+              filter: current.filter,
             }))
           }
         >
@@ -3339,7 +4226,7 @@ function ForwardFields({ action, actionId, onChange }: ActionFieldProps) {
           className="min-h-20"
         />
       </div>
-      <ActionSwitch
+      <SettingSwitch
         title="Include thread"
         checked={action.includeOriginalThread}
         onCheckedChange={(checked) =>
@@ -3349,7 +4236,7 @@ function ForwardFields({ action, actionId, onChange }: ActionFieldProps) {
           }))
         }
       />
-      <ActionSwitch
+      <SettingSwitch
         title="Include attachments"
         checked={action.includeAttachments}
         onCheckedChange={(checked) =>
@@ -3359,7 +4246,7 @@ function ForwardFields({ action, actionId, onChange }: ActionFieldProps) {
           }))
         }
       />
-      <ActionSwitch
+      <SettingSwitch
         title="Mark handled"
         checked={action.markHandled}
         onCheckedChange={(checked) =>
@@ -3422,7 +4309,7 @@ function DraftReplyFields({ action, actionId, onChange }: ActionFieldProps) {
           className="min-h-20"
         />
       </div>
-      <ActionSwitch
+      <SettingSwitch
         title="Include attachments"
         checked={action.includeAttachments}
         onCheckedChange={(checked) =>
@@ -3432,7 +4319,7 @@ function DraftReplyFields({ action, actionId, onChange }: ActionFieldProps) {
           }))
         }
       />
-      <ActionSwitch
+      <SettingSwitch
         title="Require approval"
         checked={action.requireApproval}
         onCheckedChange={(checked) =>
@@ -3463,7 +4350,7 @@ function ArchiveFields({ action, actionId, onChange }: ActionFieldProps) {
           }
         />
       </div>
-      <ActionSwitch
+      <SettingSwitch
         title="Mark handled"
         checked={action.markHandled}
         onCheckedChange={(checked) =>
@@ -3484,6 +4371,10 @@ function moduleLabel(module: SelectedModule) {
 
   if (module.type === "classifier") {
     return "Classification";
+  }
+
+  if (module.type === "filter") {
+    return "Filter";
   }
 
   return "Action";

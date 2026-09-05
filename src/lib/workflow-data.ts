@@ -1,3 +1,8 @@
+import {
+  createWorkflowFilter,
+  type WorkflowFilter,
+} from "@/lib/workflow-filters";
+
 export type WorkflowActionType =
   | "forward"
   | "draft_reply"
@@ -7,6 +12,12 @@ export type WorkflowActionType =
 export type WorkflowAction = {
   id: string;
   type: WorkflowActionType;
+  /**
+   * The filter on the wire feeding this action. Every wire has exactly one
+   * node at its downstream end, so a wire's filter is stored on that node —
+   * see `src/lib/workflow-filters.ts`.
+   */
+  filter: WorkflowFilter;
   labelName: string;
   forwardTo: string;
   subjectPrefix: string;
@@ -48,6 +59,8 @@ export type WorkflowDraft = {
   ownerRole: string;
   trigger: string;
   classifierPrompt: string;
+  /** The filter on the wire from the email watcher to the classification. */
+  classifierFilter: WorkflowFilter;
   labels: ClassificationLabel[];
 };
 
@@ -86,6 +99,7 @@ export function createWorkflowAction(
       overrides.id ??
       `action-${type}-${Math.random().toString(36).slice(2, 10)}`,
     type,
+    filter: createWorkflowFilter(),
     labelName: "",
     forwardTo: "",
     subjectPrefix: "",
@@ -157,6 +171,7 @@ export function createEmptyWorkflowDraft(): WorkflowDraft {
     ownerRole: "",
     trigger: defaultWorkflowTrigger,
     classifierPrompt: "",
+    classifierFilter: createWorkflowFilter(),
     labels: [],
   };
 }

@@ -29,8 +29,8 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong className="text-foreground">Mail content.</strong> The
-            messages, drafts, and metadata we read from your mailbox in order to
-            organise it.
+            messages, attachments, drafts, and metadata we read from your
+            mailbox in order to organise it.
           </li>
           <li>
             <strong className="text-foreground">Usage and diagnostics.</strong>{" "}

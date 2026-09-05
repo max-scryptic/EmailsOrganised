@@ -30,6 +30,29 @@ import {
 } from "@/lib/workflow-variables";
 
 /**
+ * One file on a message, as the watcher describes it before anybody asks for
+ * its bytes.
+ *
+ * The bytes are deliberately not here. A run is built in the browser and a
+ * mailbox attachment can be tens of megabytes, so the watcher carries what it
+ * takes to *find* the file — `attachmentId` when Gmail stored the body
+ * separately, `partId` when the bytes came inline in the message — and the
+ * fetch happens on the server, once, when something actually needs the file.
+ */
+export type DebugAttachment = {
+  /** Gmail's id for the stored body; blank when the bytes came inline. */
+  attachmentId: string;
+  /** The part's address in the MIME tree, e.g. `"1.2"`. */
+  partId: string;
+  filename: string;
+  mimeType: string;
+  /** Size in bytes, as Gmail reports the part. */
+  size: number;
+  /** True for a file the HTML body references, such as a signature image. */
+  inline: boolean;
+};
+
+/**
  * One message as the watcher hands it downstream. Every field here backs an
  * `email.*` variable, which is why the shape mirrors the tokens rather than
  * Gmail's own response.
@@ -50,7 +73,7 @@ export type DebugEmail = {
   receivedAt: string;
   labels: string[];
   isUnread: boolean;
-  attachments: string[];
+  attachments: DebugAttachment[];
   mailbox: string;
 };
 
@@ -164,6 +187,28 @@ export function resolveTemplate(template: string, values: Map<string, string>) {
   return { value, missing };
 }
 
+const byteUnits = ["B", "KB", "MB", "GB"];
+
+/**
+ * A byte count as a person reads it. Fixed to en-US decimals rather than the
+ * viewer's locale, because this string is rendered on the server for the run's
+ * summaries and again in the browser for the panel — the two have to match.
+ */
+export function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 B";
+  }
+
+  const unit = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    byteUnits.length - 1
+  );
+  const value = bytes / 1024 ** unit;
+
+  // Whole bytes read as bytes; anything scaled keeps one decimal place.
+  return `${unit === 0 ? value : value.toFixed(1)} ${byteUnits[unit]}`;
+}
+
 /** Every `email.*` value for one message, one per declared token. */
 export function emailVariableValues(
   email: DebugEmail
@@ -183,7 +228,15 @@ export function emailVariableValues(
     "email.isUnread": String(email.isUnread),
     "email.hasAttachments": String(email.attachments.length > 0),
     "email.attachments.count": String(email.attachments.length),
-    "email.attachments.names": email.attachments.join(", "),
+    "email.attachments.names": email.attachments
+      .map((attachment) => attachment.filename)
+      .join(", "),
+    "email.attachments.types": Array.from(
+      new Set(email.attachments.map((attachment) => attachment.mimeType))
+    ).join(", "),
+    "email.attachments.totalSize": formatBytes(
+      email.attachments.reduce((total, attachment) => total + attachment.size, 0)
+    ),
     "email.threadId": email.threadId,
     "email.id": email.id,
     "email.mailbox": email.mailbox,
@@ -402,7 +455,7 @@ export function buildDebugRun({
   });
 
   followedLabel?.actions.forEach((action) => {
-    const step = actionStep({ action, values, ranAt });
+    const step = actionStep({ action, email, values, ranAt });
 
     commit({
       nodeId: action.id,
@@ -515,10 +568,13 @@ function runEndNote({
  */
 function actionStep({
   action,
+  email,
   values,
   ranAt,
 }: {
   action: WorkflowAction;
+  /** The message being stepped through, for the files it carries. */
+  email: DebugEmail;
   values: Map<string, string>;
   ranAt: Date;
 }): {
@@ -544,13 +600,15 @@ function actionStep({
     missing: [],
   });
 
+  const carried = carriedAttachments(action, email);
+
   if (action.type === "forward") {
     const to = setting("Forward to", action.forwardTo);
     const subjectPrefix = setting("Subject prefix", action.subjectPrefix);
 
     return {
       summary: to.value
-        ? `Would forward the email to ${to.value}.`
+        ? `Would forward the email to ${to.value}${carried.clause}.`
         : "Would forward the email, but no address is set.",
       settings: [
         to,
@@ -558,10 +616,12 @@ function actionStep({
         setting("Forward note", action.note),
         setting("Signature", action.signature),
         toggle("Include thread", action.includeOriginalThread),
+        carried.setting,
         toggle("Mark handled", action.markHandled),
       ],
       outputs: {
         to: { value: to.value },
+        attachments: { value: carried.names },
         messageId: { value: "", pending: true },
         sentAt: { value: at },
       },
@@ -574,18 +634,20 @@ function actionStep({
 
     return {
       summary: instructions.value
-        ? "Would write a reply and leave it as a draft."
+        ? `Would write a reply and leave it as a draft${carried.clause}.`
         : "Would write a reply, but no draft instructions are set.",
       settings: [
         tone,
         instructions,
         setting("Signature", action.signature),
+        carried.setting,
         toggle("Require approval", action.requireApproval),
       ],
       outputs: {
         id: { value: "", pending: true },
         subject: { value: "", pending: true },
         body: { value: "", pending: true },
+        attachments: { value: carried.names },
         status: {
           value: action.requireApproval ? "awaiting_approval" : "ready",
         },
@@ -618,6 +680,52 @@ function actionStep({
       archivedAt: { value: at },
     },
   };
+}
+
+/**
+ * The files an action would take with it, for the actions that can carry one.
+ *
+ * "Would carry" is the whole answer here: a test run never fetches the bytes,
+ * because it never sends anything to put them in. What it reports is which
+ * files a live run would pull — the same list a live send would ask
+ * `fetchAttachmentBytes` for, one file at a time.
+ */
+function carriedAttachments(action: WorkflowAction, email: DebugEmail) {
+  const off = { setting: attachmentSetting("Off"), names: "", clause: "" };
+
+  if (!action.includeAttachments) {
+    return off;
+  }
+
+  if (email.attachments.length === 0) {
+    return {
+      setting: attachmentSetting("On — this email has none"),
+      names: "",
+      clause: "",
+    };
+  }
+
+  const total = email.attachments.reduce(
+    (bytes, attachment) => bytes + attachment.size,
+    0
+  );
+  const names = email.attachments
+    .map((attachment) => attachment.filename)
+    .join(", ");
+
+  return {
+    setting: attachmentSetting(`${names} (${formatBytes(total)})`),
+    names,
+    clause: `, with ${countLabel(email.attachments.length, "attachment")}`,
+  };
+}
+
+function attachmentSetting(value: string): DebugSetting {
+  return { label: "Attachments", template: value, value, missing: [] };
+}
+
+function countLabel(count: number, noun: string) {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
 /** `forward.messageId` → `messageId`; `email.from.name` → `from.name`. */
@@ -681,7 +789,19 @@ export function sampleDebugEmail(
     receivedAt: new Date().toISOString(),
     labels: ["INBOX", "IMPORTANT"],
     isUnread: true,
-    attachments: ["invoice-1024.pdf"],
+    attachments: [
+      {
+        // No ids: the sample email is not in anybody's mailbox, so there is
+        // nothing to fetch and the panel says so rather than offering a button
+        // that could only fail.
+        attachmentId: "",
+        partId: "",
+        filename: "invoice-1024.pdf",
+        mimeType: "application/pdf",
+        size: 184_320,
+        inline: false,
+      },
+    ],
     mailbox,
   };
 }

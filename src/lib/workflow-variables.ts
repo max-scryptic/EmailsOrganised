@@ -115,6 +115,10 @@ const emailFields = [
     description: "Whether the message is still unread.",
     example: "true",
   },
+  // Attachments describe the files; they never carry them. A variable is text
+  // that gets typed into a field, so the bytes stay behind an explicit fetch —
+  // `fetchAttachmentBytes` in `src/lib/gmail/messages.ts` — and an action takes
+  // the file itself by being told to, not by interpolating it.
   {
     token: "email.hasAttachments",
     label: "Has attachments",
@@ -132,6 +136,18 @@ const emailFields = [
     label: "Attachment names",
     description: "File names of the attachments, comma separated.",
     example: "invoice-1024.pdf, terms.pdf",
+  },
+  {
+    token: "email.attachments.types",
+    label: "Attachment types",
+    description: "The content types the attachments are, comma separated.",
+    example: "application/pdf",
+  },
+  {
+    token: "email.attachments.totalSize",
+    label: "Attachment size",
+    description: "How much the attachments weigh together.",
+    example: "1.4 MB",
   },
   {
     token: "email.threadId",
@@ -210,6 +226,12 @@ function actionFields(
         example: "collections@yourcompany.com",
       },
       {
+        token: `${namespace}.attachments`,
+        label: "Forwarded attachments",
+        description: "File names the forward carried, when it carried any.",
+        example: "invoice-1024.pdf",
+      },
+      {
         token: `${namespace}.messageId`,
         label: "Forwarded message ID",
         description: "Gmail id of the message that was sent on.",
@@ -243,6 +265,12 @@ function actionFields(
         label: "Draft body",
         description: "The reply the model wrote.",
         example: "Hi Ada,\n\nThanks for the nudge — payment went out…",
+      },
+      {
+        token: `${namespace}.attachments`,
+        label: "Draft attachments",
+        description: "File names the draft carried, when it carried any.",
+        example: "invoice-1024.pdf",
       },
       {
         token: `${namespace}.status`,

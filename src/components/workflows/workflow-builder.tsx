@@ -3349,6 +3349,16 @@ function ForwardFields({ action, actionId, onChange }: ActionFieldProps) {
         }
       />
       <ActionSwitch
+        title="Include attachments"
+        checked={action.includeAttachments}
+        onCheckedChange={(checked) =>
+          onChange((current) => ({
+            ...current,
+            includeAttachments: checked,
+          }))
+        }
+      />
+      <ActionSwitch
         title="Mark handled"
         checked={action.markHandled}
         onCheckedChange={(checked) =>
@@ -3411,6 +3421,16 @@ function DraftReplyFields({ action, actionId, onChange }: ActionFieldProps) {
           className="min-h-20"
         />
       </div>
+      <ActionSwitch
+        title="Include attachments"
+        checked={action.includeAttachments}
+        onCheckedChange={(checked) =>
+          onChange((current) => ({
+            ...current,
+            includeAttachments: checked,
+          }))
+        }
+      />
       <ActionSwitch
         title="Require approval"
         checked={action.requireApproval}

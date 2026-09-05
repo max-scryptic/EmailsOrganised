@@ -18,6 +18,9 @@ export const workflowActionSchema = z.object({
   note: z.string(),
   signature: z.string(),
   includeOriginalThread: z.boolean(),
+  // Defaulted rather than required: rows saved before actions could carry files
+  // have no such key, and they are read back through this schema.
+  includeAttachments: z.boolean().default(true),
   markHandled: z.boolean(),
   draftInstructions: z.string(),
   draftTone: z.string(),
@@ -92,3 +95,21 @@ export const debugClassifySchema = z.object({
 });
 
 export type DebugClassifyInput = z.infer<typeof debugClassifySchema>;
+
+/**
+ * What the panel sends to pull one attachment's bytes out of Gmail: the message
+ * it is on, and whichever handle that attachment has — `attachmentId` for a
+ * body Gmail stored separately, `partId` for one that came inline. The bounds
+ * are Gmail's own: an id is an opaque token, a part id is a dotted path.
+ */
+export const debugAttachmentSchema = z
+  .object({
+    messageId: z.string().min(1).max(256),
+    attachmentId: z.string().max(4096),
+    partId: z.string().max(64),
+  })
+  .refine((value) => value.attachmentId || value.partId, {
+    message: "That attachment cannot be located on the message.",
+  });
+
+export type DebugAttachmentInput = z.infer<typeof debugAttachmentSchema>;

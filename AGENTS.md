@@ -75,6 +75,13 @@ Read both before designing a surface. The bullets below are the short version.
   must be described in `actionStep`, never performed. A node's outputs come
   from `chainOutputFields`, so adding a variable in
   `src/lib/workflow-variables.ts` is what makes it show up in a run.
+- Attachments are metadata everywhere except one call. The watcher records what
+  it takes to find each file (`DebugAttachment` in `src/lib/workflow-debug.ts`),
+  and `fetchAttachmentBytes` in `src/lib/gmail/messages.ts` is the only place
+  bytes are pulled — by `attachmentId` when Gmail stored the body separately,
+  by `partId` when it came inline. Never put bytes in a `{{variable}}`: a
+  variable is text typed into a field. An action takes a file by being told to
+  (`includeAttachments`), not by interpolating one.
 - The branch a test run takes is the real classification call, made once on the
   server before the run is built. `buildDebugRun` stays pure and synchronous: it
   takes the answer as an argument, and takes `null` when there was no key or the

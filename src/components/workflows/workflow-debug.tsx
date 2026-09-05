@@ -6,9 +6,11 @@ import {
   ArrowRight,
   CircleCheck,
   CircleSlash,
+  Download,
   FlaskConical,
   Loader2,
   Mail,
+  Paperclip,
   RotateCcw,
   TriangleAlert,
   X,
@@ -16,6 +18,7 @@ import {
 import Link from "next/link";
 import {
   classifyDebugEmail,
+  fetchDebugAttachment,
   pollDebugWatch,
   startDebugWatch,
   type DebugWatchError,
@@ -34,7 +37,9 @@ import { cn } from "@/lib/utils";
 import {
   buildDebugRun,
   emailVariableValues,
+  formatBytes,
   sampleDebugEmail,
+  type DebugAttachment,
   type DebugBranch,
   type DebugClassification,
   type DebugEmail,
@@ -365,6 +370,8 @@ export function useWorkflowDebug(draft: WorkflowDraft) {
     isClassifying,
     isDebugging,
     isListening,
+    /** The run is on the made-up email, so its files are described, not real. */
+    isSample: session.phase === "running" && session.source === "sample",
     elapsedSeconds,
     /** Node ids the run passes through, for dimming everything it does not. */
     activeNodeIds: React.useMemo(
@@ -686,6 +693,14 @@ export function WorkflowDebugStepPanel({
           />
         ) : null}
 
+        {step.kind === "trigger" && run.email.attachments.length > 0 ? (
+          <AttachmentList
+            messageId={run.email.id}
+            attachments={run.email.attachments}
+            isSample={debug.isSample}
+          />
+        ) : null}
+
         {step.settings.length > 0 ? (
           <DebugSection title="Settings, as this step read them">
             {step.settings.map((setting) => (
@@ -795,6 +810,158 @@ function OutputRow({ output }: { output: DebugValue }) {
       </p>
     </div>
   );
+}
+
+/**
+ * The files on the email, and the one place a test run reaches for their bytes.
+ *
+ * The trigger step describes attachments as metadata — that is all a variable
+ * can carry — so this is where a user answers the question the metadata raises:
+ * is this actually the invoice? Fetching pulls the file out of Gmail and hands
+ * it over, which is a read, and the same call a live run makes when an action
+ * takes the file with it.
+ */
+function AttachmentList({
+  messageId,
+  attachments,
+  isSample,
+}: {
+  messageId: string;
+  attachments: DebugAttachment[];
+  isSample: boolean;
+}) {
+  return (
+    <DebugSection title={`Attachments (${attachments.length})`}>
+      {isSample ? (
+        <p className="rounded-md border border-dashed px-2 py-1.5 text-xs text-muted-foreground">
+          The sample email&rsquo;s files are described rather than real, so
+          there is nothing to download. Listen for a real email to fetch one.
+        </p>
+      ) : null}
+      {attachments.map((attachment) => (
+        <AttachmentRow
+          key={`${attachment.partId}-${attachment.filename}`}
+          messageId={messageId}
+          attachment={attachment}
+          isSample={isSample}
+        />
+      ))}
+    </DebugSection>
+  );
+}
+
+type AttachmentFetch =
+  | { status: "idle" }
+  | { status: "fetching" }
+  /** `url` is an object URL for the fetched bytes, revoked when it is replaced. */
+  | { status: "ready"; url: string; size: number }
+  | { status: "error"; description: string };
+
+function AttachmentRow({
+  messageId,
+  attachment,
+  isSample,
+}: {
+  messageId: string;
+  attachment: DebugAttachment;
+  isSample: boolean;
+}) {
+  const [fetchState, setFetchState] = React.useState<AttachmentFetch>({
+    status: "idle",
+  });
+
+  // The object URL holds the bytes alive until it is released, so it is let go
+  // as soon as this row stops pointing at it.
+  React.useEffect(() => {
+    if (fetchState.status !== "ready") {
+      return;
+    }
+
+    const { url } = fetchState;
+
+    return () => URL.revokeObjectURL(url);
+  }, [fetchState]);
+
+  const fetchBytes = React.useCallback(async () => {
+    setFetchState({ status: "fetching" });
+
+    const result = await fetchDebugAttachment({
+      messageId,
+      attachmentId: attachment.attachmentId,
+      partId: attachment.partId,
+    });
+
+    if (result.status === "error") {
+      setFetchState({ status: "error", description: result.description });
+      return;
+    }
+
+    setFetchState({
+      status: "ready",
+      url: URL.createObjectURL(
+        base64ToBlob(result.content, attachment.mimeType)
+      ),
+      size: result.size,
+    });
+  }, [attachment.attachmentId, attachment.mimeType, attachment.partId, messageId]);
+
+  return (
+    <div className="rounded-md border px-2 py-1.5">
+      <div className="flex items-start gap-2">
+        <Paperclip className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-medium">{attachment.filename}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {attachment.mimeType} · {formatBytes(attachment.size)}
+            {attachment.inline ? " · inline" : null}
+          </p>
+        </div>
+        {isSample ? null : fetchState.status === "ready" ? (
+          <Button type="button" variant="outline" size="sm" asChild>
+            <a href={fetchState.url} download={attachment.filename}>
+              <Download className="size-3.5" />
+              Save
+            </a>
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={fetchState.status === "fetching"}
+            onClick={() => void fetchBytes()}
+          >
+            {fetchState.status === "fetching" ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : null}
+            {fetchState.status === "error" ? "Retry" : "Fetch"}
+          </Button>
+        )}
+      </div>
+      {fetchState.status === "ready" ? (
+        <p className="mt-1 text-xs text-muted-foreground">
+          Fetched {formatBytes(fetchState.size)} from Gmail.
+        </p>
+      ) : null}
+      {fetchState.status === "error" ? (
+        <p className="mt-1 text-xs text-destructive">
+          {fetchState.description}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Base64 from the server action back into the bytes a download needs. */
+function base64ToBlob(base64: string, mimeType: string) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return new Blob([bytes], { type: mimeType });
 }
 
 /**

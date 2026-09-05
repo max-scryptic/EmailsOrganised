@@ -90,7 +90,10 @@ export function AuthCard({ mode, next }: { mode: AuthMode; next: string }) {
         <div className="space-y-3">
           <form action={signInWithGoogle}>
             <input type="hidden" name="next" value={next} />
-            <GoogleSignInButton label={copy.action} />
+            <GoogleSignInButton
+              label={copy.action}
+              disabled={!isSupabaseConfigured}
+            />
           </form>
 
           {copy.showConsent ? (

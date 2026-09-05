@@ -103,6 +103,12 @@ Setting up the Supabase project, the Google Cloud OAuth client, and the
 verification Google requires for Gmail scopes is documented in
 [`docs/google-sso-setup.md`](docs/google-sso-setup.md).
 
+Nothing applies `supabase/migrations/` for you — not the build, not the deploy.
+A change that adds a column ships to production before the column exists there,
+and the page that selects it throws until someone runs the migration by hand.
+So when a pull request touches `supabase/migrations/`, apply it to the Supabase
+project as part of shipping it.
+
 With no `.env.local` the app still boots — Proxy stops guarding routes and
 `/auth/sign-in` renders a configuration notice instead of a broken button.
 

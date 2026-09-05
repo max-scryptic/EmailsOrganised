@@ -62,6 +62,19 @@ Read both before designing a surface. The bullets below are the short version.
   counts, summaries — belongs in the node's editor popover. The classification
   node is the one exception, carrying a row per output label because each row is
   a branch the flow leaves from.
+- A wire between two nodes can carry a filter: conditions an email has to meet
+  to travel it, or the run stops there. `src/lib/workflow-filters.ts` owns the
+  operators and the evaluation, and it is pure synchronous TypeScript so the
+  board and a server run share one reading of a rule. Every wire has exactly one
+  node at its downstream end, so a wire's filter is stored on that node —
+  `WorkflowAction.filter` for a wire into an action, `WorkflowDraft.classifierFilter`
+  (column `classifier_filter`) for the one wire into the classification. Do not
+  introduce a separate edge list to hang them off.
+- A wire's filter is not a node: it has no position of its own, publishes no
+  variables, and is opened from a marker at the middle of the wire. Its
+  condition fields are `VariableInput`s like any other node setting, so a rule
+  can read `{{email.from.address}}` and everything else the steps before it
+  produced.
 - The classification node's outputs are `ClassificationLabel[]` on the draft.
   They are the branches on the board *and* the enum the model's answer is
   decoded against, so adding one changes both. `src/lib/ai/classify-email.ts`
@@ -74,7 +87,9 @@ Read both before designing a surface. The bullets below are the short version.
   in `src/lib/gmail/messages.ts` and there is no write path — so any new action
   must be described in `actionStep`, never performed. A node's outputs come
   from `chainOutputFields`, so adding a variable in
-  `src/lib/workflow-variables.ts` is what makes it show up in a run.
+  `src/lib/workflow-variables.ts` is what makes it show up in a run. A wire's
+  filter is a step of its own there, and the first one that blocks ends the run
+  — every node after it reads "Not reached".
 - Attachments are metadata everywhere except one call. The watcher records what
   it takes to find each file (`DebugAttachment` in `src/lib/workflow-debug.ts`),
   and `fetchAttachmentBytes` in `src/lib/gmail/messages.ts` is the only place

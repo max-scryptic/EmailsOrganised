@@ -45,6 +45,8 @@ type WorkflowMutationRow = {
   owner_role: string;
   trigger: string;
   classifier_prompt: string;
+  /** Trigger → classification wire filter — see the note on `WorkflowRow`. */
+  classifier_filter: unknown;
   /** Classification output labels — see the note on `WorkflowRow`. */
   outcomes: unknown;
   created_at: string;
@@ -87,6 +89,7 @@ export async function saveWorkflow(
     owner_role: parsed.data.ownerRole,
     trigger: parsed.data.trigger,
     classifier_prompt: parsed.data.classifierPrompt,
+    classifier_filter: parsed.data.classifierFilter,
     outcomes: parsed.data.labels,
   };
 
@@ -100,7 +103,7 @@ export async function saveWorkflow(
 
   const { data, error } = await query
     .select(
-      "id, name, status, owner_role, trigger, classifier_prompt, outcomes, created_at, updated_at"
+      "id, name, status, owner_role, trigger, classifier_prompt, classifier_filter, outcomes, created_at, updated_at"
     )
     .single();
 

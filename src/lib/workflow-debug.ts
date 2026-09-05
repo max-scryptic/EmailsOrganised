@@ -22,8 +22,16 @@ import {
   type WorkflowDraft,
 } from "@/lib/workflow-data";
 import {
+  evaluateFilter,
+  filterLabel,
+  isFilterActive,
+  type FilterResult,
+  type WorkflowFilter,
+} from "@/lib/workflow-filters";
+import {
   chainNodeOutputTitle,
   chainOutputFields,
+  resolveTemplate,
   type EmailVariableToken,
   type NodeOutputField,
   type VariableChainNode,
@@ -77,7 +85,7 @@ export type DebugEmail = {
   mailbox: string;
 };
 
-export type DebugStepKind = "trigger" | "classifier" | "action";
+export type DebugStepKind = "trigger" | "filter" | "classifier" | "action";
 
 /**
  * The model's answer for this email, as the classification node's own call
@@ -146,7 +154,18 @@ export type DebugStep = {
   outputs: DebugValue[];
   /** Classification step only: every output, and which one the run follows. */
   branches?: DebugBranch[];
+  /** Filter step only: every condition it checked, and the verdict. */
+  filter?: FilterResult;
 };
+
+/**
+ * The step a wire's filter runs as. It is not a node, so it gets an id of its
+ * own — namespaced by the node the wire feeds, which is where the filter is
+ * stored and which is what the board draws the wire into.
+ */
+export function filterStepNodeId(targetNodeId: string) {
+  return `filter:${targetNodeId}`;
+}
 
 export type DebugRun = {
   email: DebugEmail;
@@ -160,32 +179,11 @@ export type DebugRun = {
   forced: boolean;
   /** Set when the classification could not be run at all. */
   classificationError: string | null;
+  /** The filter step that stopped the run, when one did. */
+  blockedAtNodeId: string | null;
   /** Why the run stopped where it did, when it stopped early. */
   endNote: string | null;
 };
-
-const variablePattern = () => /\{\{\s*([\w.]+)\s*\}\}/g;
-
-/**
- * Fills `{{tokens}}` from the values earlier steps produced. An unknown token
- * resolves to nothing and is reported, because a field quietly rendering the
- * literal `{{draft.body}}` is the exact bug debug mode exists to surface.
- */
-export function resolveTemplate(template: string, values: Map<string, string>) {
-  const missing: string[] = [];
-  const value = template.replace(variablePattern(), (_full, token: string) => {
-    const resolved = values.get(token);
-
-    if (resolved === undefined) {
-      missing.push(token);
-      return "";
-    }
-
-    return resolved;
-  });
-
-  return { value, missing };
-}
 
 const byteUnits = ["B", "KB", "MB", "GB"];
 
@@ -392,6 +390,33 @@ export function buildDebugRun({
     });
   }
 
+  /**
+   * Runs the filter on the wire into `targetNodeId`, if it has one. Returns
+   * false when the email was stopped there, which is the caller's cue to end
+   * the run — a blocked wire is not a failure, it is the wire doing its job.
+   */
+  function passesWire(targetNodeId: string, filter: WorkflowFilter) {
+    if (!isFilterActive(filter)) {
+      return true;
+    }
+
+    const result = evaluateFilter(filter, values);
+
+    steps.push({
+      id: `${targetNodeId}-filter`,
+      nodeId: filterStepNodeId(targetNodeId),
+      kind: "filter",
+      kindLabel: "Filter",
+      title: filterLabel(filter),
+      summary: filterSummaryForRun(result),
+      settings: [],
+      outputs: [],
+      filter: result,
+    });
+
+    return result.passed;
+  }
+
   commit({
     nodeId: "trigger",
     kind: "trigger",
@@ -411,63 +436,79 @@ export function buildDebugRun({
     outputs: mapValues(emailVariableValues(email), (value) => ({ value })),
   });
 
-  const prompt = resolveTemplate(draft.classifierPrompt, values);
+  // The wires are checked in the order the email travels them, and the first
+  // one that blocks ends the run — everything past it is a node this email
+  // never reaches.
+  let blockedAtNodeId: string | null = null;
 
-  commit({
-    nodeId: "classifier",
-    kind: "classifier",
-    kindLabel: "Classification",
-    title: chainNodeOutputTitle({ id: "classifier", kind: "classifier" }),
-    summary: classificationSummary({
-      draft,
-      classification,
-      classificationError,
-      pickedLabel,
-      followedLabel,
-      forced,
-    }),
-    settings: [
-      {
-        label: "Prompt",
-        template: draft.classifierPrompt,
-        value: prompt.value,
-        missing: prompt.missing,
-      },
-      {
-        label: "Outputs",
-        template: outputsSetting(draft),
-        value: outputsSetting(draft),
-        missing: [],
-      },
-    ],
-    branches,
-    outputs: {
-      label: { value: classification?.label ?? "" },
-      confidence: {
-        value: classification ? classification.confidence.toFixed(2) : "",
-        pending: !classification,
-      },
-      reasoning: {
-        value: classification?.reasoning ?? "",
-        pending: !classification,
-      },
-    },
-  });
+  if (!passesWire("classifier", draft.classifierFilter)) {
+    blockedAtNodeId = filterStepNodeId("classifier");
+  }
 
-  followedLabel?.actions.forEach((action) => {
-    const step = actionStep({ action, email, values, ranAt });
+  if (!blockedAtNodeId) {
+    const prompt = resolveTemplate(draft.classifierPrompt, values);
 
     commit({
-      nodeId: action.id,
-      kind: "action",
-      kindLabel: "Action",
-      title: actionLabels[action.type],
-      summary: step.summary,
-      simulated: true,
-      settings: step.settings,
-      outputs: step.outputs,
+      nodeId: "classifier",
+      kind: "classifier",
+      kindLabel: "Classification",
+      title: chainNodeOutputTitle({ id: "classifier", kind: "classifier" }),
+      summary: classificationSummary({
+        draft,
+        classification,
+        classificationError,
+        pickedLabel,
+        followedLabel,
+        forced,
+      }),
+      settings: [
+        {
+          label: "Prompt",
+          template: draft.classifierPrompt,
+          value: prompt.value,
+          missing: prompt.missing,
+        },
+        {
+          label: "Outputs",
+          template: outputsSetting(draft),
+          value: outputsSetting(draft),
+          missing: [],
+        },
+      ],
+      branches,
+      outputs: {
+        label: { value: classification?.label ?? "" },
+        confidence: {
+          value: classification ? classification.confidence.toFixed(2) : "",
+          pending: !classification,
+        },
+        reasoning: {
+          value: classification?.reasoning ?? "",
+          pending: !classification,
+        },
+      },
     });
-  });
+
+    for (const action of followedLabel?.actions ?? []) {
+      if (!passesWire(action.id, action.filter)) {
+        blockedAtNodeId = filterStepNodeId(action.id);
+        break;
+      }
+
+      const step = actionStep({ action, email, values, ranAt });
+
+      commit({
+        nodeId: action.id,
+        kind: "action",
+        kindLabel: "Action",
+        title: actionLabels[action.type],
+        summary: step.summary,
+        simulated: true,
+        settings: step.settings,
+        outputs: step.outputs,
+      });
+    }
+  }
 
   return {
     email,
@@ -477,8 +518,35 @@ export function buildDebugRun({
     pickedLabelId: pickedLabel?.id ?? null,
     forced,
     classificationError,
-    endNote: runEndNote({ draft, followedLabel, classificationError }),
+    blockedAtNodeId,
+    endNote: runEndNote({
+      draft,
+      followedLabel,
+      classificationError,
+      blockedStep: blockedAtNodeId
+        ? steps.find((step) => step.nodeId === blockedAtNodeId) ?? null
+        : null,
+    }),
   };
+}
+
+/** What a filter step says it did, in one line. */
+function filterSummaryForRun(result: FilterResult) {
+  if (result.passed) {
+    if (result.conditions.length === 1) {
+      return "The email met this condition, so it carries on.";
+    }
+
+    return result.match === "all"
+      ? "The email met every condition, so it carries on."
+      : "The email met at least one condition, so it carries on.";
+  }
+
+  const failed = result.conditions.filter((condition) => !condition.passed);
+
+  return result.match === "all"
+    ? `The email stops here: ${countLabel(failed.length, "condition")} did not hold.`
+    : "The email stops here: none of these conditions held.";
 }
 
 /** The outputs exactly as the model was offered them, one per line. */
@@ -540,11 +608,20 @@ function runEndNote({
   draft,
   followedLabel,
   classificationError,
+  blockedStep,
 }: {
   draft: WorkflowDraft;
   followedLabel: ClassificationLabel | null;
   classificationError: string | null;
+  /** The filter step that stopped the run, when one did. */
+  blockedStep: DebugStep | null;
 }) {
+  // A blocked wire is the whole story of where the run ended, and it outranks
+  // anything the classification might otherwise have had to say.
+  if (blockedStep) {
+    return `The “${blockedStep.title}” filter blocked this email, so nothing after that wire ran.`;
+  }
+
   if (usableClassificationLabels(draft.labels).length === 0) {
     return "Name an output on the classification and the run will carry on past it.";
   }

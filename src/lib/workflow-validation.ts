@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  createWorkflowFilter,
+  filterOperatorNames,
+} from "@/lib/workflow-filters";
+
 const workflowActionTypeSchema = z.enum([
   "forward",
   "draft_reply",
@@ -9,9 +14,34 @@ const workflowActionTypeSchema = z.enum([
 
 export const workflowIdSchema = z.uuid();
 
+const filterConditionSchema = z.object({
+  id: z.string().min(1),
+  // Both sides are templates, and a half-written condition is a normal state
+  // for a draft — `isConditionComplete` is what decides whether a run reads it.
+  left: z.string(),
+  operator: z.enum(filterOperatorNames),
+  right: z.string(),
+});
+
+/**
+ * A wire's filter. Every field is defaulted so rows written before wires could
+ * carry one — where the key is simply absent — read back as an empty filter
+ * rather than failing the whole workflow.
+ */
+export const workflowFilterSchema = z
+  .object({
+    enabled: z.boolean().default(true),
+    name: z.string().default(""),
+    match: z.enum(["all", "any"]).default("all"),
+    caseSensitive: z.boolean().default(false),
+    conditions: z.array(filterConditionSchema).default([]),
+  })
+  .default(() => createWorkflowFilter());
+
 export const workflowActionSchema = z.object({
   id: z.string().min(1),
   type: workflowActionTypeSchema,
+  filter: workflowFilterSchema,
   labelName: z.string(),
   forwardTo: z.string(),
   subjectPrefix: z.string(),
@@ -42,6 +72,7 @@ export const workflowDraftSchema = z.object({
   ownerRole: z.string(),
   trigger: z.string(),
   classifierPrompt: z.string(),
+  classifierFilter: workflowFilterSchema,
   labels: z.array(classificationLabelSchema),
 });
 

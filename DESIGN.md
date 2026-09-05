@@ -431,6 +431,21 @@ beside or behind its source gets the same treatment: the wire leaves forwards,
 drops into a 34px lane below both nodes, and comes back to the inlet from the
 left rather than reversing through the node it just left.
 
+**A wire says whether it stops anything.** Half way along its run — measured
+along the wire itself, so a turning wire's marker still sits on it — an edge
+carries that wire's filter. With no rule on it, it is a 16px hairline circle
+that grows to 24px and fills with Signal Orange on hover: the connector
+handle's vocabulary, because it is the same kind of thing — an affordance, not
+an object. Once a rule is set it becomes a 20px chip on the Surface fill, a
+12px funnel glyph then the filter's name in 12px medium, capped at 112px and
+truncated, because a route that stops some mail and not other mail cannot be
+read from the wire alone. Chips draw above the nodes so a wire dragged short
+still shows what it is holding back, and auto-placed nodes leave a 132px gap so
+a chip sits along the wire rather than across either end of it. During a test
+the chip takes the run's state: a Signal Orange ring while it is the step in
+view, an Affirm border once the email is through, and a Danger border with a
+strike glyph on the one that stopped it.
+
 ## Do's and Don'ts
 
 ### Do:

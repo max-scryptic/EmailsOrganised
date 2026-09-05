@@ -58,6 +58,16 @@ Read both before designing a surface. The bullets below are the short version.
   (`src/components/workflows/variable-fields.tsx`) so the data panel can insert
   into them, and declare what a node outputs in
   `src/lib/workflow-variables.ts` — nowhere else.
+- A canvas node shows an icon and its name. Anything else about it — settings,
+  counts, summaries — belongs in the node's editor popover. The classification
+  node is the one exception, carrying a row per output label because each row is
+  a branch the flow leaves from.
+- The classification node's outputs are `ClassificationLabel[]` on the draft.
+  They are the branches on the board *and* the enum the model's answer is
+  decoded against, so adding one changes both. `src/lib/ai/classify-email.ts`
+  owns that call and is the only place the model is spoken to. Note the seam:
+  the column behind them is still called `outcomes`, mapped to `labels` in
+  `src/lib/workflows.ts` and `src/app/workflows/actions.ts`.
 - Test mode on the builder (`src/components/workflows/workflow-debug.tsx` for
   the UI, `src/lib/workflow-debug.ts` for the engine) steps one email through
   the draft on the board. It only ever reads the mailbox — the Gmail calls live
@@ -65,6 +75,11 @@ Read both before designing a surface. The bullets below are the short version.
   must be described in `actionStep`, never performed. A node's outputs come
   from `chainOutputFields`, so adding a variable in
   `src/lib/workflow-variables.ts` is what makes it show up in a run.
+- The branch a test run takes is the real classification call, made once on the
+  server before the run is built. `buildDebugRun` stays pure and synchronous: it
+  takes the answer as an argument, and takes `null` when there was no key or the
+  call failed. Following a branch by hand is a separate input again, so a user
+  can always step down the branch they are working on.
 - Every async product view should have designed loading, empty, and error
   states.
 - Destructive actions should go through `useConfirmDialog` or

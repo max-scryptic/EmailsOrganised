@@ -395,14 +395,32 @@ Compact and quiet; the primary is the only one that raises its voice.
 ### Workflow Canvas (signature component)
 
 The product's one surface with its own spatial rules. Nodes are absolutely
-positioned Surface cards with a hairline border, 12px padding, `rounded-md`
-(1.6px) and `shadow-sm`; edges are drawn behind them and move with the node as
-it is dragged. Selection is `border-primary` + `ring-2 ring-primary/20` +
+positioned Surface cards with a hairline border, `rounded-md` (1.6px) and
+`shadow-sm`; edges are drawn behind them and move with the node as it is
+dragged. Selection is `border-primary` + `ring-2 ring-primary/20` +
 `shadow-md`. An empty canvas offers a single node wearing the breathing Signal
 Glow halo. Connector handles are 4px dots that grow to 24px and fill with Signal
 Orange on hover or when open. Everything that floats — toolbar, add button,
 editor popovers — uses the shadow ladder in Elevation and enters with
 `animate-in fade-in-0 zoom-in-95` over 150ms.
+
+**A node states its identity, not its configuration.** 252×60px, 12px
+horizontal padding: a 36px tinted icon tile, one line of 14px medium-weight
+title, and nothing else. The width is set by the longest node name sitting
+beside the status badge a test run puts there — a node whose name truncates to
+fit its own state has stopped stating its identity. Settings, summaries, and
+counts belong in the node's
+editor popover, which is where they can be changed. A node missing something it
+cannot run without carries a single 14px Caution triangle at its right edge;
+what is missing is named in the node's accessible label and fixed in its panel.
+
+**The classification node is the one node that grows.** Below its title it
+carries a 26px row per output label — the label name in 12px muted type, right
+aligned, with that branch's connector dot on the node's edge — and 10px of
+padding under the last one. Edges leave from those dots rather than from the
+middle of the node, so the fan-out reads as one outlet per answer. With no
+outputs the node still shows one row, reading "No outputs yet", so an unfinished
+classification never looks finished.
 
 ## Do's and Don'ts
 

@@ -20,6 +20,12 @@ type WorkflowRow = {
   owner_role: string;
   trigger: string;
   classifier_prompt: string;
+  /**
+   * The classification node's output labels. The column is still called
+   * `outcomes` from when a classification was a node of its own — the shape it
+   * holds is `ClassificationLabel[]`, and the mapping happens here and in
+   * `saveWorkflow` so nothing else has to know the old name.
+   */
   outcomes: unknown;
   created_at: string;
   updated_at: string;
@@ -53,7 +59,9 @@ export function workflowFromRow(row: WorkflowRow): SavedWorkflow {
     ownerRole: row.owner_role,
     trigger: row.trigger,
     classifierPrompt: row.classifier_prompt,
-    outcomes: row.outcomes,
+    // Rows written before labels moved into the classification node also carry
+    // `description` and `examples` per entry; the schema drops them.
+    labels: row.outcomes,
   }) satisfies WorkflowDraft;
 
   return {

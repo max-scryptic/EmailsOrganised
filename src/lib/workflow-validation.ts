@@ -24,13 +24,12 @@ export const workflowActionSchema = z.object({
   requireApproval: z.boolean(),
 });
 
-export const workflowOutcomeSchema = z.object({
+export const classificationLabelSchema = z.object({
   id: z.string().min(1),
+  // Blank is valid: a label is added before it is named, and a draft is saved
+  // as it is built. An unnamed label simply never reaches the model.
   name: z.string(),
-  description: z.string(),
-  examples: z.string(),
-  // A draft is saved as it is built, so a classification whose actions have not
-  // been picked yet is valid to store.
+  // Same reasoning for a branch whose actions have not been picked yet.
   actions: z.array(workflowActionSchema),
 });
 
@@ -40,8 +39,25 @@ export const workflowDraftSchema = z.object({
   ownerRole: z.string(),
   trigger: z.string(),
   classifierPrompt: z.string(),
-  outcomes: z.array(workflowOutcomeSchema),
+  labels: z.array(classificationLabelSchema),
 });
+
+/**
+ * What the builder's "test this classification" button sends. The labels are
+ * the answers the model will be held to, so at least one has to be real.
+ */
+export const classificationTestInputSchema = z.object({
+  prompt: z.string().trim().min(1, "Write a classification prompt first."),
+  labels: z
+    .array(z.string().trim().min(1))
+    .min(1, "Add at least one output label first."),
+  subject: z.string(),
+  body: z.string(),
+});
+
+export type ClassificationTestInput = z.infer<
+  typeof classificationTestInputSchema
+>;
 
 export const saveWorkflowInputSchema = workflowDraftSchema.extend({
   id: workflowIdSchema.optional(),
@@ -61,3 +77,18 @@ export const debugWatchPollSchema = z.object({
 });
 
 export type DebugWatchPollInput = z.infer<typeof debugWatchPollSchema>;
+
+/**
+ * What the board sends to classify the email a test run is stepping through:
+ * the prompt, the outputs the model is held to, and the `email.*` values the
+ * trigger step produced, so `{{variables}}` resolve to the real message.
+ */
+export const debugClassifySchema = z.object({
+  prompt: z.string().trim().min(1, "Write a classification prompt first."),
+  labels: z
+    .array(z.string().trim().min(1))
+    .min(1, "Name at least one output first."),
+  email: z.record(z.string().max(200), z.string()),
+});
+
+export type DebugClassifyInput = z.infer<typeof debugClassifySchema>;

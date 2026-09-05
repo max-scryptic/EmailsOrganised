@@ -19,11 +19,17 @@ export type WorkflowAction = {
   requireApproval: boolean;
 };
 
-export type WorkflowOutcome = {
+/**
+ * One answer the classification step is allowed to give — "Sales", "FAQ",
+ * "Important" — and the actions that run when it gives it.
+ *
+ * The name is not decoration: it is handed to the model as the only set of
+ * answers it may return, and it is the branch the actions hang off on the
+ * canvas. One label, one output.
+ */
+export type ClassificationLabel = {
   id: string;
   name: string;
-  description: string;
-  examples: string;
   actions: WorkflowAction[];
 };
 
@@ -36,7 +42,7 @@ export type WorkflowDraft = {
   ownerRole: string;
   trigger: string;
   classifierPrompt: string;
-  outcomes: WorkflowOutcome[];
+  labels: ClassificationLabel[];
 };
 
 export type WorkflowStatus = "live" | "paused" | "draft";
@@ -88,6 +94,38 @@ export function createWorkflowAction(
   };
 }
 
+export function createClassificationLabel(
+  overrides: Partial<ClassificationLabel> = {}
+): ClassificationLabel {
+  return {
+    id: overrides.id ?? `label-${Math.random().toString(36).slice(2, 10)}`,
+    name: "",
+    actions: [],
+    ...overrides,
+  };
+}
+
+/**
+ * Labels the model can actually be forced onto: named, and named only once.
+ * A blank name has nothing to answer with, and two identical names would give
+ * the same answer two branches.
+ */
+export function usableClassificationLabels(labels: ClassificationLabel[]) {
+  const seen = new Set<string>();
+
+  return labels.filter((label) => {
+    const name = label.name.trim();
+
+    if (!name || seen.has(name.toLowerCase())) {
+      return false;
+    }
+
+    seen.add(name.toLowerCase());
+
+    return true;
+  });
+}
+
 /** The one email event every workflow starts from. */
 export const defaultWorkflowTrigger = "Email arrives in primary inbox";
 
@@ -110,6 +148,6 @@ export function createEmptyWorkflowDraft(): WorkflowDraft {
     ownerRole: "",
     trigger: defaultWorkflowTrigger,
     classifierPrompt: "",
-    outcomes: [],
+    labels: [],
   };
 }

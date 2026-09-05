@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import {
+  classifyDebugEmail,
   pollDebugWatch,
   startDebugWatch,
   type DebugWatchError,
@@ -32,14 +33,19 @@ import {
 import { cn } from "@/lib/utils";
 import {
   buildDebugRun,
+  emailVariableValues,
   sampleDebugEmail,
+  type DebugBranch,
+  type DebugClassification,
   type DebugEmail,
   type DebugRun,
   type DebugSetting,
   type DebugValue,
-  type OutcomeScore,
 } from "@/lib/workflow-debug";
-import type { WorkflowDraft } from "@/lib/workflow-data";
+import {
+  usableClassificationLabels,
+  type WorkflowDraft,
+} from "@/lib/workflow-data";
 
 /** How often the watcher asks Gmail whether anything has landed. */
 const pollIntervalMs = 4000;
@@ -58,13 +64,18 @@ export type DebugSession =
   | { phase: "starting" }
   | { phase: "listening"; startedAt: number; mailbox: string }
   | { phase: "error"; error: DebugWatchError }
+  /** The email is in; the model is being asked which branch it takes. */
+  | { phase: "classifying"; email: DebugEmail; source: DebugSource }
   | {
       phase: "running";
       email: DebugEmail;
       source: DebugSource;
       stepIndex: number;
-      /** Set when the user chose a branch the word match did not pick. */
-      forcedOutcomeId: string | null;
+      /** The model's answer, or null when it could not be asked. */
+      classification: DebugClassification | null;
+      classificationError: string | null;
+      /** Set when the user chose a branch the model did not pick. */
+      forcedLabelId: string | null;
     };
 
 export type WorkflowDebug = ReturnType<typeof useWorkflowDebug>;
@@ -89,7 +100,9 @@ export function useWorkflowDebug(draft: WorkflowDraft) {
         ? buildDebugRun({
             draft,
             email: session.email,
-            forcedOutcomeId: session.forcedOutcomeId,
+            classification: session.classification,
+            classificationError: session.classificationError,
+            forcedLabelId: session.forcedLabelId,
           })
         : null,
     [draft, session]
@@ -102,6 +115,7 @@ export function useWorkflowDebug(draft: WorkflowDraft) {
       : 0;
   const step = run?.steps[stepIndex] ?? null;
   const isRunning = session.phase === "running";
+  const isClassifying = session.phase === "classifying";
   const isDebugging = session.phase !== "off";
   /** True from pressing Test until an email arrives — the watcher is armed. */
   const isListening =
@@ -136,11 +150,9 @@ export function useWorkflowDebug(draft: WorkflowDraft) {
 
   const useSample = React.useCallback(() => {
     setSession({
-      phase: "running",
+      phase: "classifying",
       email: sampleDebugEmail(),
       source: "sample",
-      stepIndex: 0,
-      forcedOutcomeId: null,
     });
   }, []);
 
@@ -177,11 +189,11 @@ export function useWorkflowDebug(draft: WorkflowDraft) {
     );
   }, []);
 
-  /** Follows a different classification, and steps into it straight away. */
-  const chooseBranch = React.useCallback((outcomeId: string) => {
+  /** Follows a different output's branch, and steps into it straight away. */
+  const chooseBranch = React.useCallback((labelId: string) => {
     setSession((current) =>
       current.phase === "running"
-        ? { ...current, forcedOutcomeId: outcomeId, stepIndex: 2 }
+        ? { ...current, forcedLabelId: labelId, stepIndex: 2 }
         : current
     );
   }, []);
@@ -197,6 +209,66 @@ export function useWorkflowDebug(draft: WorkflowDraft) {
     },
     [goToStep, run]
   );
+
+  // The draft as it stands when the email lands. Read through a ref so the
+  // classification is asked once per email rather than re-asked on every
+  // keystroke while the run is on screen.
+  const draftRef = React.useRef(draft);
+
+  React.useEffect(() => {
+    draftRef.current = draft;
+  });
+
+  const emailToClassify = session.phase === "classifying" ? session.email : null;
+  const classifySource = session.phase === "classifying" ? session.source : null;
+
+  // Ask the model which branch this email takes, then hand the answer to the
+  // run. A failure is not fatal: the run still steps, and the classification
+  // step invites the user to pick a branch instead.
+  React.useEffect(() => {
+    if (!emailToClassify || !classifySource) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      const current = draftRef.current;
+      const labels = usableClassificationLabels(current.labels).map((label) =>
+        label.name.trim()
+      );
+      // Nothing to ask is not a failure — the classification is simply not
+      // finished being built, and the run says so on its own step.
+      const result =
+        current.classifierPrompt.trim() && labels.length > 0
+          ? await classifyDebugEmail({
+              prompt: current.classifierPrompt,
+              labels,
+              email: emailVariableValues(emailToClassify),
+            })
+          : null;
+
+      if (cancelled) {
+        return;
+      }
+
+      setSession({
+        phase: "running",
+        email: emailToClassify,
+        source: classifySource,
+        stepIndex: 0,
+        classification:
+          result?.status === "classified" ? result.classification : null,
+        classificationError:
+          result?.status === "error" ? result.description : null,
+        forcedLabelId: null,
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [classifySource, emailToClassify]);
 
   // Poll the mailbox while listening. One timer at a time, chained rather than
   // on an interval, so a slow answer cannot stack requests.
@@ -224,11 +296,9 @@ export function useWorkflowDebug(draft: WorkflowDraft) {
           20
         );
         setSession({
-          phase: "running",
+          phase: "classifying",
           email: result.email,
           source: "mailbox",
-          stepIndex: 0,
-          forcedOutcomeId: null,
         });
         return;
       }
@@ -292,6 +362,7 @@ export function useWorkflowDebug(draft: WorkflowDraft) {
     stepIndex,
     stepCount,
     isRunning,
+    isClassifying,
     isDebugging,
     isListening,
     elapsedSeconds,
@@ -607,11 +678,10 @@ export function WorkflowDebugStepPanel({
           </p>
         ) : null}
 
-        {step.scores ? (
+        {step.branches ? (
           <BranchPicker
-            scores={step.scores}
-            matchedOutcomeId={run.matchedOutcomeId}
-            forced={run.forced}
+            branches={step.branches}
+            error={run.classificationError}
             onChoose={debug.chooseBranch}
           />
         ) : null}
@@ -728,70 +798,79 @@ function OutputRow({ output }: { output: DebugValue }) {
 }
 
 /**
- * Every classification and how it scored, with the branch the run is following
- * marked. Picking another one re-runs the same email down that branch, which is
- * how a classification with no matching words is tested at all.
+ * Every output of the classification, with the one the model answered marked
+ * and the one this run follows highlighted. Picking another steps the same
+ * email down that branch, which is how a branch the email was never going to
+ * reach gets tested at all.
  */
 function BranchPicker({
-  scores,
-  matchedOutcomeId,
-  forced,
+  branches,
+  error,
   onChoose,
 }: {
-  scores: OutcomeScore[];
-  matchedOutcomeId: string | null;
-  forced: boolean;
-  onChoose: (outcomeId: string) => void;
+  branches: DebugBranch[];
+  /** Set when the model could not be asked at all. */
+  error: string | null;
+  onChoose: (labelId: string) => void;
 }) {
-  if (scores.length === 0) {
+  if (branches.length === 0) {
     return (
       <p className="rounded-md border border-dashed px-2 py-3 text-center text-xs text-muted-foreground">
-        There is nothing to score yet.
+        This classification has no outputs yet, so there is no branch to take.
       </p>
     );
   }
 
   return (
-    <DebugSection title="How each classification scored">
-      {scores.map((score) => {
-        const isFollowed = score.outcomeId === matchedOutcomeId;
-
-        return (
-          <button
-            key={score.outcomeId}
-            type="button"
-            onClick={() => onChoose(score.outcomeId)}
-            aria-pressed={isFollowed}
-            className={cn(
-              "w-full rounded-md border px-2 py-1.5 text-left transition",
-              "hover:border-primary/60 hover:bg-primary/5",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              isFollowed && "border-primary/60 bg-primary/5"
-            )}
-          >
-            <span className="flex items-center gap-1.5">
-              <span className="min-w-0 flex-1 truncate text-xs font-medium">
-                {score.name || "Untitled classification"}
-              </span>
-              {isFollowed ? (
-                <Badge variant="outline" className="shrink-0">
-                  {forced ? "Chosen" : "Followed"}
-                </Badge>
-              ) : null}
-              <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-                {score.score.toFixed(2)}
-              </span>
+    <DebugSection title="Outputs">
+      {error ? (
+        <p className="rounded-md border border-dashed px-2 py-1.5 text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
+      {branches.map((branch) => (
+        <button
+          key={branch.labelId}
+          type="button"
+          onClick={() => onChoose(branch.labelId)}
+          aria-pressed={branch.followed}
+          className={cn(
+            "w-full rounded-md border px-2 py-1.5 text-left transition",
+            "hover:border-primary/60 hover:bg-primary/5",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            branch.followed && "border-primary/60 bg-primary/5"
+          )}
+        >
+          <span className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate text-xs font-medium",
+                branch.name || "italic text-muted-foreground"
+              )}
+            >
+              {branch.name || "Unnamed output"}
             </span>
+            {branch.picked ? (
+              <Badge variant="outline" className="shrink-0">
+                Model&rsquo;s answer
+              </Badge>
+            ) : null}
+            {branch.followed && !branch.picked ? (
+              <Badge variant="outline" className="shrink-0">
+                Chosen
+              </Badge>
+            ) : null}
+          </span>
+          {branch.unusable ? (
             <span className="mt-0.5 block text-xs text-muted-foreground">
-              {score.reason}
+              {branch.unusable}
             </span>
-          </button>
-        );
-      })}
+          ) : null}
+        </button>
+      ))}
       <p className="text-xs text-muted-foreground">
-        In a test run the branch is picked by matching each classification&rsquo;s
-        own words against the email, not by the model that runs it live. Pick any
-        classification to step through its branch.
+        The branch is picked by the same model call this workflow runs on. Pick
+        any output to step through its branch instead.
       </p>
     </DebugSection>
   );

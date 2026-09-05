@@ -2,24 +2,24 @@
  * The engine behind debug mode: it takes one real email and the draft on the
  * board, and produces the ordered list of steps a run would take through it.
  *
- * Two things are deliberately *not* done here, and the panel says so on its
- * face:
+ * One thing is deliberately *not* done here, and the panel says so on its face:
+ * nothing is written to the mailbox. Actions are resolved and described, not
+ * performed, so testing a workflow can never send, tag, or archive anything.
  *
- * - Nothing is written to the mailbox. Actions are resolved and described, not
- *   performed, so testing a workflow can never send, tag, or archive anything.
- * - The classification is a local word match against each classification's own
- *   rule text, not the model that runs live. It exists so the user can see
- *   which branch their words point at and step down any branch they choose.
- *
- * The module is plain TypeScript on purpose: the board runs it in the browser
- * on the unsaved draft, so a workflow can be tested before it is ever saved.
+ * The branch, by contrast, is real. It comes from the same model call the
+ * workflow runs on, made on the server before this is called and handed in as
+ * `classification` — which is what keeps this module plain synchronous
+ * TypeScript that the board can run in the browser on the unsaved draft, so a
+ * workflow can be tested before it is ever saved. A run with no answer (no API
+ * key, or the call failed) still steps; the user picks the branch instead.
  */
 
 import {
   actionLabels,
+  usableClassificationLabels,
+  type ClassificationLabel,
   type WorkflowAction,
   type WorkflowDraft,
-  type WorkflowOutcome,
 } from "@/lib/workflow-data";
 import {
   chainNodeOutputTitle,
@@ -54,7 +54,17 @@ export type DebugEmail = {
   mailbox: string;
 };
 
-export type DebugStepKind = "trigger" | "classifier" | "outcome" | "action";
+export type DebugStepKind = "trigger" | "classifier" | "action";
+
+/**
+ * The model's answer for this email, as the classification node's own call
+ * returns it. Null on a run made without one.
+ */
+export type DebugClassification = {
+  label: string;
+  confidence: number;
+  reasoning: string;
+};
 
 /**
  * A setting on the node exactly as the run read it: the text the user typed,
@@ -80,14 +90,20 @@ export type DebugValue = {
   pending?: boolean;
 };
 
-/** How each classification scored against the email, and why. */
-export type OutcomeScore = {
-  outcomeId: string;
+/**
+ * One of the classification's outputs as the run reports it: whether the model
+ * picked it, and whether this run is the one following it. The two differ when
+ * the user steps down a branch to test it.
+ */
+export type DebugBranch = {
+  labelId: string;
   name: string;
-  /** 0 to 1. Zero means nothing in the rule text appears in the email. */
-  score: number;
-  matched: string[];
-  reason: string;
+  /** The model answered with this label. */
+  picked: boolean;
+  /** This is the branch the run is walking. */
+  followed: boolean;
+  /** Why this branch cannot be the answer, when it cannot. */
+  unusable: string | null;
 };
 
 export type DebugStep = {
@@ -105,20 +121,22 @@ export type DebugStep = {
   simulated?: boolean;
   settings: DebugSetting[];
   outputs: DebugValue[];
-  /** Classifier step only: every classification, best match first. */
-  scores?: OutcomeScore[];
+  /** Classification step only: every output, and which one the run follows. */
+  branches?: DebugBranch[];
 };
 
 export type DebugRun = {
   email: DebugEmail;
   steps: DebugStep[];
-  scores: OutcomeScore[];
-  /** The branch the run took, or null when nothing matched. */
-  matchedOutcomeId: string | null;
-  /** The branch the word match picked, before any override. */
-  suggestedOutcomeId: string | null;
-  /** True when the user chose the branch instead of the match. */
+  branches: DebugBranch[];
+  /** The branch the run took, or null when there is none to take. */
+  followedLabelId: string | null;
+  /** The branch the model picked, before any override. */
+  pickedLabelId: string | null;
+  /** True when the user chose the branch instead of following the model. */
   forced: boolean;
+  /** Set when the classification could not be run at all. */
+  classificationError: string | null;
   /** Why the run stopped where it did, when it stopped early. */
   endNote: string | null;
 };
@@ -147,7 +165,7 @@ export function resolveTemplate(template: string, values: Map<string, string>) {
 }
 
 /** Every `email.*` value for one message, one per declared token. */
-function emailVariableValues(
+export function emailVariableValues(
   email: DebugEmail
 ): Record<EmailVariableToken, string> {
   return {
@@ -173,147 +191,88 @@ function emailVariableValues(
 }
 
 /**
- * Words too common to tell one classification from another. Matching on them
- * would make every rule look like a hit.
+ * Every output the classification declares, marked with what the run did about
+ * it. A blank or repeated name is carried here rather than dropped: the branch
+ * is on the board, so the panel has to say why the model was never offered it.
  */
-const stopWords = new Set([
-  "the", "and", "for", "you", "your", "our", "with", "that", "this", "from",
-  "are", "was", "were", "has", "have", "had", "not", "but", "all", "any",
-  "can", "will", "would", "should", "about", "into", "than", "then", "them",
-  "they", "there", "here", "when", "what", "which", "who", "whom", "how",
-  "email", "emails", "message", "messages", "mail", "sender", "someone",
-  "anything", "something", "please", "thanks", "regards", "hello", "http",
-  "https", "www", "com",
-]);
-
-function significantTerms(text: string) {
-  return new Set(
-    text
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter((term) => term.length >= 3 && !stopWords.has(term))
+function describeBranches({
+  draft,
+  pickedLabelId,
+  followedLabelId,
+}: {
+  draft: WorkflowDraft;
+  pickedLabelId: string | null;
+  followedLabelId: string | null;
+}): DebugBranch[] {
+  const usableIds = new Set(
+    usableClassificationLabels(draft.labels).map((label) => label.id)
   );
+
+  return draft.labels.map((label) => ({
+    labelId: label.id,
+    name: label.name.trim(),
+    picked: label.id === pickedLabelId,
+    followed: label.id === followedLabelId,
+    unusable: usableIds.has(label.id)
+      ? null
+      : label.name.trim()
+        ? "Another output already has this name, so the model is only offered one of them."
+        : "This output has no name yet, so the model is never offered it.",
+  }));
 }
 
 /**
- * Scores one classification against the email by how much of its own rule text
- * turns up in the message. Words in the subject count double — a rule's word in
- * the subject line is a far stronger signal than the same word buried in a
- * quoted thread.
+ * The label the model answered with, as one of the draft's outputs. Matched by
+ * name because the name is what the model was given — and it can miss when the
+ * board was edited after the call was made.
  */
-function scoreOutcome(outcome: WorkflowOutcome, email: DebugEmail): OutcomeScore {
-  const ruleText = [outcome.name, outcome.description, outcome.examples]
-    .filter(Boolean)
-    .join(" ");
-  const ruleTerms = Array.from(significantTerms(ruleText));
-
-  if (ruleTerms.length === 0) {
-    return {
-      outcomeId: outcome.id,
-      name: outcome.name,
-      score: 0,
-      matched: [],
-      reason:
-        "This classification has no rule text yet, so there is nothing to match on.",
-    };
+function labelForAnswer(
+  draft: WorkflowDraft,
+  classification: DebugClassification | null
+) {
+  if (!classification) {
+    return null;
   }
 
-  const subjectTerms = significantTerms(email.subject);
-  const bodyTerms = significantTerms(
-    `${email.snippet} ${email.bodyText} ${email.fromName} ${email.fromAddress}`
+  return (
+    usableClassificationLabels(draft.labels).find(
+      (label) => label.name.trim() === classification.label
+    ) ?? null
   );
-  const matchedInSubject: string[] = [];
-  const matchedInBody: string[] = [];
-
-  ruleTerms.forEach((term) => {
-    if (subjectTerms.has(term)) {
-      matchedInSubject.push(term);
-      return;
-    }
-
-    if (bodyTerms.has(term)) {
-      matchedInBody.push(term);
-    }
-  });
-
-  const weighted = matchedInSubject.length * 2 + matchedInBody.length;
-  const score = Math.min(1, weighted / ruleTerms.length);
-  const matched = [...matchedInSubject, ...matchedInBody];
-
-  return {
-    outcomeId: outcome.id,
-    name: outcome.name,
-    score,
-    matched,
-    reason: matchReason(matchedInSubject, matchedInBody),
-  };
-}
-
-function matchReason(inSubject: string[], inBody: string[]) {
-  if (inSubject.length === 0 && inBody.length === 0) {
-    return "No word from this classification's rule appears in the email.";
-  }
-
-  const parts: string[] = [];
-
-  if (inSubject.length > 0) {
-    parts.push(`${listTerms(inSubject)} in the subject`);
-  }
-
-  if (inBody.length > 0) {
-    parts.push(`${listTerms(inBody)} in the body`);
-  }
-
-  return `Matched ${parts.join(", and ")}.`;
-}
-
-/** Keeps a reason readable when a rule matches a dozen words. */
-function listTerms(terms: string[]) {
-  const shown = terms.slice(0, 4).map((term) => `“${term}”`);
-
-  return terms.length > shown.length
-    ? `${shown.join(", ")} and ${terms.length - shown.length} more`
-    : shown.join(", ");
-}
-
-/** Every classification scored against the email, best match first. */
-export function scoreOutcomes(draft: WorkflowDraft, email: DebugEmail) {
-  return draft.outcomes
-    .map((outcome) => scoreOutcome(outcome, email))
-    .sort((a, b) => b.score - a.score);
 }
 
 /**
  * Builds the run: the steps in the order they happen, with each node's settings
  * resolved against what the steps before it produced.
  *
- * `forcedOutcomeId` follows a branch the word match did not pick, which is how
- * a user tests the branch they are actually working on.
+ * `classification` is the model's answer, already obtained on the server.
+ * `forcedLabelId` follows a branch the model did not pick, which is how a user
+ * tests the branch they are actually working on.
  */
 export function buildDebugRun({
   draft,
   email,
-  forcedOutcomeId,
+  classification = null,
+  classificationError = null,
+  forcedLabelId,
 }: {
   draft: WorkflowDraft;
   email: DebugEmail;
-  forcedOutcomeId?: string | null;
+  classification?: DebugClassification | null;
+  classificationError?: string | null;
+  forcedLabelId?: string | null;
 }): DebugRun {
-  const scores = scoreOutcomes(draft, email);
-  const best = scores.find((score) => score.score > 0) ?? null;
-  const suggestedOutcomeId = best?.outcomeId ?? null;
-  const forcedOutcome = forcedOutcomeId
-    ? draft.outcomes.find((outcome) => outcome.id === forcedOutcomeId) ?? null
+  const pickedLabel = labelForAnswer(draft, classification);
+  const forcedLabel = forcedLabelId
+    ? draft.labels.find((label) => label.id === forcedLabelId) ?? null
     : null;
-  const matchedOutcome =
-    forcedOutcome ??
-    (suggestedOutcomeId
-      ? draft.outcomes.find((outcome) => outcome.id === suggestedOutcomeId) ??
-        null
-      : null);
-  const matchedScore = matchedOutcome
-    ? scores.find((score) => score.outcomeId === matchedOutcome.id) ?? null
-    : null;
+  const followedLabel = forcedLabel ?? pickedLabel;
+  const forced = Boolean(forcedLabel && forcedLabel.id !== pickedLabel?.id);
+  const branches = describeBranches({
+    draft,
+    pickedLabelId: pickedLabel?.id ?? null,
+    followedLabelId: followedLabel?.id ?? null,
+  });
 
   // The nodes this run touches, in order — the same chain the inspector uses to
   // work out which variables a node can read, so the tokens agree.
@@ -322,16 +281,9 @@ export function buildDebugRun({
     { id: "classifier", kind: "classifier" },
   ];
 
-  if (matchedOutcome) {
-    chain.push({
-      id: matchedOutcome.id,
-      kind: "outcome",
-      outcomeName: matchedOutcome.name,
-    });
-    matchedOutcome.actions.forEach((action) => {
-      chain.push({ id: action.id, kind: "action", actionType: action.type });
-    });
-  }
+  followedLabel?.actions.forEach((action) => {
+    chain.push({ id: action.id, kind: "action", actionType: action.type });
+  });
 
   const fieldsByNode = chainOutputFields(chain);
   const values = new Map<string, string>();
@@ -346,7 +298,7 @@ export function buildDebugRun({
     summary,
     settings,
     simulated,
-    scores: stepScores,
+    branches: stepBranches,
     outputs,
   }: {
     nodeId: string;
@@ -356,7 +308,7 @@ export function buildDebugRun({
     summary: string;
     settings: DebugSetting[];
     simulated?: boolean;
-    scores?: OutcomeScore[];
+    branches?: DebugBranch[];
     /** Keyed by the part of the token after its namespace, e.g. `from.name`. */
     outputs: Record<string, { value: string; pending?: boolean }>;
   }) {
@@ -383,7 +335,7 @@ export function buildDebugRun({
       simulated,
       settings,
       outputs: resolved,
-      scores: stepScores,
+      branches: stepBranches,
     });
   }
 
@@ -406,124 +358,152 @@ export function buildDebugRun({
     outputs: mapValues(emailVariableValues(email), (value) => ({ value })),
   });
 
-  const classifierPrompt = resolveTemplate(draft.classifierPrompt, values);
+  const prompt = resolveTemplate(draft.classifierPrompt, values);
 
   commit({
     nodeId: "classifier",
     kind: "classifier",
-    kindLabel: "Filter",
+    kindLabel: "Classification",
     title: chainNodeOutputTitle({ id: "classifier", kind: "classifier" }),
-    summary: matchedOutcome
-      ? `Best match: “${matchedOutcome.name}”${
-          forcedOutcome && forcedOutcome.id !== suggestedOutcomeId
-            ? " (branch chosen by you)"
-            : ""
-        }.`
-      : draft.outcomes.length === 0
-        ? "This workflow has no classifications yet, so there is nothing to match."
-        : "No classification matched this email.",
+    summary: classificationSummary({
+      draft,
+      classification,
+      classificationError,
+      pickedLabel,
+      followedLabel,
+      forced,
+    }),
     settings: [
       {
-        label: "Filter instructions",
+        label: "Prompt",
         template: draft.classifierPrompt,
-        value: classifierPrompt.value,
-        missing: classifierPrompt.missing,
+        value: prompt.value,
+        missing: prompt.missing,
+      },
+      {
+        label: "Outputs",
+        template: outputsSetting(draft),
+        value: outputsSetting(draft),
+        missing: [],
       },
     ],
-    scores,
+    branches,
     outputs: {
-      name: { value: matchedOutcome?.name ?? "" },
-      confidence: { value: matchedScore ? matchedScore.score.toFixed(2) : "0" },
-      reasoning: {
-        value:
-          matchedScore?.reason ??
-          (draft.outcomes.length === 0
-            ? "There are no classifications to match against yet."
-            : "No classification rule matched this email."),
+      label: { value: classification?.label ?? "" },
+      confidence: {
+        value: classification ? classification.confidence.toFixed(2) : "",
+        pending: !classification,
       },
-      summary: { value: "", pending: true },
+      reasoning: {
+        value: classification?.reasoning ?? "",
+        pending: !classification,
+      },
     },
   });
 
-  if (matchedOutcome) {
-    const rule = resolveTemplate(matchedOutcome.description, values);
-    const examples = resolveTemplate(matchedOutcome.examples, values);
+  followedLabel?.actions.forEach((action) => {
+    const step = actionStep({ action, values, ranAt });
 
     commit({
-      nodeId: matchedOutcome.id,
-      kind: "outcome",
-      kindLabel: "Classification",
-      title: matchedOutcome.name || "Classification",
-      summary:
-        matchedOutcome.actions.length > 0
-          ? `Running ${matchedOutcome.actions.length} action${
-              matchedOutcome.actions.length === 1 ? "" : "s"
-            } under this classification.`
-          : "This classification has no actions attached.",
-      settings: [
-        {
-          label: "Classification rule",
-          template: matchedOutcome.description,
-          value: rule.value,
-          missing: rule.missing,
-        },
-        {
-          label: "Examples",
-          template: matchedOutcome.examples,
-          value: examples.value,
-          missing: examples.missing,
-        },
-      ],
-      outputs: {
-        name: { value: matchedOutcome.name },
-        rule: { value: rule.value },
-      },
+      nodeId: action.id,
+      kind: "action",
+      kindLabel: "Action",
+      title: actionLabels[action.type],
+      summary: step.summary,
+      simulated: true,
+      settings: step.settings,
+      outputs: step.outputs,
     });
-
-    matchedOutcome.actions.forEach((action) => {
-      const step = actionStep({ action, values, ranAt });
-
-      commit({
-        nodeId: action.id,
-        kind: "action",
-        kindLabel: "Action",
-        title: actionLabels[action.type],
-        summary: step.summary,
-        simulated: true,
-        settings: step.settings,
-        outputs: step.outputs,
-      });
-    });
-  }
+  });
 
   return {
     email,
     steps,
-    scores,
-    matchedOutcomeId: matchedOutcome?.id ?? null,
-    suggestedOutcomeId,
-    forced: Boolean(forcedOutcome && forcedOutcome.id !== suggestedOutcomeId),
-    endNote: runEndNote({ draft, matchedOutcome }),
+    branches,
+    followedLabelId: followedLabel?.id ?? null,
+    pickedLabelId: pickedLabel?.id ?? null,
+    forced,
+    classificationError,
+    endNote: runEndNote({ draft, followedLabel, classificationError }),
   };
+}
+
+/** The outputs exactly as the model was offered them, one per line. */
+function outputsSetting(draft: WorkflowDraft) {
+  const usable = usableClassificationLabels(draft.labels);
+
+  return usable.length > 0
+    ? usable.map((label) => label.name.trim()).join("\n")
+    : "";
+}
+
+function classificationSummary({
+  draft,
+  classification,
+  classificationError,
+  pickedLabel,
+  followedLabel,
+  forced,
+}: {
+  draft: WorkflowDraft;
+  classification: DebugClassification | null;
+  classificationError: string | null;
+  pickedLabel: ClassificationLabel | null;
+  followedLabel: ClassificationLabel | null;
+  forced: boolean;
+}) {
+  if (usableClassificationLabels(draft.labels).length === 0) {
+    return "This classification has no named outputs yet, so there is nothing the model can answer with.";
+  }
+
+  if (classificationError) {
+    return forced && followedLabel
+      ? `The model could not be asked, so this run follows “${followedLabel.name.trim()}” because you picked it.`
+      : "The model could not be asked. Pick an output below to step down its branch anyway.";
+  }
+
+  if (!classification) {
+    return followedLabel
+      ? `Following “${followedLabel.name.trim()}” because you picked it.`
+      : "Pick an output below to step down its branch.";
+  }
+
+  const confidence = `${Math.round(classification.confidence * 100)}% confident`;
+
+  if (forced && followedLabel) {
+    return `The model answered “${classification.label}” (${confidence}); this run follows “${followedLabel.name.trim()}” because you picked it.`;
+  }
+
+  if (!pickedLabel) {
+    // The answer no longer names an output — the board was edited after the
+    // call, which is worth saying rather than showing an empty branch.
+    return `The model answered “${classification.label}”, which is no longer one of this classification's outputs.`;
+  }
+
+  return `The model answered “${classification.label}” — ${confidence}.`;
 }
 
 function runEndNote({
   draft,
-  matchedOutcome,
+  followedLabel,
+  classificationError,
 }: {
   draft: WorkflowDraft;
-  matchedOutcome: WorkflowOutcome | null;
+  followedLabel: ClassificationLabel | null;
+  classificationError: string | null;
 }) {
-  if (draft.outcomes.length === 0) {
-    return "Add a classification and the run will carry on past the filter.";
+  if (usableClassificationLabels(draft.labels).length === 0) {
+    return "Name an output on the classification and the run will carry on past it.";
   }
 
-  if (!matchedOutcome) {
-    return "Nothing after the filter ran. Pick a classification on the filter step to test its branch anyway.";
+  if (!followedLabel) {
+    return classificationError
+      ? "Nothing after the classification ran. Pick an output on this step to test its branch anyway."
+      : "Nothing after the classification ran. Pick an output on this step to test its branch.";
   }
 
-  if (matchedOutcome.actions.length === 0) {
-    return "The branch ends here — no actions are attached to this classification.";
+  if (followedLabel.actions.length === 0) {
+    return "The branch ends here — no actions are attached to this output.";
   }
 
   return null;

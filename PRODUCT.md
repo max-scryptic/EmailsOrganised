@@ -22,9 +22,9 @@ showing up.
 
 EmailsOrganised turns inbox triage into workflows the user builds and can see.
 A workflow starts from a trigger (by default, mail arriving in the primary
-inbox), classifies each message against outcomes the user describes in their own
-words, and runs the actions attached to the matched outcome — forward, draft a
-reply, tag, or archive.
+inbox), classifies each message with a prompt the user writes against output
+labels the user names, and runs the actions on the branch the answer lands in —
+forward, draft a reply, tag, or archive.
 
 Success is a user who trusts what the workflow did without re-reading the
 inbox to check.
@@ -32,8 +32,8 @@ inbox to check.
 ## Positioning
 
 Triage rules are a **visible workflow canvas**, not a hidden list of filters.
-The user reads their own triage logic as a structure — trigger, outcomes,
-actions — and edits it in place. Competing inbox tools bury the same behaviour
+The user reads their own triage logic as a structure — trigger, classification
+outputs, actions — and edits it in place. Competing inbox tools bury the same behaviour
 in a settings list or behind an opaque model; the mechanism here is that the
 logic is legible and directly manipulable.
 
@@ -44,9 +44,13 @@ logic is legible and directly manipulable.
   it the ability to do its job are a single step for the user.
 - Work happens in the browser alongside Gmail, not instead of it. Actions land
   back in the user's real mailbox.
-- Building a workflow is an act of describing intent in prose: the classifier
-  prompt and each outcome's description and examples are written by the user,
+- Building a workflow is an act of describing intent in prose: the
+  classification prompt and the names of its outputs are written by the user,
   not picked from a fixed taxonomy.
+- The classification is one cheap GPT call per message. The user's output labels
+  are not a suggestion to the model — they are the enum its answer is decoded
+  against, so a workflow offering Sales / FAQ / Important can only ever be
+  handed one of those three.
 - A workflow has a lifecycle the user controls: `draft`, `live`, `paused`.
 
 ## Capabilities and Constraints
@@ -56,17 +60,23 @@ Confirmed and implemented:
 - Workflow list and detail builder at `/workflows`, `/workflows/new`,
   `/workflows/[workflowId]`; workflows persist in `public.workflows`.
 - Workflow vocabulary the UI must keep consistent: **workflow**, **trigger**,
-  **classifier prompt**, **outcome** (name, description, examples), **action**,
-  and the four action labels "Forward email", "Draft reply", "Tag email",
-  "Archive". Status labels are "Live", "Paused", "Draft".
+  **classification** (its **prompt** and its **outputs**), **branch**,
+  **action**, and the four action labels "Forward email", "Draft reply", "Tag
+  email", "Archive". Status labels are "Live", "Paused", "Draft". An output is a
+  setting of the classification node, not a node of its own — it is named in
+  that node's panel and appears on the board as a branch.
+- Classification runs through OpenAI, keyed by `OPENAI_API_KEY` and modelled by
+  `OPENAI_CLASSIFIER_MODEL` (default `gpt-4o-mini`). The classification panel
+  can run one against a sample email.
 - Test mode on the builder: "Test workflow" arms the trigger node to listen to
   the connected mailbox (Gmail read only), and the first message to arrive
   after that starts a run the user steps through node by node, seeing each
   node's settings with `{{variables}}` resolved and the values it passes on. A
-  test never writes to the mailbox — actions are described, not performed — and
-  the branch is chosen by matching each classification's own words against the
-  email, not by the live model, so any branch can be stepped through on demand.
-  A sample email stands in when no mailbox is connected.
+  test never writes to the mailbox — actions are described, not performed. The
+  branch is picked by the same model call the workflow runs on, and the user can
+  follow any other branch on demand to test it. A sample email stands in when no
+  mailbox is connected; with no API key the run still steps, and says the branch
+  is the user's choice rather than the model's.
 - Actions carry their own settings — forward target, subject prefix, note,
   signature, include original thread, mark handled, draft instructions, draft
   tone, and an approval requirement on generated drafts.
@@ -116,8 +126,9 @@ Absent — future work must not fabricate these:
    do before it runs, the surface has failed regardless of how it looks.
 2. **The canvas is the centre of gravity.** `/workflows` is the product; every
    other surface exists to support returning to it.
-3. **The user writes the intent.** Outcomes and classifier prompts are the
-   user's own words. Do not replace that expressiveness with fixed categories.
+3. **The user writes the intent.** The classification prompt and the names of
+   its outputs are the user's own words. Do not replace that expressiveness with
+   fixed categories.
 4. **Automation is reversible and inspectable.** Draft, pause, approval before
    sending — the user stays able to stop and check.
 5. **One consent, honestly scoped.** The product asks for mailbox access once

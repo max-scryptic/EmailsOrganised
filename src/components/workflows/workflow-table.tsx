@@ -124,7 +124,7 @@ export function WorkflowTable({ workflows }: { workflows: SavedWorkflow[] }) {
     const confirmed = await confirm({
       title: `Delete ${workflow.draft.name}?`,
       description:
-        "The workflow stops running and its classifier, outcomes, and actions are removed. This cannot be undone.",
+        "The workflow stops running and its classification, outputs, and actions are removed. This cannot be undone.",
       confirmLabel: "Delete workflow",
     });
 

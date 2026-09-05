@@ -4,8 +4,7 @@ import * as React from "react";
 import {
   Archive,
   CheckCircle2,
-  CircleDot,
-  Filter,
+  ChevronRight,
   FlaskConical,
   Forward,
   Grip,
@@ -14,6 +13,7 @@ import {
   Loader2,
   MailCheck,
   Minus,
+  Play,
   Plus,
   Save,
   Sparkles,
@@ -23,7 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { saveWorkflow } from "@/app/workflows/actions";
+import { saveWorkflow, testClassification } from "@/app/workflows/actions";
 import { InlineEditableText } from "@/components/workflows/inline-editable-text";
 import {
   NodeOutputSummary,
@@ -44,6 +44,11 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -54,16 +59,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useConfirmDialog } from "@/components/use-confirm-dialog";
 import { cn } from "@/lib/utils";
 import {
   actionLabels,
+  createClassificationLabel,
   createWorkflowAction,
   defaultWorkflowNamePrefix,
+  usableClassificationLabels,
+  type ClassificationLabel,
   type WorkflowAction,
   type WorkflowActionType,
   type WorkflowDraft,
-  type WorkflowOutcome,
   type WorkflowStatus,
 } from "@/lib/workflow-data";
 import {
@@ -87,7 +95,22 @@ const actionTypes = Object.keys(actionLabels) as WorkflowActionType[];
 
 const canvasWidth = 1520;
 const canvasHeight = 980;
-const nodeWidth = 248;
+/**
+ * A node says what it is and nothing else, so it is sized for one line of text
+ * beside one icon — wide enough that a node's name still fits whole beside the
+ * status marker a test run puts there. Everything a node used to summarise on the board — the
+ * prompt, the counts, the readiness badge — lives in its settings panel, which
+ * is where it can be acted on.
+ */
+const nodeWidth = 252;
+const nodeBaseHeight = 60;
+/**
+ * The classification node is the one exception: it grows a row per output
+ * label, because each of those rows is an outlet the flow branches from and an
+ * unnamed outlet is not a flow anyone can read.
+ */
+const branchRowHeight = 26;
+const branchListPaddingBottom = 10;
 /**
  * How far the board can be scaled. The floor keeps a node's label readable;
  * the ceiling is about as close as you can get before the grid stops helping.
@@ -123,15 +146,18 @@ const defaultConnectMenuHeight = 340;
 const nodeDragThreshold = 4;
 /** Gap the auto-placed node leaves after the node it was added from. */
 const autoPlaceGap = 78;
-const autoPlaceStep = 148;
-const nodeHeights = {
-  trigger: 112,
-  classifier: 112,
-  outcome: 124,
-  action: 104,
-} satisfies Record<CanvasNodeKind, number>;
+const autoPlaceStep = 96;
+/** Where the fixed spine sits before anyone drags it. */
+const defaultTriggerPosition = { x: 96, y: 300 };
+const defaultClassifierPosition = { x: 400, y: 288 };
 
-type CanvasNodeKind = "trigger" | "classifier" | "outcome" | "action";
+type CanvasNodeKind = "trigger" | "classifier" | "action";
+
+/** One output label as the board draws it: a row with an outlet on its edge. */
+type CanvasBranch = {
+  labelId: string;
+  name: string;
+};
 
 /**
  * How a node reads during a test: the trigger while it waits for mail, then —
@@ -161,12 +187,17 @@ type FlowCanvasNode = {
   kind: CanvasNodeKind;
   module: SelectedModule;
   title: string;
-  detail: string;
-  meta: string;
   icon: React.ComponentType<{ className?: string }>;
   position: CanvasNodePosition;
+  /** Board pixels. Only the classification node's varies, with its branches. */
+  height: number;
   ready: boolean;
-  outcomeId?: string;
+  /** What is still missing, shown on the node's warning marker. */
+  needs?: string;
+  /** Set on the classification node: one entry per output label. */
+  branches?: CanvasBranch[];
+  /** Set on action nodes: the branch the action runs under. */
+  labelId?: string;
   actionId?: string;
   /** Set on action nodes: which outputs the node publishes downstream. */
   actionType?: WorkflowActionType;
@@ -175,9 +206,20 @@ type FlowCanvasNode = {
 type CanvasEdge = {
   from: string;
   to: string;
+  /** Set when the edge leaves a classification branch rather than a node edge. */
+  fromBranchIndex?: number;
 };
 
-type PaletteWidgetType = "outcome" | WorkflowActionType;
+/**
+ * Where an edge or a menu attaches to a node: the node, plus which of its
+ * output branches when it has more than one.
+ */
+type CanvasOutlet = {
+  node: FlowCanvasNode;
+  branchIndex?: number;
+};
+
+type PaletteWidgetType = WorkflowActionType;
 
 type DragState =
   | {
@@ -192,7 +234,7 @@ type DragState =
       startClientX: number;
       startClientY: number;
       startPosition: CanvasNodePosition;
-      nodeKind: CanvasNodeKind;
+      nodeHeight: number;
       element: HTMLDivElement;
       frame: number;
       nextPosition: CanvasNodePosition;
@@ -208,8 +250,7 @@ type DragState =
 type SelectedModule =
   | { type: "trigger" }
   | { type: "classifier" }
-  | { type: "outcome"; outcomeId: string }
-  | { type: "action"; outcomeId: string; actionId: string };
+  | { type: "action"; labelId: string; actionId: string };
 
 type WorkflowBuilderProps = {
   initialDraft: WorkflowDraft;
@@ -289,9 +330,9 @@ export function WorkflowBuilder({
   const [classifierPrompt, setClassifierPrompt] = React.useState(
     initialDraft.classifierPrompt
   );
-  const [outcomes, setOutcomes] = React.useState(initialDraft.outcomes);
+  const [labels, setLabels] = React.useState(initialDraft.labels);
   const [nodePositions, setNodePositions] = React.useState<CanvasPositions>(
-    () => createInitialNodePositions(initialDraft.outcomes)
+    createInitialNodePositions
   );
   const [view, setView] = React.useState<CanvasView>({ x: 8, y: 8, zoom: 1 });
   /**
@@ -300,14 +341,15 @@ export function WorkflowBuilder({
    */
   const [isPanning, setIsPanning] = React.useState(false);
   const [connectingFrom, setConnectingFrom] =
-    React.useState<FlowCanvasNode | null>(null);
+    React.useState<CanvasOutlet | null>(null);
   /**
-   * The node whose output handle opened the add-node menu. Held by id so the
-   * menu follows the node as it moves rather than freezing an old position.
+   * The outlet whose handle opened the add-node menu. Held by id so the menu
+   * follows the node as it moves rather than freezing an old position.
    */
-  const [connectMenuNodeId, setConnectMenuNodeId] = React.useState<
-    string | null
-  >(null);
+  const [connectMenu, setConnectMenu] = React.useState<{
+    nodeId: string;
+    branchIndex?: number;
+  } | null>(null);
   const [selectedModule, setSelectedModule] =
     React.useState<SelectedModule | null>(null);
   const [isPaletteOpen, setIsPaletteOpen] = React.useState(false);
@@ -319,9 +361,9 @@ export function WorkflowBuilder({
       ownerRole,
       trigger,
       classifierPrompt,
-      outcomes,
+      labels,
     }),
-    [classifierPrompt, outcomes, ownerRole, trigger, workflowName]
+    [classifierPrompt, labels, ownerRole, trigger, workflowName]
   );
   /**
    * A test run works on the draft that is on the board, not on the saved row,
@@ -331,50 +373,32 @@ export function WorkflowBuilder({
   const { height: debugPanelHeight, measure: measureDebugPanel } =
     useMeasuredHeight(defaultInspectorHeight);
 
-  const selectedOutcome =
-    selectedModule && "outcomeId" in selectedModule
-      ? outcomes.find((outcome) => outcome.id === selectedModule.outcomeId)
+  const selectedLabel =
+    selectedModule?.type === "action"
+      ? labels.find((label) => label.id === selectedModule.labelId)
       : undefined;
   const selectedAction =
     selectedModule?.type === "action"
-      ? selectedOutcome?.actions.find(
+      ? selectedLabel?.actions.find(
           (action) => action.id === selectedModule.actionId
         )
       : undefined;
-
-  const exampleCount = React.useMemo(
-    () =>
-      outcomes.reduce(
-        (total, outcome) =>
-          total +
-          outcome.examples
-            .split("\n")
-            .map((example) => example.trim())
-            .filter(Boolean).length,
-        0
-      ),
-    [outcomes]
-  );
 
   const canvasNodes = React.useMemo(
     () =>
       createCanvasNodes({
         trigger,
         classifierPrompt,
-        outcomes,
-        exampleCount,
+        labels,
         nodePositions,
       }),
-    [classifierPrompt, exampleCount, nodePositions, outcomes, trigger]
+    [classifierPrompt, labels, nodePositions, trigger]
   );
   const canvasNodeMap = React.useMemo(
     () => new Map(canvasNodes.map((node) => [node.id, node])),
     [canvasNodes]
   );
-  const canvasEdges = React.useMemo(
-    () => createCanvasEdges(outcomes),
-    [outcomes]
-  );
+  const canvasEdges = React.useMemo(() => createCanvasEdges(labels), [labels]);
   const selectedNode = React.useMemo(
     () =>
       canvasNodes.find(
@@ -425,15 +449,15 @@ export function WorkflowBuilder({
         panelHeight: inspectorHeight,
       })
     : null;
-  const connectMenuNode = connectMenuNodeId
-    ? canvasNodeMap.get(connectMenuNodeId) ?? null
+  const connectMenuNode = connectMenu
+    ? canvasNodeMap.get(connectMenu.nodeId) ?? null
     : null;
-  const connectMenuOptions = connectMenuNode
-    ? nodeMenuOptions(connectMenuNode)
-    : [];
-  const connectMenuPosition = connectMenuNode
+  const connectMenuOutlet: CanvasOutlet | null = connectMenuNode
+    ? { node: connectMenuNode, branchIndex: connectMenu?.branchIndex }
+    : null;
+  const connectMenuPosition = connectMenuOutlet
     ? floatingPanelPosition({
-        nodePosition: connectMenuNode.position,
+        nodePosition: outletPosition(connectMenuOutlet),
         view,
         board: boardSize,
         panelWidth: connectMenuWidth,
@@ -560,71 +584,96 @@ export function WorkflowBuilder({
     );
   }
 
-  function updateOutcome(
+  function updateLabel(
     id: string,
-    updater: (outcome: WorkflowOutcome) => WorkflowOutcome
+    updater: (label: ClassificationLabel) => ClassificationLabel
   ) {
-    setOutcomes((current) =>
-      current.map((outcome) => (outcome.id === id ? updater(outcome) : outcome))
+    setLabels((current) =>
+      current.map((label) => (label.id === id ? updater(label) : label))
     );
   }
 
-  /**
-   * Adds the classification node and nothing else — its actions are the next
-   * thing you pick, not something chosen for you.
-   */
-  function addOutcome(position?: CanvasNodePosition) {
-    const nextIndex = outcomes.length;
-    const nextOutcome: WorkflowOutcome = {
-      id: `outcome-${Date.now()}`,
-      name: "New classification",
-      description: "",
-      examples: "",
-      actions: [],
-    };
-    const outcomePosition = clampCanvasPosition(
-      position ?? {
-        x: 640,
-        y: 96 + nextIndex * 176,
-      },
-      "outcome"
-    );
+  /** A new, unnamed output. Naming it is the next thing the panel asks for. */
+  function addLabel() {
+    setLabels((current) => [...current, createClassificationLabel()]);
+  }
 
-    setNodePositions((current) => ({
-      ...current,
-      [nextOutcome.id]: outcomePosition,
-    }));
-    setOutcomes((current) => [...current, nextOutcome]);
-    setSelectedModule({ type: "outcome", outcomeId: nextOutcome.id });
+  /** An output takes the actions on its branch with it. */
+  function removeLabel(labelId: string) {
+    const removed = labels.find((label) => label.id === labelId);
+
+    setLabels((current) => current.filter((label) => label.id !== labelId));
+    setNodePositions((current) => {
+      const next = { ...current };
+
+      removed?.actions.forEach((action) => {
+        delete next[action.id];
+      });
+
+      return next;
+    });
+    setConnectingFrom(null);
+    setConnectMenu(null);
+    setSelectedModule((current) =>
+      current?.type === "action" && current.labelId === labelId ? null : current
+    );
+  }
+
+  async function confirmRemoveLabel(labelId: string) {
+    const label = labels.find((current) => current.id === labelId);
+
+    if (!label) {
+      return;
+    }
+
+    // Removing an output cascades to the actions on its branch, so confirm when
+    // there is something to lose. An empty branch goes straight away.
+    if (label.actions.length > 0) {
+      const confirmed = await confirm({
+        title: "Remove this output?",
+        description: `${label.name.trim() || "This output"} and the ${
+          label.actions.length
+        } action${
+          label.actions.length === 1 ? "" : "s"
+        } on its branch will be removed from the flow.`,
+        confirmLabel: "Remove output",
+      });
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    removeLabel(labelId);
   }
 
   /**
-   * `insertIndex` is where the action lands in its classification's sequence,
-   * which is
+   * `insertIndex` is where the action lands in its branch's sequence, which is
    * also where it lands in the drawn chain. Left out, it goes on the end.
    */
   function addAction(
-    outcomeId: string,
+    labelId: string,
     type: WorkflowActionType,
     options: { position?: CanvasNodePosition; insertIndex?: number } = {}
   ) {
     const nextAction = createWorkflowAction(type);
-    const outcome = outcomes.find((current) => current.id === outcomeId);
-    const outcomePosition = nodePositions[outcomeId] ?? { x: 640, y: 96 };
+    const label = labels.find((current) => current.id === labelId);
     const actionPosition = clampCanvasPosition(
-      options.position ?? {
-        x: outcomePosition.x + 330 + (outcome?.actions.length ?? 0) * 286,
-        y: outcomePosition.y + 10,
-      },
-      "action"
+      options.position ??
+        branchActionPosition(
+          nodePositions.classifier ?? defaultClassifierPosition,
+          labels.findIndex((current) => current.id === labelId),
+          label?.actions.length ?? 0
+        ),
+      nodeBaseHeight
     );
 
     setNodePositions((current) => ({
       ...current,
       [nextAction.id]: actionPosition,
     }));
-    updateOutcome(outcomeId, (outcome) => {
-      const nextActions = [...outcome.actions];
+    updateLabel(labelId, (label) => {
+      const nextActions = [...label.actions];
       const index = Math.min(
         Math.max(options.insertIndex ?? nextActions.length, 0),
         nextActions.length
@@ -632,32 +681,32 @@ export function WorkflowBuilder({
 
       nextActions.splice(index, 0, nextAction);
 
-      return { ...outcome, actions: nextActions };
+      return { ...label, actions: nextActions };
     });
     setSelectedModule({
       type: "action",
-      outcomeId,
+      labelId,
       actionId: nextAction.id,
     });
   }
 
   function updateAction(
-    outcomeId: string,
+    labelId: string,
     actionId: string,
     updater: (action: WorkflowAction) => WorkflowAction
   ) {
-    updateOutcome(outcomeId, (outcome) => ({
-      ...outcome,
-      actions: outcome.actions.map((action) =>
+    updateLabel(labelId, (label) => ({
+      ...label,
+      actions: label.actions.map((action) =>
         action.id === actionId ? updater(action) : action
       ),
     }));
   }
 
-  function removeAction(outcomeId: string, actionId: string) {
-    updateOutcome(outcomeId, (outcome) => ({
-      ...outcome,
-      actions: outcome.actions.filter((action) => action.id !== actionId),
+  function removeAction(labelId: string, actionId: string) {
+    updateLabel(labelId, (label) => ({
+      ...label,
+      actions: label.actions.filter((action) => action.id !== actionId),
     }));
     setNodePositions((current) => {
       const next = { ...current };
@@ -665,80 +714,14 @@ export function WorkflowBuilder({
       return next;
     });
     setConnectingFrom(null);
-    setConnectMenuNodeId(null);
+    setConnectMenu(null);
     setSelectedModule(null);
   }
 
-  /** A classification takes its action nodes with it when it leaves the board. */
-  function removeOutcome(outcomeId: string) {
-    const removedOutcome = outcomes.find((outcome) => outcome.id === outcomeId);
-
-    setOutcomes((current) =>
-      current.filter((outcome) => outcome.id !== outcomeId)
-    );
-    setNodePositions((current) => {
-      const next = { ...current };
-
-      delete next[outcomeId];
-      removedOutcome?.actions.forEach((action) => {
-        delete next[action.id];
-      });
-
-      return next;
-    });
-    setConnectingFrom(null);
-    setConnectMenuNodeId(null);
-    setSelectedModule(null);
-  }
-
-  const isConfirmingDelete = React.useRef(false);
-
-  async function deleteModule(module: SelectedModule) {
+  function deleteModule(module: SelectedModule) {
     if (module.type === "action") {
-      removeAction(module.outcomeId, module.actionId);
-      return;
+      removeAction(module.labelId, module.actionId);
     }
-
-    if (module.type !== "outcome") {
-      return;
-    }
-
-    const outcome = outcomes.find(
-      (current) => current.id === module.outcomeId
-    );
-
-    if (!outcome) {
-      return;
-    }
-
-    // Removing a classification cascades to its actions, so confirm when there is
-    // something to lose. A lone action node deletes straight away.
-    if (outcome.actions.length > 0) {
-      // A second Backspace while the dialog is open must not stack confirms.
-      if (isConfirmingDelete.current) {
-        return;
-      }
-
-      isConfirmingDelete.current = true;
-
-      const confirmed = await confirm({
-        title: "Delete this classification?",
-        description: `${
-          outcome.name.trim() || "This classification"
-        } and its ${outcome.actions.length} action${
-          outcome.actions.length === 1 ? "" : "s"
-        } will be removed from the flow.`,
-        confirmLabel: "Delete classification",
-      });
-
-      isConfirmingDelete.current = false;
-
-      if (!confirmed) {
-        return;
-      }
-    }
-
-    removeOutcome(module.outcomeId);
   }
 
   const deleteModuleRef = React.useRef(deleteModule);
@@ -766,7 +749,7 @@ export function WorkflowBuilder({
       }
 
       event.preventDefault();
-      void deleteModuleRef.current(moduleToDelete);
+      deleteModuleRef.current(moduleToDelete);
     }
 
     window.addEventListener("keydown", handleKeyDown);
@@ -777,7 +760,7 @@ export function WorkflowBuilder({
   // The add-node menu closes on Escape or on a click anywhere outside it. Its
   // own handle is exempt so clicking the handle again toggles it shut.
   React.useEffect(() => {
-    if (!connectMenuNodeId) {
+    if (!connectMenu) {
       return;
     }
 
@@ -795,12 +778,12 @@ export function WorkflowBuilder({
         return;
       }
 
-      setConnectMenuNodeId(null);
+      setConnectMenu(null);
     }
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setConnectMenuNodeId(null);
+        setConnectMenu(null);
       }
     }
 
@@ -811,23 +794,24 @@ export function WorkflowBuilder({
       window.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [connectMenuNodeId]);
+  }, [connectMenu]);
 
-  function moveActionToOutcome(actionId: string, outcomeId: string) {
+  /** Re-parents an action onto another output's branch, at the front of it. */
+  function moveActionToLabel(actionId: string, labelId: string) {
     let movedAction: WorkflowAction | undefined;
 
-    setOutcomes((current) => {
-      const next = current.map((outcome) => {
-        const action = outcome.actions.find((item) => item.id === actionId);
+    setLabels((current) => {
+      const next = current.map((label) => {
+        const action = label.actions.find((item) => item.id === actionId);
 
         if (!action) {
-          return outcome;
+          return label;
         }
 
         movedAction = action;
         return {
-          ...outcome,
-          actions: outcome.actions.filter((item) => item.id !== actionId),
+          ...label,
+          actions: label.actions.filter((item) => item.id !== actionId),
         };
       });
 
@@ -837,38 +821,38 @@ export function WorkflowBuilder({
 
       const actionToMove = movedAction;
 
-      return next.map((outcome) =>
-        outcome.id === outcomeId &&
-        !outcome.actions.some((action) => action.id === actionId)
-          ? { ...outcome, actions: [...outcome.actions, actionToMove] }
-          : outcome
+      return next.map((label) =>
+        label.id === labelId &&
+        !label.actions.some((action) => action.id === actionId)
+          ? { ...label, actions: [actionToMove, ...label.actions] }
+          : label
       );
     });
-    setSelectedModule({ type: "action", outcomeId, actionId });
+    setSelectedModule({ type: "action", labelId, actionId });
   }
 
   function reorderActionAfter(sourceActionId: string, targetActionId: string) {
-    setOutcomes((current) =>
-      current.map((outcome) => {
-        const sourceIndex = outcome.actions.findIndex(
+    setLabels((current) =>
+      current.map((label) => {
+        const sourceIndex = label.actions.findIndex(
           (action) => action.id === sourceActionId
         );
-        const targetIndex = outcome.actions.findIndex(
+        const targetIndex = label.actions.findIndex(
           (action) => action.id === targetActionId
         );
 
         if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) {
-          return outcome;
+          return label;
         }
 
-        const nextActions = [...outcome.actions];
+        const nextActions = [...label.actions];
         const [targetAction] = nextActions.splice(targetIndex, 1);
         const nextSourceIndex = nextActions.findIndex(
           (action) => action.id === sourceActionId
         );
         nextActions.splice(nextSourceIndex + 1, 0, targetAction);
 
-        return { ...outcome, actions: nextActions };
+        return { ...label, actions: nextActions };
       })
     );
   }
@@ -886,44 +870,60 @@ export function WorkflowBuilder({
     };
   }
 
-  function selectedOutcomeIdForWidgetDrop(point: CanvasNodePosition) {
-    const nearestOutcome = outcomes
-      .map((outcome) => ({
-        outcome,
-        position: nodePositions[outcome.id] ?? { x: 640, y: 96 },
-      }))
-      .map(({ outcome, position }) => ({
-        outcome,
-        distance: Math.hypot(point.x - position.x, point.y - position.y),
-      }))
+  /**
+   * Which branch a loose action belongs to. An action always runs under one
+   * output, so a drop that names no branch is resolved by where it landed:
+   * nearest branch first, then whatever branch is already open in the panel.
+   */
+  function labelIdForDrop(point: CanvasNodePosition) {
+    const classifierPosition =
+      nodePositions.classifier ?? defaultClassifierPosition;
+    const nearest = labels
+      .map((label, index) => {
+        const tail = label.actions.at(-1);
+        const anchor = tail
+          ? nodePositions[tail.id] ??
+            branchActionPosition(
+              classifierPosition,
+              index,
+              label.actions.length - 1
+            )
+          : {
+              x: classifierPosition.x + nodeWidth,
+              y: classifierPosition.y + branchAnchorY(index),
+            };
+
+        return {
+          label,
+          distance: Math.hypot(point.x - anchor.x, point.y - anchor.y),
+        };
+      })
       .sort((a, b) => a.distance - b.distance)[0];
 
-    if (nearestOutcome && nearestOutcome.distance < 360) {
-      return nearestOutcome.outcome.id;
+    if (nearest && nearest.distance < 360) {
+      return nearest.label.id;
     }
 
-    if (selectedModule && "outcomeId" in selectedModule) {
-      return selectedModule.outcomeId;
+    if (selectedModule?.type === "action") {
+      return selectedModule.labelId;
     }
 
-    return outcomes[0]?.id;
+    return labels[0]?.id;
   }
 
-  function handleWidgetDrop(widgetType: PaletteWidgetType, point: CanvasNodePosition) {
-    const position = {
-      x: point.x - nodeWidth / 2,
-      y: point.y - nodeHeights[widgetType === "outcome" ? "outcome" : "action"] / 2,
-    };
+  function handleWidgetDrop(
+    widgetType: PaletteWidgetType,
+    point: CanvasNodePosition
+  ) {
+    const labelId = labelIdForDrop(point);
 
-    if (widgetType === "outcome") {
-      addOutcome(position);
-      return;
-    }
-
-    const outcomeId = selectedOutcomeIdForWidgetDrop(point);
-
-    if (outcomeId) {
-      addAction(outcomeId, widgetType, { position });
+    if (labelId) {
+      addAction(labelId, widgetType, {
+        position: {
+          x: point.x - nodeWidth / 2,
+          y: point.y - nodeBaseHeight / 2,
+        },
+      });
     }
   }
 
@@ -931,7 +931,10 @@ export function WorkflowBuilder({
    * Slides the board just far enough to bring a node into view, leaving room
    * on the right for the inspector that opens beside it.
    */
-  function revealPosition(position: CanvasNodePosition, kind: CanvasNodeKind) {
+  function revealPosition(
+    position: CanvasNodePosition,
+    nodeHeight: number
+  ) {
     const margin = 24;
 
     if (boardSize.width === 0 || boardSize.height === 0) {
@@ -944,7 +947,7 @@ export function WorkflowBuilder({
       const left = position.x * current.zoom;
       const top = position.y * current.zoom;
       const width = nodeWidth * current.zoom;
-      const height = nodeHeights[kind] * current.zoom;
+      const height = nodeHeight * current.zoom;
       const rightEdge = Math.max(
         width + margin,
         boardSize.width - margin - inspectorWidth - inspectorGap
@@ -992,7 +995,7 @@ export function WorkflowBuilder({
     const node = canvasNodeMapRef.current.get(debugNodeId);
 
     if (node) {
-      revealPositionRef.current(node.position, node.kind);
+      revealPositionRef.current(node.position, node.height);
     }
   }, [boardSize.height, boardSize.width, debugNodeId]);
 
@@ -1003,7 +1006,7 @@ export function WorkflowBuilder({
    */
   function startDebug() {
     setSelectedModule(null);
-    setConnectMenuNodeId(null);
+    setConnectMenu(null);
     setConnectingFrom(null);
     setIsPaletteOpen(false);
     debug.start();
@@ -1037,46 +1040,39 @@ export function WorkflowBuilder({
   }
 
   /**
-   * Adds the picked node straight after the node whose handle opened the menu,
-   * so the new node arrives already wired into that classification's sequence.
+   * Adds the picked action straight after the outlet whose handle opened the
+   * menu, so it arrives already wired into that branch's sequence.
    */
-  function addNodeAfter(
-    sourceNode: FlowCanvasNode,
-    widgetType: PaletteWidgetType
-  ) {
-    const kind: CanvasNodeKind = widgetType === "outcome" ? "outcome" : "action";
-    const position = placeNodeAfter({
-      sourceNode,
-      kind,
-      occupied: canvasNodes,
-    });
+  function addNodeAfter(outlet: CanvasOutlet, widgetType: PaletteWidgetType) {
+    const position = placeNodeAfter({ outlet, occupied: canvasNodes });
 
-    setConnectMenuNodeId(null);
-    revealPosition(position, kind);
+    setConnectMenu(null);
+    revealPosition(position, nodeBaseHeight);
 
-    if (widgetType === "outcome") {
-      addOutcome(position);
+    if (outlet.node.kind === "classifier") {
+      const labelId =
+        outlet.branchIndex === undefined
+          ? undefined
+          : outlet.node.branches?.[outlet.branchIndex]?.labelId;
+
+      if (labelId) {
+        // First on the branch: the new node sits between the classification and
+        // whatever used to run first.
+        addAction(labelId, widgetType, { position, insertIndex: 0 });
+      }
+
       return;
     }
 
-    if (sourceNode.kind === "outcome") {
-      // First in the classification: the new node sits between it and whatever
-      // used to be its first action.
-      addAction(sourceNode.id, widgetType, { position, insertIndex: 0 });
+    if (outlet.node.kind !== "action" || !outlet.node.labelId) {
       return;
     }
 
-    if (sourceNode.kind !== "action" || !sourceNode.outcomeId) {
-      return;
-    }
-
-    const outcome = outcomes.find(
-      (current) => current.id === sourceNode.outcomeId
-    );
+    const label = labels.find((current) => current.id === outlet.node.labelId);
     const sourceIndex =
-      outcome?.actions.findIndex((action) => action.id === sourceNode.id) ?? -1;
+      label?.actions.findIndex((action) => action.id === outlet.node.id) ?? -1;
 
-    addAction(sourceNode.outcomeId, widgetType, {
+    addAction(outlet.node.labelId, widgetType, {
       position,
       insertIndex: sourceIndex === -1 ? undefined : sourceIndex + 1,
     });
@@ -1109,7 +1105,7 @@ export function WorkflowBuilder({
     };
     setIsPanning(true);
     setConnectingFrom(null);
-    setConnectMenuNodeId(null);
+    setConnectMenu(null);
     // Clicking the board itself is how you dismiss the node inspector.
     setSelectedModule(null);
   }
@@ -1130,14 +1126,14 @@ export function WorkflowBuilder({
       startClientX: event.clientX,
       startClientY: event.clientY,
       startPosition: node.position,
-      nodeKind: node.kind,
+      nodeHeight: node.height,
       element: event.currentTarget,
       frame: 0,
       nextPosition: node.position,
       moved: false,
     };
     ignoreNodeClick.current = false;
-    setConnectMenuNodeId(null);
+    setConnectMenu(null);
     // Selection waits for the click: pressing to drag a node should move it,
     // not open its inspector.
   }
@@ -1164,7 +1160,7 @@ export function WorkflowBuilder({
 
     // The inspector is two columns wide now, so a node near the right edge
     // would open its own settings on top of itself. Slide the board first.
-    revealPosition(node.position, node.kind);
+    revealPosition(node.position, node.height);
     setSelectedModule(node.module);
   }
 
@@ -1206,7 +1202,7 @@ export function WorkflowBuilder({
         x: drag.startPosition.x + deltaX / view.zoom,
         y: drag.startPosition.y + deltaY / view.zoom,
       },
-      drag.nodeKind
+      drag.nodeHeight
     );
 
     if (drag.frame === 0) {
@@ -1244,7 +1240,8 @@ export function WorkflowBuilder({
         "d",
         edgePathDefinition(
           edge.from === nodeId ? { ...fromNode, position } : fromNode,
-          edge.to === nodeId ? { ...toNode, position } : toNode
+          edge.to === nodeId ? { ...toNode, position } : toNode,
+          edge.fromBranchIndex
         )
       );
     });
@@ -1301,25 +1298,40 @@ export function WorkflowBuilder({
   }
 
   function handleConnectionTarget(targetNode: FlowCanvasNode) {
-    if (!connectingFrom || connectingFrom.id === targetNode.id) {
+    if (!connectingFrom || connectingFrom.node.id === targetNode.id) {
       setConnectingFrom(null);
       return;
     }
 
     connectCanvasNodes(connectingFrom, targetNode);
     setConnectingFrom(null);
-    revealPosition(targetNode.position, targetNode.kind);
+    revealPosition(targetNode.position, targetNode.height);
     setSelectedModule(targetNode.module);
   }
 
-  function connectCanvasNodes(sourceNode: FlowCanvasNode, targetNode: FlowCanvasNode) {
-    if (sourceNode.kind === "outcome" && targetNode.kind === "action") {
-      moveActionToOutcome(targetNode.id, sourceNode.id);
+  function connectCanvasNodes(
+    outlet: CanvasOutlet,
+    targetNode: FlowCanvasNode
+  ) {
+    if (targetNode.kind !== "action") {
       return;
     }
 
-    if (sourceNode.kind === "action" && targetNode.kind === "action") {
-      reorderActionAfter(sourceNode.id, targetNode.id);
+    if (outlet.node.kind === "classifier") {
+      const labelId =
+        outlet.branchIndex === undefined
+          ? undefined
+          : outlet.node.branches?.[outlet.branchIndex]?.labelId;
+
+      if (labelId) {
+        moveActionToLabel(targetNode.id, labelId);
+      }
+
+      return;
+    }
+
+    if (outlet.node.kind === "action") {
+      reorderActionAfter(outlet.node.id, targetNode.id);
     }
   }
 
@@ -1454,21 +1466,35 @@ export function WorkflowBuilder({
                 key={node.id}
                 node={node}
                 selected={moduleKey(selectedModule) === moduleKey(node.module)}
-                connecting={connectingFrom?.id === node.id}
+                connecting={connectingFrom?.node.id === node.id}
                 canReceiveConnection={Boolean(
-                  connectingFrom && connectingFrom.id !== node.id
+                  connectingFrom &&
+                    connectingFrom.node.id !== node.id &&
+                    node.kind === "action"
                 )}
                 onPointerDown={(event) => handleNodePointerDown(event, node)}
                 onSelect={() => handleNodeClick(node)}
                 debugState={debugNodeState(node.id)}
-                canAddNext={
-                  !debug.isDebugging && nodeMenuOptions(node).length > 0
+                followedBranchId={
+                  debug.isRunning && node.kind === "classifier"
+                    ? debug.run?.followedLabelId ?? null
+                    : undefined
                 }
-                menuOpen={connectMenuNodeId === node.id}
-                onToggleMenu={() => {
+                // A test is a reading of the board, not an edit of it: the
+                // outlets stop offering to add anything while one is running.
+                canAddNext={!debug.isDebugging}
+                openMenuBranch={
+                  connectMenu?.nodeId === node.id
+                    ? connectMenu.branchIndex ?? "node"
+                    : null
+                }
+                onToggleMenu={(branchIndex) => {
                   setConnectingFrom(null);
-                  setConnectMenuNodeId((current) =>
-                    current === node.id ? null : node.id
+                  setConnectMenu((current) =>
+                    current?.nodeId === node.id &&
+                    current.branchIndex === branchIndex
+                      ? null
+                      : { nodeId: node.id, branchIndex }
                   );
                   // One panel at a time: the menu takes the spot the
                   // inspector would float in.
@@ -1491,17 +1517,13 @@ export function WorkflowBuilder({
           {debug.isDebugging ? null : (
             <NodePalette
               open={isPaletteOpen}
-              canAddAction={outcomes.length > 0}
+              canAddAction={labels.length > 0}
               onOpenChange={setIsPaletteOpen}
-              onAddOutcome={() => {
-                addOutcome();
-                setIsPaletteOpen(false);
-              }}
               onAddAction={(type) => {
-                const outcomeId = selectedOutcomeIdForWidgetDrop({ x: 0, y: 0 });
+                const labelId = labelIdForDrop({ x: 0, y: 0 });
 
-                if (outcomeId) {
-                  addAction(outcomeId, type);
+                if (labelId) {
+                  addAction(labelId, type);
                   setIsPaletteOpen(false);
                 }
               }}
@@ -1524,26 +1546,25 @@ export function WorkflowBuilder({
             />
           ) : null}
 
-          {connectMenuNode &&
-          connectMenuPosition &&
-          connectMenuOptions.length > 0 ? (
+          {connectMenuOutlet && connectMenuPosition ? (
             <NodeConnectMenu
               ref={measureConnectMenu}
-              sourceTitle={connectMenuNode.title}
-              options={connectMenuOptions}
-              canConnectExisting={canStartConnection(connectMenuNode)}
+              sourceTitle={outletTitle(connectMenuOutlet)}
+              options={actionTypes}
               position={connectMenuPosition}
               maxHeight={Math.max(
                 200,
                 (boardSize.height || defaultConnectMenuHeight) -
                   inspectorMargin * 2
               )}
-              onPick={(widgetType) => addNodeAfter(connectMenuNode, widgetType)}
+              onPick={(widgetType) =>
+                addNodeAfter(connectMenuOutlet, widgetType)
+              }
               onConnectExisting={() => {
-                setConnectingFrom(connectMenuNode);
-                setConnectMenuNodeId(null);
+                setConnectingFrom(connectMenuOutlet);
+                setConnectMenu(null);
               }}
-              onClose={() => setConnectMenuNodeId(null)}
+              onClose={() => setConnectMenu(null)}
             />
           ) : null}
 
@@ -1555,11 +1576,7 @@ export function WorkflowBuilder({
               <NodeInspector
                 ref={inspectorNodeRef}
                 module={selectedModule}
-                title={moduleTitle(
-                  selectedModule,
-                  selectedOutcome,
-                  selectedAction
-                )}
+                title={moduleTitle(selectedModule, selectedAction)}
                 position={inspectorPosition}
                 maxHeight={Math.max(
                   200,
@@ -1567,7 +1584,7 @@ export function WorkflowBuilder({
                     inspectorMargin * 2
                 )}
                 canDelete={canDeleteModule(selectedModule)}
-                onDelete={() => void deleteModule(selectedModule)}
+                onDelete={() => deleteModule(selectedModule)}
                 onClose={() => setSelectedModule(null)}
                 width={inspectorPanelWidth}
                 dataPanel={
@@ -1584,27 +1601,27 @@ export function WorkflowBuilder({
                     />
                   ) : null}
                   {selectedModule.type === "classifier" ? (
-                    <ClassifierSettings
+                    <ClassificationSettings
                       classifierPrompt={classifierPrompt}
                       onClassifierPromptChange={setClassifierPrompt}
-                    />
-                  ) : null}
-                  {selectedModule.type === "outcome" && selectedOutcome ? (
-                    <OutcomeSettings
-                      outcome={selectedOutcome}
-                      onChange={(updater) =>
-                        updateOutcome(selectedOutcome.id, updater)
+                      labels={labels}
+                      onAddLabel={addLabel}
+                      onRenameLabel={(labelId, name) =>
+                        updateLabel(labelId, (label) => ({ ...label, name }))
+                      }
+                      onRemoveLabel={(labelId) =>
+                        void confirmRemoveLabel(labelId)
                       }
                     />
                   ) : null}
                   {selectedModule.type === "action" &&
-                  selectedOutcome &&
+                  selectedLabel &&
                   selectedAction ? (
                     <ActionSettings
                       action={selectedAction}
                       onChange={(updater) =>
                         updateAction(
-                          selectedOutcome.id,
+                          selectedLabel.id,
                           selectedAction.id,
                           updater
                         )
@@ -1707,13 +1724,12 @@ function NodePalette({
   open,
   canAddAction,
   onOpenChange,
-  onAddOutcome,
   onAddAction,
 }: {
   open: boolean;
+  /** False until the classification has an output for an action to sit under. */
   canAddAction: boolean;
   onOpenChange: (open: boolean) => void;
-  onAddOutcome: () => void;
   onAddAction: (type: WorkflowActionType) => void;
 }) {
   return (
@@ -1729,7 +1745,7 @@ function NodePalette({
           className="pointer-events-auto min-h-0 w-64 max-w-full overflow-y-auto rounded-lg border bg-card p-2 shadow-lg"
         >
           <div className="flex items-center justify-between gap-2 px-1 pb-2">
-            <span className="text-sm font-medium">Add a node</span>
+            <span className="text-sm font-medium">Add an action</span>
             <Button
               type="button"
               variant="ghost"
@@ -1742,13 +1758,6 @@ function NodePalette({
             </Button>
           </div>
           <div className="space-y-2">
-            <PaletteItem
-              title="Classification"
-              detail="Classification rule"
-              icon={Sparkles}
-              widgetType="outcome"
-              onAdd={onAddOutcome}
-            />
             {actionTypes.map((type) => {
               const Icon = actionIcons[type];
 
@@ -1760,14 +1769,16 @@ function NodePalette({
                   icon={Icon}
                   widgetType={type}
                   disabled={!canAddAction}
-                  disabledHint="Add a classification before adding actions"
+                  disabledHint="Add an output to the classification first"
                   onAdd={() => onAddAction(type)}
                 />
               );
             })}
           </div>
           <p className="px-1 pt-2 text-xs text-muted-foreground">
-            Click to drop it on the board, or drag it where you want it.
+            {canAddAction
+              ? "Click to drop it on the nearest branch, or drag it where you want it."
+              : "Open the classification node and add an output first — actions run on a branch."}
           </p>
         </div>
       ) : null}
@@ -1850,7 +1861,6 @@ function NodeConnectMenu({
   ref,
   sourceTitle,
   options,
-  canConnectExisting,
   position,
   maxHeight,
   onPick,
@@ -1860,7 +1870,6 @@ function NodeConnectMenu({
   ref: React.Ref<HTMLDivElement>;
   sourceTitle: string;
   options: PaletteWidgetType[];
-  canConnectExisting: boolean;
   /** Board-relative pixels, already flipped and clamped to stay on screen. */
   position: CanvasNodePosition;
   maxHeight: number;
@@ -1884,7 +1893,7 @@ function NodeConnectMenu({
     >
       <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
         <div className="min-w-0">
-          <p className="text-sm font-medium">Add next node</p>
+          <p className="text-sm font-medium">Add next action</p>
           <p className="truncate text-xs text-muted-foreground">
             After {sourceTitle}
           </p>
@@ -1901,38 +1910,28 @@ function NodeConnectMenu({
         </Button>
       </div>
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
-        {options.map((option) => {
-          const Icon = option === "outcome" ? Sparkles : actionIcons[option];
-
-          return (
-            <PaletteItem
-              key={option}
-              role="menuitem"
-              title={
-                option === "outcome" ? "Classification" : actionLabels[option]
-              }
-              detail={
-                option === "outcome" ? "Classification rule" : "Action node"
-              }
-              icon={Icon}
-              draggable={false}
-              onAdd={() => onPick(option)}
-            />
-          );
-        })}
-        {canConnectExisting ? (
+        {options.map((option) => (
           <PaletteItem
+            key={option}
             role="menuitem"
-            title="Connect an existing node"
-            detail="Pick a node already on the board"
-            icon={Link2}
+            title={actionLabels[option]}
+            detail="Action node"
+            icon={actionIcons[option]}
             draggable={false}
-            onAdd={onConnectExisting}
+            onAdd={() => onPick(option)}
           />
-        ) : null}
+        ))}
+        <PaletteItem
+          role="menuitem"
+          title="Connect an existing action"
+          detail="Pick an action already on the board"
+          icon={Link2}
+          draggable={false}
+          onAdd={onConnectExisting}
+        />
       </div>
       <p className="border-t px-3 py-2 text-xs text-muted-foreground">
-        The new node is connected next in the sequence.
+        The new action is connected next in the sequence.
       </p>
     </div>
   );
@@ -2039,14 +2038,24 @@ function NodeInspector({
   );
 }
 
+/**
+ * A node on the board says what it is: an icon and a name, nothing else. What
+ * it is set to is a question the settings panel answers, and a board that
+ * answered it too would be a board nobody can scan.
+ *
+ * The classification node carries one extra thing, because it is the one node
+ * whose shape the user decides: a row per output label, each with the outlet
+ * its branch leaves from.
+ */
 function CanvasNode({
   node,
   selected,
   connecting,
   canReceiveConnection,
   canAddNext,
-  menuOpen,
+  openMenuBranch,
   debugState,
+  followedBranchId,
   onPointerDown,
   onSelect,
   onToggleMenu,
@@ -2056,20 +2065,26 @@ function CanvasNode({
   selected: boolean;
   connecting: boolean;
   canReceiveConnection: boolean;
-  /** False when nothing can follow this node, which hides the plus entirely. */
+  /** False while a test is running, which hides every outlet's plus. */
   canAddNext: boolean;
-  menuOpen: boolean;
+  /** Which outlet has the add-node menu open: a branch index, or the node. */
+  openMenuBranch: number | "node" | null;
   /** Set only while a test run is stepping through the board. */
   debugState?: DebugNodeState;
+  /** Classification node, during a run: the branch this email took. */
+  followedBranchId?: string | null;
   onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
   onSelect: () => void;
-  onToggleMenu: () => void;
+  onToggleMenu: (branchIndex?: number) => void;
   onCompleteConnection: () => void;
 }) {
   const Icon = node.icon;
-  const height = nodeHeights[node.kind];
   /** The workflow always starts here, so the node wears a soft brand halo. */
   const isInitialNode = node.kind === "trigger";
+  // Only an action can be followed by another node from the node's own edge.
+  // The classification branches out from its rows instead, and the trigger's
+  // one link — to the classification — is fixed.
+  const showNodeHandle = canAddNext && node.kind === "action";
 
   return (
     <div
@@ -2077,7 +2092,9 @@ function CanvasNode({
       tabIndex={0}
       // Named explicitly so the handles nested inside it do not end up in the
       // node's own accessible name.
-      aria-label={`${moduleLabel(node.module)}: ${node.title}`}
+      aria-label={`${moduleLabel(node.module)}: ${node.title}${
+        node.needs ? `. ${node.needs}` : ""
+      }`}
       onClick={onSelect}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -2087,7 +2104,7 @@ function CanvasNode({
       }}
       onPointerDown={onPointerDown}
       className={cn(
-        "absolute rounded-md border bg-card p-3 text-card-foreground shadow-sm",
+        "absolute rounded-md border bg-card text-card-foreground shadow-sm",
         // Not `transition-all`: the position is a transform written straight to
         // the DOM every frame of a drag, and easing that would lag the pointer.
         "transition-[background-color,border-color,box-shadow,color]",
@@ -2119,11 +2136,11 @@ function CanvasNode({
       )}
       style={{
         width: nodeWidth,
-        minHeight: height,
+        height: node.height,
         transform: canvasPositionTransform(node.position),
       }}
     >
-      {node.kind !== "trigger" ? (
+      {node.kind === "action" ? (
         <button
           type="button"
           onPointerDown={(event) => event.stopPropagation()}
@@ -2131,8 +2148,9 @@ function CanvasNode({
             event.stopPropagation();
             onCompleteConnection();
           }}
+          style={{ top: nodeBaseHeight / 2 }}
           className={cn(
-            "absolute left-0 top-1/2 z-10 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border bg-background transition",
+            "absolute left-0 z-10 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border bg-background transition",
             canReceiveConnection
               ? "border-primary ring-4 ring-primary/15"
               : "border-border"
@@ -2142,84 +2160,104 @@ function CanvasNode({
         />
       ) : null}
 
-      {canAddNext ? (
-        <button
-          type="button"
-          data-connect-handle
-          data-open={menuOpen}
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          // The handle is its own control: pressing it must not start a node
-          // drag or select the node underneath.
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggleMenu();
-          }}
-          className={cn(
-            "group/handle absolute right-0 top-1/2 z-10 flex size-4 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full border bg-background text-primary transition-all",
-            "hover:size-6 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-md",
-            "focus-visible:size-6 focus-visible:border-primary focus-visible:bg-primary focus-visible:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            "data-[open=true]:size-6 data-[open=true]:border-primary data-[open=true]:bg-primary data-[open=true]:text-primary-foreground data-[open=true]:shadow-md",
-            connecting && !menuOpen && "border-primary ring-4 ring-primary/15"
-          )}
-          aria-label={`Add a node after ${node.title}`}
-          title={`Add a node after ${node.title}`}
-        >
-          <Plus
-            aria-hidden="true"
-            className={cn(
-              "size-3.5 scale-0 opacity-0 transition-transform duration-150",
-              "group-hover/handle:scale-100 group-hover/handle:opacity-100",
-              "group-focus-visible/handle:scale-100 group-focus-visible/handle:opacity-100",
-              "group-data-[open=true]/handle:scale-100 group-data-[open=true]/handle:opacity-100"
-            )}
-          />
-        </button>
+      {showNodeHandle ? (
+        <ConnectHandle
+          open={openMenuBranch === "node"}
+          connecting={connecting}
+          offsetY={nodeBaseHeight / 2}
+          label={`Add an action after ${node.title}`}
+          onToggle={() => onToggleMenu()}
+        />
       ) : null}
 
-      <div className="flex items-start gap-3">
+      <div
+        className="flex items-center gap-2.5 px-3"
+        style={{ height: nodeBaseHeight }}
+      >
         <span
           className={cn(
-            "flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary",
+            "flex size-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary",
             isInitialNode && "bg-primary/15 ring-1 ring-primary/25"
           )}
         >
-          <Icon className="size-5" />
+          <Icon className="size-4" />
         </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2">
-            <span className="truncate font-medium">{node.title}</span>
-            {node.ready ? (
-              <CircleDot className="size-3.5 shrink-0 text-success" />
-            ) : null}
-          </span>
-          <span className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-            {node.detail}
-          </span>
+        <span className="min-w-0 flex-1 truncate font-medium">
+          {node.title}
         </span>
-      </div>
-      <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span className="truncate">{node.meta}</span>
-        {/* During a run the badge reports the run, not the draft: whether the
+        {/* During a run the marker reports the run, not the draft: whether the
             node is configured is a question for when you are editing it. */}
         {debugState ? (
-          <Badge variant={debugBadge[debugState].variant}>
+          <Badge
+            variant={debugBadge[debugState].variant}
+            className="shrink-0"
+          >
             {debugBadge[debugState].label}
           </Badge>
-        ) : (
-          <Badge variant={node.ready ? "outline" : "destructive"}>
-            {node.ready ? "Ready" : "Needs input"}
-          </Badge>
-        )}
+        ) : node.needs ? (
+          <TriangleAlert
+            aria-hidden="true"
+            className="size-3.5 shrink-0 text-warning"
+          />
+        ) : null}
       </div>
+
+      {node.branches ? (
+        <div style={{ paddingBottom: branchListPaddingBottom }}>
+          {node.branches.length === 0 ? (
+            <div
+              className="flex items-center justify-end px-3 text-xs text-muted-foreground"
+              style={{ height: branchRowHeight }}
+            >
+              No outputs yet
+            </div>
+          ) : null}
+          {node.branches.map((branch, index) => {
+            // While a run is on, the branch it took is the only one in focus —
+            // the rest are paths this email was never going to follow.
+            const receded =
+              followedBranchId !== undefined &&
+              branch.labelId !== followedBranchId;
+
+            return (
+              <div
+                key={branch.labelId}
+                className="relative flex items-center justify-end pl-12 pr-3"
+                style={{ height: branchRowHeight }}
+              >
+                <span
+                  className={cn(
+                    "truncate text-xs transition-opacity",
+                    branch.name
+                      ? "text-muted-foreground"
+                      : "italic text-muted-foreground/70",
+                    receded && "opacity-40"
+                  )}
+                >
+                  {branch.name || "Unnamed output"}
+                </span>
+                {canAddNext ? (
+                  <ConnectHandle
+                    open={openMenuBranch === index}
+                    connecting={connecting}
+                    label={`Add an action to the ${
+                      branch.name || "unnamed"
+                    } branch`}
+                    onToggle={() => onToggleMenu(index)}
+                  />
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }
 
 /**
- * What a node's badge says while a run is stepping through. "Running" is a true
- * live state, which is why it is the one that takes the accent.
+ * What a node's marker says while a run is stepping through. "Running" is a
+ * true live state, which is why it is the one that takes the accent.
  */
 const debugBadge = {
   listening: { label: "Listening", variant: "default" },
@@ -2231,6 +2269,63 @@ const debugBadge = {
   DebugNodeState,
   { label: string; variant: React.ComponentProps<typeof Badge>["variant"] }
 >;
+
+/**
+ * The outlet an edge leaves from, and the button that adds what comes next.
+ * Positioned against whatever it is nested in unless `offsetY` places it
+ * against the node instead.
+ */
+function ConnectHandle({
+  open,
+  connecting,
+  offsetY,
+  label,
+  onToggle,
+}: {
+  open: boolean;
+  connecting: boolean;
+  offsetY?: number;
+  label: string;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-connect-handle
+      data-open={open}
+      aria-haspopup="menu"
+      aria-expanded={open}
+      // The handle is its own control: pressing it must not start a node drag
+      // or select the node underneath.
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+      style={offsetY === undefined ? undefined : { top: offsetY }}
+      className={cn(
+        "group/handle absolute right-0 z-10 flex size-4 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full border bg-background text-primary transition-all",
+        offsetY === undefined && "top-1/2",
+        "hover:size-6 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-md",
+        "focus-visible:size-6 focus-visible:border-primary focus-visible:bg-primary focus-visible:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "data-[open=true]:size-6 data-[open=true]:border-primary data-[open=true]:bg-primary data-[open=true]:text-primary-foreground data-[open=true]:shadow-md",
+        connecting && !open && "border-primary ring-4 ring-primary/15"
+      )}
+      aria-label={label}
+      title={label}
+    >
+      <Plus
+        aria-hidden="true"
+        className={cn(
+          "size-3.5 scale-0 opacity-0 transition-transform duration-150",
+          "group-hover/handle:scale-100 group-hover/handle:opacity-100",
+          "group-focus-visible/handle:scale-100 group-focus-visible/handle:opacity-100",
+          "group-data-[open=true]/handle:scale-100 group-data-[open=true]/handle:opacity-100"
+        )}
+      />
+    </button>
+  );
+}
 
 function FlowEdges({
   edges,
@@ -2280,7 +2375,7 @@ function FlowEdges({
 
               return () => registerPath(key, null);
             }}
-            d={edgePathDefinition(fromNode, toNode)}
+            d={edgePathDefinition(fromNode, toNode, edge.fromBranchIndex)}
             className="fill-none stroke-current stroke-[2]"
             markerEnd="url(#workflow-builder-arrow)"
           />
@@ -2298,18 +2393,28 @@ function edgeKey(edge: CanvasEdge) {
  * The curve between two nodes, from the right edge of one to the left edge of
  * the next. Shared so a dragged node's edges are redrawn exactly as React
  * would draw them once the drag is committed.
+ *
+ * An edge leaving a classification branch starts at that branch's row rather
+ * than at the middle of the node, so the fan-out reads as one outlet per label.
  */
 function edgePathDefinition(
-  fromNode: { position: CanvasNodePosition; kind: CanvasNodeKind },
-  toNode: { position: CanvasNodePosition; kind: CanvasNodeKind }
+  fromNode: { position: CanvasNodePosition; height: number },
+  toNode: { position: CanvasNodePosition },
+  fromBranchIndex?: number
 ) {
   const from = {
     x: fromNode.position.x + nodeWidth,
-    y: fromNode.position.y + nodeHeights[fromNode.kind] / 2,
+    y:
+      fromNode.position.y +
+      (fromBranchIndex === undefined
+        ? fromNode.height / 2
+        : branchAnchorY(fromBranchIndex)),
   };
   const to = {
     x: toNode.position.x,
-    y: toNode.position.y + nodeHeights[toNode.kind] / 2,
+    // Every node an edge lands on is a plain one-line node, so its inlet is
+    // always half a base node down.
+    y: toNode.position.y + nodeBaseHeight / 2,
   };
   const bend = Math.max(72, Math.abs(to.x - from.x) * 0.42);
 
@@ -2335,110 +2440,114 @@ function ActionSwitch({
   );
 }
 
-function createInitialNodePositions(outcomes: WorkflowOutcome[]) {
-  const positions: CanvasPositions = {
-    trigger: { x: 72, y: 390 },
-    classifier: { x: 382, y: 390 },
+/** Only the spine is placed up front; branches are laid out from it. */
+function createInitialNodePositions(): CanvasPositions {
+  return {
+    trigger: { ...defaultTriggerPosition },
+    classifier: { ...defaultClassifierPosition },
   };
+}
 
-  outcomes.forEach((outcome, outcomeIndex) => {
-    const y = 72 + outcomeIndex * 178;
+/** Where a branch's `actionIndex`-th action lands before anyone drags it. */
+function branchActionPosition(
+  classifierPosition: CanvasNodePosition,
+  branchIndex: number,
+  actionIndex: number
+) {
+  return {
+    x:
+      classifierPosition.x +
+      nodeWidth +
+      autoPlaceGap +
+      Math.max(actionIndex, 0) * (nodeWidth + autoPlaceGap),
+    y:
+      classifierPosition.y +
+      branchAnchorY(Math.max(branchIndex, 0)) -
+      nodeBaseHeight / 2,
+  };
+}
 
-    positions[outcome.id] = { x: 700, y };
-    outcome.actions.forEach((action, actionIndex) => {
-      positions[action.id] = {
-        x: 1028 + actionIndex * 288,
-        y: y + 10,
-      };
-    });
-  });
+/** How far down the classification node its `index`-th outlet sits. */
+function branchAnchorY(index: number) {
+  return nodeBaseHeight + index * branchRowHeight + branchRowHeight / 2;
+}
 
-  return positions;
+function classifierNodeHeight(branchCount: number) {
+  // An empty classification still shows one row — the "no outputs yet" line —
+  // so the node never collapses to something that looks finished.
+  return (
+    nodeBaseHeight +
+    Math.max(branchCount, 1) * branchRowHeight +
+    branchListPaddingBottom
+  );
 }
 
 function createCanvasNodes({
   trigger,
   classifierPrompt,
-  outcomes,
-  exampleCount,
+  labels,
   nodePositions,
 }: {
   trigger: string;
   classifierPrompt: string;
-  outcomes: WorkflowOutcome[];
-  exampleCount: number;
+  labels: ClassificationLabel[];
   nodePositions: CanvasPositions;
 }) {
+  const classifierPosition =
+    nodePositions.classifier ?? defaultClassifierPosition;
+  const usableLabels = usableClassificationLabels(labels);
   const nodes: FlowCanvasNode[] = [
     {
       id: "trigger",
       kind: "trigger",
       module: { type: "trigger" },
       title: "Email watcher",
-      detail: trigger || "Mailbox trigger",
-      meta: "Initial node",
       icon: Inbox,
-      position: nodePositions.trigger ?? { x: 72, y: 390 },
+      position: nodePositions.trigger ?? defaultTriggerPosition,
+      height: nodeBaseHeight,
       ready: Boolean(trigger.trim()),
     },
   ];
 
-  // Trigger → classifier is the fixed spine of every workflow, so it is on the
-  // board from the start rather than arriving with the first classification.
+  // Trigger → classification is the fixed spine of every workflow, so both are
+  // on the board from the start rather than arriving with the first branch.
   nodes.push({
     id: "classifier",
     kind: "classifier",
     module: { type: "classifier" },
-    title: "Classify with AI",
-    detail: classifierPrompt || "AI classification prompt",
-    meta: `${outcomes.length} classification${
-      outcomes.length === 1 ? "" : "s"
-    }, ${exampleCount} example${exampleCount === 1 ? "" : "s"}`,
-    icon: Filter,
-    position: nodePositions.classifier ?? { x: 382, y: 390 },
-    ready: Boolean(classifierPrompt.trim()) && exampleCount > 0,
+    title: "Classification",
+    icon: Sparkles,
+    position: classifierPosition,
+    height: classifierNodeHeight(labels.length),
+    branches: labels.map((label) => ({
+      labelId: label.id,
+      name: label.name.trim(),
+    })),
+    ready: Boolean(classifierPrompt.trim()) && usableLabels.length > 0,
+    needs: classificationNeeds(classifierPrompt, labels, usableLabels),
   });
 
-  outcomes.forEach((outcome, outcomeIndex) => {
-    nodes.push({
-      id: outcome.id,
-      kind: "outcome",
-      module: { type: "outcome", outcomeId: outcome.id },
-      title: outcome.name,
-      detail: outcome.description || "Classification rule",
-      meta: `${outcome.actions.length} actions`,
-      icon: Sparkles,
-      position:
-        nodePositions[outcome.id] ?? {
-          x: 700,
-          y: 72 + outcomeIndex * 178,
-        },
-      ready: Boolean(outcome.name.trim()) && Boolean(outcome.description.trim()),
-      outcomeId: outcome.id,
-    });
-
-    outcome.actions.forEach((action, actionIndex) => {
-      const Icon = actionIcons[action.type];
-
+  labels.forEach((label, branchIndex) => {
+    label.actions.forEach((action, actionIndex) => {
       nodes.push({
         id: action.id,
         kind: "action",
         module: {
           type: "action",
-          outcomeId: outcome.id,
+          labelId: label.id,
           actionId: action.id,
         },
         title: actionLabels[action.type],
-        detail: actionSummary(action),
-        meta: `Under ${outcome.name}`,
-        icon: Icon,
-        position:
-          nodePositions[action.id] ?? {
-            x: 1028 + actionIndex * 288,
-            y: 82 + outcomeIndex * 178,
-          },
+        icon: actionIcons[action.type],
+        position: clampCanvasPosition(
+          nodePositions[action.id] ??
+            branchActionPosition(classifierPosition, branchIndex, actionIndex),
+          nodeBaseHeight
+        ),
+        height: nodeBaseHeight,
         ready: actionIsReady(action),
-        outcomeId: outcome.id,
+        needs: actionIsReady(action) ? undefined : actionNeeds(action),
+        labelId: label.id,
         actionId: action.id,
         actionType: action.type,
       });
@@ -2448,17 +2557,37 @@ function createCanvasNodes({
   return nodes;
 }
 
-function createCanvasEdges(outcomes: WorkflowOutcome[]) {
+/** What the classification node's warning marker is warning about. */
+function classificationNeeds(
+  classifierPrompt: string,
+  labels: ClassificationLabel[],
+  usableLabels: ClassificationLabel[]
+) {
+  if (!classifierPrompt.trim()) {
+    return "Needs a prompt";
+  }
+
+  if (usableLabels.length === 0) {
+    return "Needs at least one named output";
+  }
+
+  if (usableLabels.length < labels.length) {
+    return "Some outputs are unnamed or repeated";
+  }
+
+  return undefined;
+}
+
+function createCanvasEdges(labels: ClassificationLabel[]) {
   const edges: CanvasEdge[] = [{ from: "trigger", to: "classifier" }];
 
-  outcomes.forEach((outcome) => {
-    edges.push({ from: "classifier", to: outcome.id });
-
-    outcome.actions.forEach((action, actionIndex) => {
-      edges.push({
-        from: actionIndex === 0 ? outcome.id : outcome.actions[actionIndex - 1].id,
-        to: action.id,
-      });
+  labels.forEach((label, branchIndex) => {
+    label.actions.forEach((action, actionIndex) => {
+      edges.push(
+        actionIndex === 0
+          ? { from: "classifier", to: action.id, fromBranchIndex: branchIndex }
+          : { from: label.actions[actionIndex - 1].id, to: action.id }
+      );
     });
   });
 
@@ -2517,10 +2646,6 @@ function nodeDataGroups({
 }
 
 function variableChainNode(node: FlowCanvasNode): VariableChainNode | null {
-  if (node.kind === "outcome") {
-    return { id: node.id, kind: "outcome", outcomeName: node.title };
-  }
-
   if (node.kind === "action") {
     return node.actionType
       ? { id: node.id, kind: "action", actionType: node.actionType }
@@ -2530,18 +2655,18 @@ function variableChainNode(node: FlowCanvasNode): VariableChainNode | null {
   return { id: node.id, kind: node.kind };
 }
 
-function clampCanvasPosition(position: CanvasNodePosition, kind: CanvasNodeKind) {
+function clampCanvasPosition(
+  position: CanvasNodePosition,
+  nodeHeight: number
+) {
   return {
     x: Math.min(Math.max(position.x, 24), canvasWidth - nodeWidth - 24),
-    y: Math.min(
-      Math.max(position.y, 24),
-      canvasHeight - nodeHeights[kind] - 24
-    ),
+    y: Math.min(Math.max(position.y, 24), canvasHeight - nodeHeight - 24),
   };
 }
 
 function isPaletteWidgetType(value: string): value is PaletteWidgetType {
-  return value === "outcome" || actionTypes.includes(value as WorkflowActionType);
+  return actionTypes.includes(value as WorkflowActionType);
 }
 
 function moduleKey(module: SelectedModule | null) {
@@ -2549,12 +2674,8 @@ function moduleKey(module: SelectedModule | null) {
     return "none";
   }
 
-  if (module.type === "outcome") {
-    return `${module.type}:${module.outcomeId}`;
-  }
-
   if (module.type === "action") {
-    return `${module.type}:${module.outcomeId}:${module.actionId}`;
+    return `${module.type}:${module.labelId}:${module.actionId}`;
   }
 
   return module.type;
@@ -2613,9 +2734,13 @@ function wheelZoomFactor(deltaY: number) {
   return Math.exp(-Math.min(Math.max(deltaY, -80), 80) / 200);
 }
 
-/** Only the nodes a workflow can live without can be deleted. */
+/**
+ * Only the nodes a workflow can live without can be deleted from the board. An
+ * output is not one of them — it is a setting of the classification node, and
+ * it is removed where it is named.
+ */
 function canDeleteModule(module: SelectedModule) {
-  return module.type === "outcome" || module.type === "action";
+  return module.type === "action";
 }
 
 function isTextEntryTarget(target: EventTarget | null) {
@@ -2708,57 +2833,50 @@ function useMeasuredHeight(defaultHeight: number) {
   return { height, measure };
 }
 
-/**
- * What can follow a node in the flow. Classifications only ever hang off the
- * classifier, and actions only ever hang off a classification or another
- * action, so
- * the handle offers exactly the nodes that can legally come next.
- */
-function nodeMenuOptions(node: FlowCanvasNode): PaletteWidgetType[] {
-  if (node.kind === "trigger") {
-    // The trigger always feeds the classifier, and that link is fixed — there
-    // is nothing to add in between.
-    return [];
+/** Board pixels of the point an outlet's menu and edges hang from. */
+function outletPosition(outlet: CanvasOutlet): CanvasNodePosition {
+  if (outlet.branchIndex === undefined) {
+    return outlet.node.position;
   }
 
-  if (node.kind === "classifier") {
-    return ["outcome"];
-  }
-
-  return actionTypes;
+  return {
+    x: outlet.node.position.x,
+    y:
+      outlet.node.position.y +
+      branchAnchorY(outlet.branchIndex) -
+      nodeBaseHeight / 2,
+  };
 }
 
-/** Only classifications and actions can be re-parented by hand. */
-function canStartConnection(node: FlowCanvasNode) {
-  return node.kind === "outcome" || node.kind === "action";
+/** How an outlet is named in the menu it opens, e.g. "the Sales branch". */
+function outletTitle(outlet: CanvasOutlet) {
+  if (outlet.branchIndex === undefined) {
+    return outlet.node.title;
+  }
+
+  const branch = outlet.node.branches?.[outlet.branchIndex];
+
+  return branch?.name ? `the ${branch.name} branch` : "this branch";
 }
 
 /**
- * Drops the new node to the right of the one it was added from, stepping it
+ * Drops the new node to the right of the outlet it was added from, stepping it
  * out of the way of anything already sitting there.
  */
 function placeNodeAfter({
-  sourceNode,
-  kind,
+  outlet,
   occupied,
-  reserved = [],
 }: {
-  sourceNode: FlowCanvasNode;
-  kind: CanvasNodeKind;
+  outlet: CanvasOutlet;
   occupied: FlowCanvasNode[];
-  reserved?: { kind: CanvasNodeKind; position: CanvasNodePosition }[];
 }) {
-  const taken = [
-    ...occupied
-      .filter((node) => node.id !== sourceNode.id)
-      .map((node) => ({ kind: node.kind, position: node.position })),
-    ...reserved,
-  ];
+  const taken = occupied
+    .filter((node) => node.id !== outlet.node.id)
+    .map((node) => ({ height: node.height, position: node.position }));
+  const anchor = outletPosition(outlet);
   const base = {
-    x: sourceNode.position.x + nodeWidth + autoPlaceGap,
-    y:
-      sourceNode.position.y +
-      (nodeHeights[sourceNode.kind] - nodeHeights[kind]) / 2,
+    x: outlet.node.position.x + nodeWidth + autoPlaceGap,
+    y: anchor.y,
   };
   // Straight across first, then alternating below and above it.
   const offsets = [0, 1, -1, 2, -2, 3, -3, 4, -4];
@@ -2766,40 +2884,39 @@ function placeNodeAfter({
   for (const offset of offsets) {
     const candidate = clampCanvasPosition(
       { x: base.x, y: base.y + offset * autoPlaceStep },
-      kind
+      nodeBaseHeight
     );
 
     if (
       !taken.some((other) =>
-        nodesOverlap(candidate, kind, other.position, other.kind)
+        nodesOverlap(candidate, nodeBaseHeight, other.position, other.height)
       )
     ) {
       return candidate;
     }
   }
 
-  return clampCanvasPosition(base, kind);
+  return clampCanvasPosition(base, nodeBaseHeight);
 }
 
 function nodesOverlap(
   a: CanvasNodePosition,
-  aKind: CanvasNodeKind,
+  aHeight: number,
   b: CanvasNodePosition,
-  bKind: CanvasNodeKind
+  bHeight: number
 ) {
   const gap = 16;
 
   return (
     a.x < b.x + nodeWidth + gap &&
     a.x + nodeWidth + gap > b.x &&
-    a.y < b.y + nodeHeights[bKind] + gap &&
-    a.y + nodeHeights[aKind] + gap > b.y
+    a.y < b.y + bHeight + gap &&
+    a.y + aHeight + gap > b.y
   );
 }
 
 function moduleTitle(
   module: SelectedModule,
-  outcome: WorkflowOutcome | undefined,
   action: WorkflowAction | undefined
 ) {
   if (module.type === "trigger") {
@@ -2807,11 +2924,7 @@ function moduleTitle(
   }
 
   if (module.type === "classifier") {
-    return "Classify with AI";
-  }
-
-  if (module.type === "outcome") {
-    return outcome?.name || "Classification";
+    return "Classification";
   }
 
   return action ? actionLabels[action.type] : "Action";
@@ -2834,80 +2947,242 @@ function TriggerSettings({
   );
 }
 
-function ClassifierSettings({
+/**
+ * The two halves of one decision: what the model is asked, and what it is
+ * allowed to answer.
+ *
+ * The outputs are not a hint to the model — they are the answer set the call is
+ * decoded against, so a workflow with Sales / FAQ / Important gets back one of
+ * those three and never a fourth thing. Each one is also a branch on the board,
+ * which is why adding an output changes the shape of the node behind this
+ * panel.
+ */
+function ClassificationSettings({
   classifierPrompt,
   onClassifierPromptChange,
+  labels,
+  onAddLabel,
+  onRenameLabel,
+  onRemoveLabel,
 }: {
   classifierPrompt: string;
   onClassifierPromptChange: (value: string) => void;
+  labels: ClassificationLabel[];
+  onAddLabel: () => void;
+  onRenameLabel: (labelId: string, name: string) => void;
+  onRemoveLabel: (labelId: string) => void;
 }) {
+  const duplicated = duplicateLabelIds(labels);
+  const usableLabels = usableClassificationLabels(labels);
+
   return (
-    <div className="space-y-2">
-      <Label htmlFor="classifier-prompt">Filter instructions</Label>
-      <VariableTextarea
-        id="classifier-prompt"
-        fieldLabel="Filter instructions"
-        value={classifierPrompt}
-        onValueChange={onClassifierPromptChange}
-        className="min-h-36"
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="classification-prompt">Prompt</Label>
+        <VariableTextarea
+          id="classification-prompt"
+          fieldLabel="Prompt"
+          value={classifierPrompt}
+          onValueChange={onClassifierPromptChange}
+          placeholder="Describe how to tell these emails apart."
+          className="min-h-32"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Outputs</Label>
+        <p className="text-xs text-muted-foreground">
+          The model has to answer with one of these, and each one gets its own
+          branch on the board.
+        </p>
+        <div className="space-y-2">
+          {labels.map((label, index) => (
+            <div key={label.id} className="flex items-center gap-2">
+              <Input
+                value={label.name}
+                aria-label={`Output ${index + 1}`}
+                aria-invalid={duplicated.has(label.id)}
+                placeholder="Sales"
+                onChange={(event) => onRenameLabel(label.id, event.target.value)}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => onRemoveLabel(label.id)}
+                aria-label={`Remove ${label.name.trim() || `output ${index + 1}`}`}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+        {duplicated.size > 0 ? (
+          <p className="text-xs text-destructive">
+            Two outputs share a name. Repeated names would send the same answer
+            down two branches.
+          </p>
+        ) : null}
+        <Button type="button" variant="outline" size="sm" onClick={onAddLabel}>
+          <Plus className="size-4" />
+          Add output
+        </Button>
+      </div>
+
+      <ClassificationTest
+        classifierPrompt={classifierPrompt}
+        labels={usableLabels.map((label) => label.name.trim())}
       />
     </div>
   );
 }
 
-function OutcomeSettings({
-  outcome,
-  onChange,
+/** Names claimed more than once, which the model could not be split between. */
+function duplicateLabelIds(labels: ClassificationLabel[]) {
+  const byName = new Map<string, string[]>();
+
+  labels.forEach((label) => {
+    const name = label.name.trim().toLowerCase();
+
+    if (!name) {
+      return;
+    }
+
+    byName.set(name, [...(byName.get(name) ?? []), label.id]);
+  });
+
+  return new Set(
+    Array.from(byName.values())
+      .filter((ids) => ids.length > 1)
+      .flat()
+  );
+}
+
+/**
+ * One classification run against a made-up email. The prompt is a piece of
+ * writing, and writing is checked by reading what it did — not by saving the
+ * workflow and waiting for real mail to arrive.
+ */
+function ClassificationTest({
+  classifierPrompt,
+  labels,
 }: {
-  outcome: WorkflowOutcome;
-  onChange: (updater: (outcome: WorkflowOutcome) => WorkflowOutcome) => void;
+  classifierPrompt: string;
+  /** Already trimmed and de-duplicated: exactly what the model is held to. */
+  labels: string[];
 }) {
+  const [subject, setSubject] = React.useState("");
+  const [body, setBody] = React.useState("");
+  const [result, setResult] = React.useState<
+    Awaited<ReturnType<typeof testClassification>> | null
+  >(null);
+  const [isPending, startTransition] = React.useTransition();
+  const resultRef = React.useRef<HTMLDivElement>(null);
+  const canRun = Boolean(classifierPrompt.trim()) && labels.length > 0;
+
+  // The panel is taller than the board it floats over, so an answer that
+  // arrives below the fold looks like a button that did nothing.
+  React.useEffect(() => {
+    if (result) {
+      resultRef.current?.scrollIntoView({ block: "nearest" });
+    }
+  }, [result]);
+
+  function runTest() {
+    startTransition(() => {
+      void (async () => {
+        setResult(
+          await testClassification({
+            prompt: classifierPrompt,
+            labels,
+            subject,
+            body,
+          })
+        );
+      })();
+    });
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="outcome-name">Outcome</Label>
-        <Input
-          id="outcome-name"
-          value={outcome.name}
-          onChange={(event) =>
-            onChange((current) => ({
-              ...current,
-              name: event.target.value,
-            }))
+    <Collapsible className="overflow-hidden rounded-md border border-dashed">
+      <CollapsibleTrigger className="group/test flex w-full items-center gap-2 px-2 py-1.5 text-left transition hover:bg-muted/60">
+        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/test:rotate-90" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-xs font-medium">
+            Try it on an email
+          </span>
+          <span className="block truncate text-xs text-muted-foreground">
+            Runs the real classification once
+          </span>
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="space-y-3 border-t p-2">
+        <div className="space-y-2">
+          <Label htmlFor="classification-test-subject">Subject</Label>
+          <Input
+            id="classification-test-subject"
+            value={subject}
+            placeholder="Re: pricing for 40 seats"
+            onChange={(event) => setSubject(event.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="classification-test-body">Body</Label>
+          <Textarea
+            id="classification-test-body"
+            value={body}
+            placeholder="Paste an email you would want sorted."
+            className="min-h-24"
+            onChange={(event) => setBody(event.target.value)}
+          />
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-full"
+          disabled={!canRun || isPending}
+          title={
+            canRun ? undefined : "Write a prompt and name an output first."
           }
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="outcome-description">Classification rule</Label>
-        <VariableTextarea
-          id="outcome-description"
-          fieldLabel="Classification rule"
-          value={outcome.description}
-          onValueChange={(value) =>
-            onChange((current) => ({
-              ...current,
-              description: value,
-            }))
-          }
-          className="min-h-24"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="outcome-examples">Examples</Label>
-        <VariableTextarea
-          id="outcome-examples"
-          fieldLabel="Examples"
-          value={outcome.examples}
-          onValueChange={(value) =>
-            onChange((current) => ({
-              ...current,
-              examples: value,
-            }))
-          }
-          className="min-h-32"
-        />
-      </div>
-    </div>
+          onClick={runTest}
+        >
+          {isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Play className="size-4" />
+          )}
+          Run classification
+        </Button>
+
+        {result?.status === "success" ? (
+          <div
+            ref={resultRef}
+            className="space-y-1.5 rounded-md border bg-muted/40 px-2 py-1.5"
+          >
+            <div className="flex items-center gap-2">
+              <Badge>{result.classification.label}</Badge>
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {Math.round(result.classification.confidence * 100)}% confident
+              </span>
+            </div>
+            {result.classification.reasoning ? (
+              <p className="text-xs text-muted-foreground">
+                {result.classification.reasoning}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {result?.status === "error" ? (
+          <Alert ref={resultRef} variant="destructive">
+            <TriangleAlert className="size-4" />
+            <AlertTitle>{result.title}</AlertTitle>
+            <AlertDescription>{result.description}</AlertDescription>
+          </Alert>
+        ) : null}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -3187,34 +3462,23 @@ function moduleLabel(module: SelectedModule) {
   }
 
   if (module.type === "classifier") {
-    return "Filter";
-  }
-
-  if (module.type === "outcome") {
     return "Classification";
   }
 
   return "Action";
 }
 
-function actionSummary(action: WorkflowAction) {
+/** The one setting an action cannot run without, named on its marker. */
+function actionNeeds(action: WorkflowAction) {
   if (action.type === "apply_label") {
-    return action.labelName
-      ? `Tag ${action.labelName}`
-      : actionLabels.apply_label;
+    return "Needs a tag";
   }
 
   if (action.type === "forward") {
-    return action.forwardTo ? `Forward to ${action.forwardTo}` : actionLabels.forward;
+    return "Needs an address to forward to";
   }
 
-  if (action.type === "draft_reply") {
-    return action.draftTone
-      ? `Draft reply: ${action.draftTone}`
-      : actionLabels.draft_reply;
-  }
-
-  return actionLabels.archive;
+  return "Needs draft instructions";
 }
 
 function actionIsReady(action: WorkflowAction) {

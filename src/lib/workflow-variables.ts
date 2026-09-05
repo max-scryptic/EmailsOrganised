@@ -17,7 +17,6 @@ export type NodeOutputField = {
 export type VariableChainNode =
   | { id: string; kind: "trigger" }
   | { id: string; kind: "classifier" }
-  | { id: string; kind: "outcome"; outcomeName: string }
   | { id: string; kind: "action"; actionType: WorkflowActionType };
 
 /** A node's outputs as the inspector groups them: one card per source node. */
@@ -161,13 +160,17 @@ const emailFields = [
  */
 export type EmailVariableToken = (typeof emailFields)[number]["token"];
 
-/** What the AI classification step decides about a message. */
+/**
+ * What the classification step decides about a message. These are exactly the
+ * three values the model is forced to return, which is why there is nothing
+ * here the run cannot actually produce.
+ */
 const classifierFields: NodeOutputField[] = [
   {
-    token: "classification.name",
-    label: "Classification",
-    description: "Name of the classification the email matched.",
-    example: "Overdue invoice",
+    token: "classification.label",
+    label: "Label",
+    description: "The output label the model picked for this email.",
+    example: "Sales",
   },
   {
     token: "classification.confidence",
@@ -178,35 +181,10 @@ const classifierFields: NodeOutputField[] = [
   {
     token: "classification.reasoning",
     label: "Reasoning",
-    description: "The model's short explanation for the match.",
+    description: "The model's short explanation for the label it picked.",
     example: "Mentions invoice 1024 and a missed due date.",
   },
-  {
-    token: "classification.summary",
-    label: "Summary",
-    description: "One-line summary of the email.",
-    example: "Ada is chasing payment on invoice 1024.",
-  },
 ];
-
-function outcomeFields(outcomeName: string): NodeOutputField[] {
-  const name = outcomeName.trim() || "Overdue invoice";
-
-  return [
-    {
-      token: "match.name",
-      label: "Matched classification",
-      description: "Name of this classification.",
-      example: name,
-    },
-    {
-      token: "match.rule",
-      label: "Matched rule",
-      description: "The classification rule this branch matched on.",
-      example: "The sender is asking about an unpaid invoice.",
-    },
-  ];
-}
 
 /**
  * The prefix an action's outputs sit under. Kept short because it is typed by
@@ -324,11 +302,6 @@ export function chainOutputFields(chain: VariableChainNode[]) {
       return;
     }
 
-    if (node.kind === "outcome") {
-      fieldsByNode.set(node.id, outcomeFields(node.outcomeName));
-      return;
-    }
-
     const base = actionNamespaces[node.actionType];
     const seen = (namespaceCounts.get(base) ?? 0) + 1;
 
@@ -349,11 +322,7 @@ export function chainNodeOutputTitle(node: VariableChainNode) {
   }
 
   if (node.kind === "classifier") {
-    return "Classify with AI";
-  }
-
-  if (node.kind === "outcome") {
-    return node.outcomeName.trim() || "Classification";
+    return "Classification";
   }
 
   return actionLabels[node.actionType];
@@ -383,9 +352,34 @@ export function insertAtSelection({
   };
 }
 
+const variablePattern = /\{\{\s*([\w.]+)\s*\}\}/g;
+
 /** Every `{{token}}` in a field, in the order it appears. */
 export function usedVariableTokens(value: string) {
-  return Array.from(value.matchAll(/\{\{\s*([\w.]+)\s*\}\}/g)).map(
-    (match) => match[1]
+  return Array.from(value.matchAll(variablePattern)).map((match) => match[1]);
+}
+
+/**
+ * Swaps every `{{token}}` this run has a value for. A token with no value is
+ * left as it was written rather than blanked, so a prompt sent to the model
+ * still reads as the user wrote it instead of quietly losing a clause.
+ */
+export function applyVariables(text: string, values: Record<string, string>) {
+  return text.replace(variablePattern, (match, token: string) =>
+    token in values ? values[token] : match
   );
+}
+
+/**
+ * The `{{email.*}}` values a test run stands in with: whatever the tester
+ * typed, and the documented example for every field they did not.
+ */
+export function sampleEmailValues(overrides: Record<string, string> = {}) {
+  const values: Record<string, string> = {};
+
+  emailFields.forEach((field) => {
+    values[field.token] = field.example;
+  });
+
+  return { ...values, ...overrides };
 }

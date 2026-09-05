@@ -422,6 +422,15 @@ middle of the node, so the fan-out reads as one outlet per answer. With no
 outputs the node still shows one row, reading "No outputs yet", so an unfinished
 classification never looks finished.
 
+**Edges are square, not curved.** A 2px wire runs 18px straight out of its
+outlet, turns at a right angle, and runs straight into the inlet — never a
+bezier. The board is a grid and the corners of everything on it are cut, so a
+wire that only travels along the grid's axes is the one that belongs on it, and
+a fan of them stays traceable back to the outlet each left. A target sitting
+beside or behind its source gets the same treatment: the wire leaves forwards,
+drops into a 34px lane below both nodes, and comes back to the inlet from the
+left rather than reversing through the node it just left.
+
 ## Do's and Don'ts
 
 ### Do:

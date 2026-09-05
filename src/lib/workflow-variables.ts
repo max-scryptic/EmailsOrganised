@@ -42,7 +42,7 @@ export function variableExpression(token: string) {
  * fields of a Gmail `users.messages.get` response — the watcher retrieves the
  * message, and every one of these values travels down the workflow with it.
  */
-const emailFields: NodeOutputField[] = [
+const emailFields = [
   {
     token: "email.subject",
     label: "Subject",
@@ -151,7 +151,14 @@ const emailFields: NodeOutputField[] = [
     description: "The connected account the message arrived in.",
     example: "you@yourcompany.com",
   },
-];
+] as const satisfies readonly NodeOutputField[];
+
+/**
+ * The tokens the watcher publishes, as a union. A debug run fills one value per
+ * token, so typing the record against this makes a missed field a type error
+ * rather than a blank row in the panel.
+ */
+export type EmailVariableToken = (typeof emailFields)[number]["token"];
 
 /**
  * What the classification step decides about a message. These are exactly the
@@ -286,7 +293,7 @@ export function chainOutputFields(chain: VariableChainNode[]) {
 
   chain.forEach((node) => {
     if (node.kind === "trigger") {
-      fieldsByNode.set(node.id, emailFields);
+      fieldsByNode.set(node.id, [...emailFields]);
       return;
     }
 

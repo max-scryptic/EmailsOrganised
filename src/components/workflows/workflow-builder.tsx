@@ -5,6 +5,7 @@ import {
   Archive,
   CheckCircle2,
   ChevronRight,
+  FlaskConical,
   Forward,
   Grip,
   Inbox,
@@ -28,6 +29,12 @@ import {
   NodeOutputSummary,
   UpstreamDataPanel,
 } from "@/components/workflows/node-data-panel";
+import {
+  useWorkflowDebug,
+  WorkflowDebugBar,
+  WorkflowDebugDialog,
+  WorkflowDebugStepPanel,
+} from "@/components/workflows/workflow-debug";
 import {
   VariableInsertProvider,
   VariableInput,
@@ -90,11 +97,12 @@ const canvasWidth = 1520;
 const canvasHeight = 980;
 /**
  * A node says what it is and nothing else, so it is sized for one line of text
- * beside one icon. Everything a node used to summarise on the board — the
+ * beside one icon — wide enough that a node's name still fits whole beside the
+ * status marker a test run puts there. Everything a node used to summarise on the board — the
  * prompt, the counts, the readiness badge — lives in its settings panel, which
  * is where it can be acted on.
  */
-const nodeWidth = 208;
+const nodeWidth = 252;
 const nodeBaseHeight = 60;
 /**
  * The classification node is the one exception: it grows a row per output
@@ -150,6 +158,13 @@ type CanvasBranch = {
   labelId: string;
   name: string;
 };
+
+/**
+ * How a node reads during a test: the trigger while it waits for mail, then —
+ * once a run starts — the node the run is on, the ones it has been through, the
+ * ones still to come, and the ones this email never reaches.
+ */
+type DebugNodeState = "listening" | "active" | "passed" | "ahead" | "muted";
 
 type CanvasNodePosition = {
   x: number;
@@ -340,6 +355,23 @@ export function WorkflowBuilder({
   const [isPaletteOpen, setIsPaletteOpen] = React.useState(false);
   const [lastSavedAt, setLastSavedAt] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<WorkflowResult>(null);
+  const draft = React.useMemo<WorkflowDraft>(
+    () => ({
+      name: workflowName,
+      ownerRole,
+      trigger,
+      classifierPrompt,
+      labels,
+    }),
+    [classifierPrompt, labels, ownerRole, trigger, workflowName]
+  );
+  /**
+   * A test run works on the draft that is on the board, not on the saved row,
+   * so a workflow can be tested before it has ever been saved.
+   */
+  const debug = useWorkflowDebug(draft);
+  const { height: debugPanelHeight, measure: measureDebugPanel } =
+    useMeasuredHeight(defaultInspectorHeight);
 
   const selectedLabel =
     selectedModule?.type === "action"
@@ -430,6 +462,27 @@ export function WorkflowBuilder({
         board: boardSize,
         panelWidth: connectMenuWidth,
         panelHeight: connectMenuHeight,
+      })
+    : null;
+
+  // The step panel floats beside the node the run is on, exactly the way the
+  // settings inspector floats beside the node you are editing.
+  const debugNode = debug.step
+    ? canvasNodeMap.get(debug.step.nodeId) ?? null
+    : null;
+  const debugPanelWidth = Math.min(
+    inspectorSettingsWidth,
+    boardSize.width > 0
+      ? Math.max(240, boardSize.width - inspectorMargin * 2)
+      : Number.POSITIVE_INFINITY
+  );
+  const debugPanelPosition = debugNode
+    ? floatingPanelPosition({
+        nodePosition: debugNode.position,
+        view,
+        board: boardSize,
+        panelWidth: debugPanelWidth,
+        panelHeight: debugPanelHeight,
       })
     : null;
 
@@ -743,16 +796,6 @@ export function WorkflowBuilder({
     };
   }, [connectMenu]);
 
-  function currentDraft(): WorkflowDraft {
-    return {
-      name: workflowName,
-      ownerRole,
-      trigger,
-      classifierPrompt,
-      labels,
-    };
-  }
-
   /** Re-parents an action onto another output's branch, at the front of it. */
   function moveActionToLabel(actionId: string, labelId: string) {
     let movedAction: WorkflowAction | undefined;
@@ -931,6 +974,71 @@ export function WorkflowBuilder({
     });
   }
 
+  // Both are read from effects that must not re-run when the board re-renders.
+  const revealPositionRef = React.useRef(revealPosition);
+  const canvasNodeMapRef = React.useRef(canvasNodeMap);
+
+  React.useEffect(() => {
+    revealPositionRef.current = revealPosition;
+    canvasNodeMapRef.current = canvasNodeMap;
+  });
+
+  const debugNodeId = debug.isRunning ? debug.step?.nodeId ?? null : null;
+
+  // Stepping the run slides the board to the node the step belongs to, so the
+  // panel is never explaining a node that is off screen.
+  React.useEffect(() => {
+    if (!debugNodeId) {
+      return;
+    }
+
+    const node = canvasNodeMapRef.current.get(debugNodeId);
+
+    if (node) {
+      revealPositionRef.current(node.position, node.height);
+    }
+  }, [boardSize.height, boardSize.width, debugNodeId]);
+
+  /**
+   * A test takes the board over: nothing is edited while it runs, so the
+   * inspector, the add-node menu, and the palette all step aside before the
+   * watcher starts listening.
+   */
+  function startDebug() {
+    setSelectedModule(null);
+    setConnectMenu(null);
+    setConnectingFrom(null);
+    setIsPaletteOpen(false);
+    debug.start();
+  }
+
+  /** Where a node stands in the test, or undefined when no test is on. */
+  function debugNodeState(nodeId: string): DebugNodeState | undefined {
+    // Waiting for mail is the trigger node's job, so it is the node that shows
+    // it. Everything else is simply not doing anything yet.
+    if (debug.isListening) {
+      return nodeId === "trigger" ? "listening" : undefined;
+    }
+
+    if (!debug.isRunning || !debug.run) {
+      return undefined;
+    }
+
+    if (debug.step?.nodeId === nodeId) {
+      return "active";
+    }
+
+    const index = debug.run.steps.findIndex((item) => item.nodeId === nodeId);
+
+    if (index === -1) {
+      // This email never reaches the node — a branch it did not match, or an
+      // action under one.
+      return "muted";
+    }
+
+    return index < debug.stepIndex ? "passed" : "ahead";
+  }
+
   /**
    * Adds the picked action straight after the outlet whose handle opened the
    * menu, so it arrives already wired into that branch's sequence.
@@ -1037,6 +1145,16 @@ export function WorkflowBuilder({
   function handleNodeClick(node: FlowCanvasNode) {
     if (ignoreNodeClick.current) {
       ignoreNodeClick.current = false;
+      return;
+    }
+
+    // During a test a node is not something you open — while a run is stepping
+    // it is a step to jump to, if this email went through it at all.
+    if (debug.isDebugging) {
+      if (debug.isRunning) {
+        debug.goToNode(node.id);
+      }
+
       return;
     }
 
@@ -1223,7 +1341,7 @@ export function WorkflowBuilder({
         const response = await saveWorkflow({
           id: workflowId,
           status,
-          ...currentDraft(),
+          ...draft,
         });
 
         setResult(response);
@@ -1276,6 +1394,18 @@ export function WorkflowBuilder({
             <p className="text-xs text-muted-foreground">{saveHint}</p>
           ) : null}
           {actions}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={debug.isDebugging ? debug.stop : startDebug}
+          >
+            {debug.isDebugging ? (
+              <X className="size-4" />
+            ) : (
+              <FlaskConical className="size-4" />
+            )}
+            {debug.isDebugging ? "Exit test" : "Test workflow"}
+          </Button>
           <Button type="button" onClick={saveDraft} disabled={isPending}>
             {isPending ? (
               <Loader2 className="size-4 animate-spin" />
@@ -1344,6 +1474,15 @@ export function WorkflowBuilder({
                 )}
                 onPointerDown={(event) => handleNodePointerDown(event, node)}
                 onSelect={() => handleNodeClick(node)}
+                debugState={debugNodeState(node.id)}
+                followedBranchId={
+                  debug.isRunning && node.kind === "classifier"
+                    ? debug.run?.followedLabelId ?? null
+                    : undefined
+                }
+                // A test is a reading of the board, not an edit of it: the
+                // outlets stop offering to add anything while one is running.
+                canAddNext={!debug.isDebugging}
                 openMenuBranch={
                   connectMenu?.nodeId === node.id
                     ? connectMenu.branchIndex ?? "node"
@@ -1375,19 +1514,37 @@ export function WorkflowBuilder({
             onReset={() => zoomFromButton(() => 1)}
           />
 
-          <NodePalette
-            open={isPaletteOpen}
-            canAddAction={labels.length > 0}
-            onOpenChange={setIsPaletteOpen}
-            onAddAction={(type) => {
-              const labelId = labelIdForDrop({ x: 0, y: 0 });
+          {debug.isDebugging ? null : (
+            <NodePalette
+              open={isPaletteOpen}
+              canAddAction={labels.length > 0}
+              onOpenChange={setIsPaletteOpen}
+              onAddAction={(type) => {
+                const labelId = labelIdForDrop({ x: 0, y: 0 });
 
-              if (labelId) {
-                addAction(labelId, type);
-                setIsPaletteOpen(false);
-              }
-            }}
-          />
+                if (labelId) {
+                  addAction(labelId, type);
+                  setIsPaletteOpen(false);
+                }
+              }}
+            />
+          )}
+
+          <WorkflowDebugBar debug={debug} />
+
+          {debug.isRunning && debugPanelPosition ? (
+            <WorkflowDebugStepPanel
+              ref={measureDebugPanel}
+              debug={debug}
+              position={debugPanelPosition}
+              width={debugPanelWidth}
+              maxHeight={Math.max(
+                200,
+                (boardSize.height || defaultInspectorHeight) -
+                  inspectorMargin * 2
+              )}
+            />
+          ) : null}
 
           {connectMenuOutlet && connectMenuPosition ? (
             <NodeConnectMenu
@@ -1482,6 +1639,7 @@ export function WorkflowBuilder({
       </Card>
 
       <ConfirmDialog />
+      <WorkflowDebugDialog debug={debug} />
     </div>
   );
 }
@@ -1894,7 +2052,10 @@ function CanvasNode({
   selected,
   connecting,
   canReceiveConnection,
+  canAddNext,
   openMenuBranch,
+  debugState,
+  followedBranchId,
   onPointerDown,
   onSelect,
   onToggleMenu,
@@ -1904,8 +2065,14 @@ function CanvasNode({
   selected: boolean;
   connecting: boolean;
   canReceiveConnection: boolean;
+  /** False while a test is running, which hides every outlet's plus. */
+  canAddNext: boolean;
   /** Which outlet has the add-node menu open: a branch index, or the node. */
   openMenuBranch: number | "node" | null;
+  /** Set only while a test run is stepping through the board. */
+  debugState?: DebugNodeState;
+  /** Classification node, during a run: the branch this email took. */
+  followedBranchId?: string | null;
   onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => void;
   onSelect: () => void;
   onToggleMenu: (branchIndex?: number) => void;
@@ -1917,7 +2084,7 @@ function CanvasNode({
   // Only an action can be followed by another node from the node's own edge.
   // The classification branches out from its rows instead, and the trigger's
   // one link — to the classification — is fixed.
-  const canAddNext = node.kind === "action";
+  const showNodeHandle = canAddNext && node.kind === "action";
 
   return (
     <div
@@ -1944,11 +2111,22 @@ function CanvasNode({
         "select-none",
         // The trigger's idle glow animates box-shadow, which would outrank the
         // drag ring below — so it steps aside while the node is being dragged.
+        // The halo also steps aside for a test run, where the lit node is
+        // whichever step the run is on.
         isInitialNode &&
+          !debugState &&
           "border-primary/45 not-data-[dragging=true]:motion-safe:animate-brand-glow-pulse not-data-[dragging=true]:motion-reduce:shadow-[0_0_0_1px_var(--brand-glow),0_0_22px_-6px_var(--brand-glow)]",
         selected && "border-primary shadow-md ring-2 ring-primary/20",
         connecting && "border-primary bg-primary/10",
         canReceiveConnection && "ring-2 ring-muted-foreground/20",
+        // A run reads as a path across the board: the step it is on is lit, the
+        // nodes this email never reached recede.
+        debugState === "listening" &&
+          "border-primary shadow-md ring-2 ring-primary/30 not-data-[dragging=true]:motion-safe:animate-brand-glow-pulse not-data-[dragging=true]:motion-reduce:shadow-[0_0_0_1px_var(--brand-glow),0_0_22px_-6px_var(--brand-glow)]",
+        debugState === "active" &&
+          "border-primary shadow-md ring-2 ring-primary/30",
+        debugState === "passed" && "border-success/50",
+        debugState === "muted" && "opacity-40",
         // Set on the DOM by the drag handlers, not by React. A dragged node
         // lifts off the board: brand ring, deeper shadow, and above its
         // neighbours so it never slides underneath one. The hand appears with
@@ -1982,7 +2160,7 @@ function CanvasNode({
         />
       ) : null}
 
-      {canAddNext ? (
+      {showNodeHandle ? (
         <ConnectHandle
           open={openMenuBranch === "node"}
           connecting={connecting}
@@ -2007,7 +2185,16 @@ function CanvasNode({
         <span className="min-w-0 flex-1 truncate font-medium">
           {node.title}
         </span>
-        {node.needs ? (
+        {/* During a run the marker reports the run, not the draft: whether the
+            node is configured is a question for when you are editing it. */}
+        {debugState ? (
+          <Badge
+            variant={debugBadge[debugState].variant}
+            className="shrink-0"
+          >
+            {debugBadge[debugState].label}
+          </Badge>
+        ) : node.needs ? (
           <TriangleAlert
             aria-hidden="true"
             className="size-3.5 shrink-0 text-warning"
@@ -2025,37 +2212,63 @@ function CanvasNode({
               No outputs yet
             </div>
           ) : null}
-          {node.branches.map((branch, index) => (
-            <div
-              key={branch.labelId}
-              className="relative flex items-center justify-end pl-12 pr-3"
-              style={{ height: branchRowHeight }}
-            >
-              <span
-                className={cn(
-                  "truncate text-xs",
-                  branch.name
-                    ? "text-muted-foreground"
-                    : "italic text-muted-foreground/70"
-                )}
+          {node.branches.map((branch, index) => {
+            // While a run is on, the branch it took is the only one in focus —
+            // the rest are paths this email was never going to follow.
+            const receded =
+              followedBranchId !== undefined &&
+              branch.labelId !== followedBranchId;
+
+            return (
+              <div
+                key={branch.labelId}
+                className="relative flex items-center justify-end pl-12 pr-3"
+                style={{ height: branchRowHeight }}
               >
-                {branch.name || "Unnamed output"}
-              </span>
-              <ConnectHandle
-                open={openMenuBranch === index}
-                connecting={connecting}
-                label={`Add an action to the ${
-                  branch.name || "unnamed"
-                } branch`}
-                onToggle={() => onToggleMenu(index)}
-              />
-            </div>
-          ))}
+                <span
+                  className={cn(
+                    "truncate text-xs transition-opacity",
+                    branch.name
+                      ? "text-muted-foreground"
+                      : "italic text-muted-foreground/70",
+                    receded && "opacity-40"
+                  )}
+                >
+                  {branch.name || "Unnamed output"}
+                </span>
+                {canAddNext ? (
+                  <ConnectHandle
+                    open={openMenuBranch === index}
+                    connecting={connecting}
+                    label={`Add an action to the ${
+                      branch.name || "unnamed"
+                    } branch`}
+                    onToggle={() => onToggleMenu(index)}
+                  />
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </div>
   );
 }
+
+/**
+ * What a node's marker says while a run is stepping through. "Running" is a
+ * true live state, which is why it is the one that takes the accent.
+ */
+const debugBadge = {
+  listening: { label: "Listening", variant: "default" },
+  active: { label: "Running", variant: "default" },
+  passed: { label: "Done", variant: "secondary" },
+  ahead: { label: "Next up", variant: "outline" },
+  muted: { label: "Not reached", variant: "outline" },
+} satisfies Record<
+  DebugNodeState,
+  { label: string; variant: React.ComponentProps<typeof Badge>["variant"] }
+>;
 
 /**
  * The outlet an edge leaves from, and the button that adds what comes next.

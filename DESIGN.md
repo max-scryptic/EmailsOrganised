@@ -404,9 +404,12 @@ Orange on hover or when open. Everything that floats — toolbar, add button,
 editor popovers — uses the shadow ladder in Elevation and enters with
 `animate-in fade-in-0 zoom-in-95` over 150ms.
 
-**A node states its identity, not its configuration.** 208×60px, 12px
+**A node states its identity, not its configuration.** 252×60px, 12px
 horizontal padding: a 36px tinted icon tile, one line of 14px medium-weight
-title, and nothing else. Settings, summaries, and counts belong in the node's
+title, and nothing else. The width is set by the longest node name sitting
+beside the status badge a test run puts there — a node whose name truncates to
+fit its own state has stopped stating its identity. Settings, summaries, and
+counts belong in the node's
 editor popover, which is where they can be changed. A node missing something it
 cannot run without carries a single 14px Caution triangle at its right edge;
 what is missing is named in the node's accessible label and fixed in its panel.

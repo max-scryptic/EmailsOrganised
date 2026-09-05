@@ -66,9 +66,17 @@ Confirmed and implemented:
   setting of the classification node, not a node of its own — it is named in
   that node's panel and appears on the board as a branch.
 - Classification runs through OpenAI, keyed by `OPENAI_API_KEY` and modelled by
-  `OPENAI_CLASSIFIER_MODEL` (default `gpt-4o-mini`). The builder can run one
-  classification against a sample email; nothing runs a workflow against a real
-  mailbox yet.
+  `OPENAI_CLASSIFIER_MODEL` (default `gpt-4o-mini`). The classification panel
+  can run one against a sample email.
+- Test mode on the builder: "Test workflow" arms the trigger node to listen to
+  the connected mailbox (Gmail read only), and the first message to arrive
+  after that starts a run the user steps through node by node, seeing each
+  node's settings with `{{variables}}` resolved and the values it passes on. A
+  test never writes to the mailbox — actions are described, not performed. The
+  branch is picked by the same model call the workflow runs on, and the user can
+  follow any other branch on demand to test it. A sample email stands in when no
+  mailbox is connected; with no API key the run still steps, and says the branch
+  is the user's choice rather than the model's.
 - Actions carry their own settings — forward target, subject prefix, note,
   signature, include original thread, mark handled, draft instructions, draft
   tone, and an approval requirement on generated drafts.

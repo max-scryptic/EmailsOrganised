@@ -65,3 +65,30 @@ export const saveWorkflowInputSchema = workflowDraftSchema.extend({
 });
 
 export type SaveWorkflowInput = z.infer<typeof saveWorkflowInputSchema>;
+
+/**
+ * What the debug watcher sends back on each poll: when it started listening,
+ * and the messages it has already handed to the board. The seen list is capped
+ * because it comes from the browser and is only ever a handful of ids.
+ */
+export const debugWatchPollSchema = z.object({
+  startedAt: z.number().int().positive(),
+  seenIds: z.array(z.string().max(128)).max(50),
+});
+
+export type DebugWatchPollInput = z.infer<typeof debugWatchPollSchema>;
+
+/**
+ * What the board sends to classify the email a test run is stepping through:
+ * the prompt, the outputs the model is held to, and the `email.*` values the
+ * trigger step produced, so `{{variables}}` resolve to the real message.
+ */
+export const debugClassifySchema = z.object({
+  prompt: z.string().trim().min(1, "Write a classification prompt first."),
+  labels: z
+    .array(z.string().trim().min(1))
+    .min(1, "Name at least one output first."),
+  email: z.record(z.string().max(200), z.string()),
+});
+
+export type DebugClassifyInput = z.infer<typeof debugClassifySchema>;

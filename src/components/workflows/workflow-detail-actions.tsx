@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Play, Trash2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { deleteWorkflow } from "@/app/workflows/actions";
 import { useConfirmDialog } from "@/components/use-confirm-dialog";
 import {
@@ -59,10 +59,6 @@ export function WorkflowDetailActions({
 
   return (
     <>
-      <Button type="button" variant="outline">
-        <Play className="size-4" />
-        Run checks
-      </Button>
       <Button
         type="button"
         variant="outline"

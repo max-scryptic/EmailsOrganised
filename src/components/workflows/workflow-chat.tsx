@@ -43,9 +43,16 @@ const greeting =
 
 export function WorkflowChat({
   onOpenEditor,
+  onReturnToEditor,
 }: {
   /** Called with the drafted workflow, or null to start from a blank board. */
   onOpenEditor: (draft: WorkflowDraft | null) => void;
+  /**
+   * Set once a board exists, and goes back to it without touching it. Its
+   * absence is what tells the chat it is still the first phase, where the only
+   * way to the builder is to open one.
+   */
+  onReturnToEditor?: () => void;
 }) {
   const messageId = React.useRef(0);
   const nextId = React.useCallback(() => {
@@ -122,7 +129,7 @@ export function WorkflowChat({
   }, [input, isPending, messages, nextId, send]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-xl font-semibold tracking-normal sm:text-2xl">
@@ -134,14 +141,25 @@ export function WorkflowChat({
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenEditor(null)}
-          >
-            <PenLine className="size-4" />
-            Build it myself
-          </Button>
+          {/* Before there is a board, the second way out of the chat is to
+              skip it and start from a blank one. Once there is, that offer is
+              gone — the board is the work, and the button that sits here goes
+              back to it. */}
+          {onReturnToEditor ? (
+            <Button type="button" variant="outline" onClick={onReturnToEditor}>
+              <PenLine className="size-4" />
+              Back to the editor
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenEditor(null)}
+            >
+              <PenLine className="size-4" />
+              Build it myself
+            </Button>
+          )}
           <Button
             type="button"
             // Outline until there is something to open. A disabled primary
@@ -151,7 +169,10 @@ export function WorkflowChat({
             disabled={!canOpen || !draft}
             onClick={() => onOpenEditor(draft)}
           >
-            Open in the editor
+            {/* Naming the effect, because this is the one button that throws
+                away whatever is on the board and puts the conversation's
+                latest reading there instead. */}
+            {onReturnToEditor ? "Update the board" : "Open in the editor"}
             <ArrowRight className="size-4" />
           </Button>
         </div>

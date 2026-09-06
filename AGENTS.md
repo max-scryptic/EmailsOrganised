@@ -78,9 +78,30 @@ Read both before designing a surface. The bullets below are the short version.
 - The classification node's outputs are `ClassificationLabel[]` on the draft.
   They are the branches on the board *and* the enum the model's answer is
   decoded against, so adding one changes both. `src/lib/ai/classify-email.ts`
-  owns that call and is the only place the model is spoken to. Note the seam:
-  the column behind them is still called `outcomes`, mapped to `labels` in
-  `src/lib/workflows.ts` and `src/app/workflows/actions.ts`.
+  owns that call. Note the seam: the column behind them is still called
+  `outcomes`, mapped to `labels` in `src/lib/workflows.ts` and
+  `src/app/workflows/actions.ts`.
+- Two features speak to a model, and each owns exactly one call: the
+  classification (`src/lib/ai/classify-email.ts`) and the chat that drafts a
+  workflow (`src/lib/ai/draft-workflow.ts`). Both post through
+  `src/lib/ai/openai.ts`, which owns the endpoint, the timeout, and the error
+  wording — a new model call adds a module beside them rather than its own
+  `fetch`. Both force their answer with a JSON schema instead of asking for one
+  in the prompt; that is the house pattern, not an implementation detail.
+- `/workflows/new` opens the setup chat
+  (`src/components/workflows/workflow-chat.tsx`), and "Open in the editor"
+  swaps it for the builder with the drafted `WorkflowDraft` in hand —
+  `new-workflow-flow.tsx` holds both phases on one route because a draft is
+  handed over in memory, never through the database or session storage. The
+  chat writes nothing; the builder still saves on the user's say-so.
+- The model never emits a `WorkflowDraft`. It emits the narrower
+  `WorkflowIntent`, and `buildDraftFromIntent` in `src/lib/workflow-intent.ts`
+  maps it onto a draft through the same factories the builder uses. Ids,
+  action defaults, and the two safety rules live there, not in a prompt: every
+  generated workflow gets a catch-all label — a lone label is the *only* answer
+  its enum allows, so it would swallow the whole mailbox — and a
+  `{{classification.confidence}}` gate on the wire into any branch that
+  forwards, drafts, or archives. Tagging is reversible and is not gated.
 - Test mode on the builder (`src/components/workflows/workflow-debug.tsx` for
   the UI, `src/lib/workflow-debug.ts` for the engine) steps one email through
   the draft on the board. It only ever reads the mailbox — the Gmail calls live

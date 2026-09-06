@@ -1,5 +1,12 @@
 import "server-only";
 
+import {
+  ModelError,
+  isModelConfigured,
+  postChatCompletion,
+  readMessageContent,
+} from "@/lib/ai/openai";
+
 /**
  * The classification step's model call.
  *
@@ -9,22 +16,11 @@ import "server-only";
  * the response is decoded against, where `label` is an enum of exactly the
  * labels the workflow declares. A model that wants to answer "Billing" when the
  * workflow only offers Sales / FAQ / Important is not able to.
+ *
+ * The transport — endpoint, timeout, error wording — lives in `openai.ts`,
+ * shared with the chat that drafts a workflow. What is owned here is the call
+ * itself: the schema that closes the answer set, and how it is read back.
  */
-
-const defaultBaseUrl = "https://api.openai.com/v1";
-
-/**
- * `OPENAI_BASE_URL` points the call at an OpenAI-compatible gateway instead —
- * a proxy, a self-hosted endpoint, or a stub while developing.
- */
-function chatCompletionsEndpoint() {
-  const base = (process.env.OPENAI_BASE_URL?.trim() || defaultBaseUrl).replace(
-    /\/+$/,
-    ""
-  );
-
-  return `${base}/chat/completions`;
-}
 
 /**
  * A small, cheap model is the right tool here: the job is one short label from
@@ -32,9 +28,6 @@ function chatCompletionsEndpoint() {
  * `OPENAI_CLASSIFIER_MODEL` when a cheaper or newer one comes along.
  */
 const defaultModel = "gpt-4o-mini";
-
-/** How long a single classification is allowed to take before it is dropped. */
-const requestTimeoutMs = 20_000;
 
 export type ClassificationEmail = {
   subject: string;
@@ -51,10 +44,10 @@ export type EmailClassification = {
 };
 
 /** A failure with a message that is safe to show the person who triggered it. */
-export class ClassificationError extends Error {}
+export class ClassificationError extends ModelError {}
 
 /** False when no API key is set, which every caller should say out loud. */
-export const isClassificationConfigured = Boolean(process.env.OPENAI_API_KEY);
+export const isClassificationConfigured = isModelConfigured;
 
 export function classifierModel() {
   return process.env.OPENAI_CLASSIFIER_MODEL?.trim() || defaultModel;
@@ -71,23 +64,13 @@ export async function classifyEmail({
   labels: string[];
   email: ClassificationEmail;
 }): Promise<EmailClassification> {
-  const apiKey = process.env.OPENAI_API_KEY;
-
-  if (!apiKey) {
-    throw new ClassificationError(
-      "No OpenAI API key is configured. Set OPENAI_API_KEY to run classifications."
-    );
-  }
-
   if (labels.length === 0) {
     throw new ClassificationError(
       "A classification needs at least one output label."
     );
   }
 
-  const response = await postJson(
-    chatCompletionsEndpoint(),
-    apiKey,
+  const response = await postChatCompletion(
     {
       model: classifierModel(),
       // Temperature is deliberately left at the model's default: the answer set
@@ -115,7 +98,8 @@ export async function classifyEmail({
           },
         },
       },
-    }
+    },
+    (message) => new ClassificationError(message)
   );
 
   return readClassification(response, labels);
@@ -145,64 +129,6 @@ function userPrompt(prompt: string, email: ClassificationEmail) {
   ].join("\n\n");
 }
 
-async function postJson(url: string, apiKey: string, body: unknown) {
-  let response: Response;
-
-  try {
-    response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(requestTimeoutMs),
-    });
-  } catch (error) {
-    throw new ClassificationError(
-      error instanceof Error && error.name === "TimeoutError"
-        ? "The model did not answer in time. Try again."
-        : "Could not reach the model. Check the network and try again."
-    );
-  }
-
-  if (!response.ok) {
-    throw new ClassificationError(await apiErrorMessage(response));
-  }
-
-  return (await response.json()) as unknown;
-}
-
-/**
- * The API's own message is the most useful thing to show — it names a bad key,
- * an unknown model, or a rate limit precisely — so it is surfaced rather than
- * flattened into "something went wrong".
- */
-async function apiErrorMessage(response: Response) {
-  const detail = await response
-    .json()
-    .then((body) =>
-      typeof body === "object" &&
-      body !== null &&
-      "error" in body &&
-      typeof (body as { error?: { message?: unknown } }).error?.message ===
-        "string"
-        ? (body as { error: { message: string } }).error.message
-        : ""
-    )
-    .catch(() => "");
-
-  if (response.status === 401) {
-    return "The OpenAI API key was rejected. Check OPENAI_API_KEY.";
-  }
-
-  if (response.status === 429) {
-    return "The model is rate limited right now. Try again in a moment.";
-  }
-
-  return detail || `The model returned ${response.status}.`;
-}
-
 /**
  * Reads the one answer out of the response. Structured outputs make the shape
  * a near-certainty, but a refusal still comes back in place of content, and a
@@ -213,24 +139,15 @@ function readClassification(
   response: unknown,
   labels: string[]
 ): EmailClassification {
-  const message = (
-    response as {
-      choices?: { message?: { content?: unknown; refusal?: unknown } }[];
-    }
-  )?.choices?.[0]?.message;
-
-  if (typeof message?.refusal === "string" && message.refusal) {
-    throw new ClassificationError(`The model declined: ${message.refusal}`);
-  }
-
-  if (typeof message?.content !== "string") {
-    throw new ClassificationError("The model returned an empty answer.");
-  }
+  const content = readMessageContent(
+    response,
+    (message) => new ClassificationError(message)
+  );
 
   let parsed: unknown;
 
   try {
-    parsed = JSON.parse(message.content);
+    parsed = JSON.parse(content);
   } catch {
     throw new ClassificationError("The model's answer was not valid JSON.");
   }

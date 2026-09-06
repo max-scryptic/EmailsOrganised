@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { AppShell } from "@/components/app-shell";
-import { WorkflowBuilder } from "@/components/workflows/workflow-builder";
-import { createEmptyWorkflowDraft } from "@/lib/workflow-data";
+import { NewWorkflowFlow } from "@/components/workflows/new-workflow-flow";
+import { isWorkflowChatConfigured } from "@/lib/ai/draft-workflow";
 
 export const metadata: Metadata = { title: "New workflow" };
 
@@ -9,17 +9,18 @@ export default function NewWorkflowPage() {
   return (
     <AppShell
       title="New workflow"
-      description="Name what the classification can answer, then build the actions each answer runs. Naming the workflow is optional — an unnamed one is numbered for you."
+      description="Describe what you want done with your email, then open what that builds on the board."
       breadcrumbs={[
         { title: "Workflows", href: "/workflows" },
         { title: "New workflow" },
       ]}
-      // The builder owns the heading so the name stays editable, and the board
-      // fills everything under it.
+      // The chat and the builder each own their heading — the chat so it can
+      // explain itself, the builder so the name stays editable — and both fill
+      // everything under it.
       hideHeading
       fill
     >
-      <WorkflowBuilder mode="new" initialDraft={createEmptyWorkflowDraft()} />
+      <NewWorkflowFlow chatConfigured={isWorkflowChatConfigured} />
     </AppShell>
   );
 }

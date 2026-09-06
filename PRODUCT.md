@@ -68,6 +68,18 @@ Confirmed and implemented:
 - Classification runs through OpenAI, keyed by `OPENAI_API_KEY` and modelled by
   `OPENAI_CLASSIFIER_MODEL` (default `gpt-4o-mini`). The classification panel
   can run one against a sample email.
+- `/workflows/new` opens a chat that drafts the workflow from a description —
+  "forward all sales enquiries to sales@example.com" — asking for examples and
+  counter-examples, showing what it has understood as it goes, and handing the
+  finished draft to the builder. It shares `OPENAI_API_KEY`, is modelled by
+  `OPENAI_CHAT_MODEL`, and falls back to opening the blank board when no key is
+  set. The chat drafts; it never saves. The board remains where a workflow is
+  read and changed, which is the positioning above and not a temporary split:
+  a generated workflow is legible on arrival or it has not been delivered.
+- A generated workflow always carries a catch-all branch and a confidence gate
+  on any branch that forwards, drafts, or archives. Both are structural, not
+  advisory: the labels are the enum the model's answer is decoded against, so
+  a single-label workflow would route the entire mailbox down one branch.
 - Test mode on the builder: "Test workflow" arms the trigger node to listen to
   the connected mailbox (Gmail read only), and the first message to arrive
   after that starts a run the user steps through node by node, seeing each

@@ -76,7 +76,11 @@ Read both before designing a surface. The bullets below are the short version.
   new brand or status color is needed.
 - Render the logo through `BrandMark` / `BrandLockup` in
   `src/components/brand-logo.tsx`, and read the product name from `appConfig`
-  rather than typing "EmailsOrganised" into copy. `--brand` is the brand
+  rather than typing "EmailsOrganised" into copy. The browser icons are the
+  same mark: `src/app/icon.svg` is what Next.js links from every page, and
+  `src/app/favicon.ico` and `src/app/apple-icon.png` are rendered from it by
+  `node scripts/generate-icons.mjs`. Run that script after changing the mark,
+  and commit what it writes. `--brand` is the brand
   orange and `--primary` resolves to it, so keep using `primary` in components,
   and pair it with `primary-foreground`, which is white: anything sitting on
   the brand orange is white, never dark.

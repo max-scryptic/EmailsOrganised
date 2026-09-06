@@ -101,6 +101,60 @@ export const saveWorkflowInputSchema = workflowDraftSchema.extend({
 export type SaveWorkflowInput = z.infer<typeof saveWorkflowInputSchema>;
 
 /**
+ * One action as the workflow chat describes it — only the settings a spoken
+ * description can decide. Every field is defaulted because a half-understood
+ * workflow is the normal state mid-conversation, and a missing `note` should
+ * not throw away the turn.
+ */
+export const workflowActionIntentSchema = z.object({
+  type: workflowActionTypeSchema,
+  forwardTo: z.string().default(""),
+  labelName: z.string().default(""),
+  subjectPrefix: z.string().default(""),
+  note: z.string().default(""),
+  draftInstructions: z.string().default(""),
+});
+
+export const classificationLabelIntentSchema = z.object({
+  name: z.string().default(""),
+  isCatchAll: z.boolean().default(false),
+  actions: z.array(workflowActionIntentSchema).default([]),
+});
+
+/**
+ * The whole of what the chat's model call is allowed to describe. It is
+ * deliberately narrower than `workflowDraftSchema` — no ids, no filters, no
+ * action defaults — because those are decided in
+ * `src/lib/workflow-intent.ts`, not by a model.
+ */
+export const workflowIntentSchema = z.object({
+  name: z.string().default(""),
+  classifierPrompt: z.string().default(""),
+  labels: z.array(classificationLabelIntentSchema).default([]),
+});
+
+const workflowChatMessageSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  // Bounded because the whole history is posted on every turn, and it comes
+  // from the browser.
+  content: z.string().trim().min(1).max(4000),
+});
+
+/**
+ * What the chat page sends on each turn: the conversation so far, oldest
+ * first. The history is capped rather than trimmed silently — a conversation
+ * this long has stopped being a setup chat.
+ */
+export const workflowChatInputSchema = z.object({
+  messages: z
+    .array(workflowChatMessageSchema)
+    .min(1, "Say something first.")
+    .max(40, "This conversation is too long. Start a new workflow."),
+});
+
+export type WorkflowChatInput = z.infer<typeof workflowChatInputSchema>;
+
+/**
  * What the debug watcher sends back on each poll: when it started listening,
  * and the messages it has already handed to the board. The seen list is capped
  * because it comes from the browser and is only ever a handful of ids.

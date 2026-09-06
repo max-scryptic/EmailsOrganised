@@ -149,6 +149,8 @@ const edgeBacktrackLane = 34;
  */
 const minZoom = 0.4;
 const maxZoom = 2;
+/** Breathing room left around a workflow the board frames on arrival. */
+const framePadding = 32;
 /** One press of a zoom button. Multiplicative, so the steps feel even. */
 const zoomButtonStep = 1.2;
 /** Zoom is a float, so the buttons compare against the limits with slack. */
@@ -486,6 +488,78 @@ export function WorkflowBuilder({
     () => new Map(canvasNodes.map((node) => [node.id, node])),
     [canvasNodes]
   );
+  /**
+   * A workflow built node by node is already sitting where its author left it,
+   * so the board opens where it always has. One that arrived whole — drafted in
+   * the chat and handed over — has never been on screen, and at 100% a chain of
+   * four nodes runs off the right edge. That one gets framed once, on arrival.
+   */
+  const hasFramedArrival = React.useRef(false);
+
+  React.useEffect(() => {
+    if (hasFramedArrival.current) {
+      return;
+    }
+
+    const canvas = canvasRef.current;
+
+    // The ref is not set on the first render, so this waits rather than
+    // marking itself done and never framing anything.
+    if (!canvas) {
+      return;
+    }
+
+    if (!initialDraft.labels.some((label) => label.actions.length > 0)) {
+      hasFramedArrival.current = true;
+
+      return;
+    }
+
+    const { width, height } = canvas.getBoundingClientRect();
+
+    if (width === 0 || height === 0) {
+      return;
+    }
+
+    const bounds = canvasNodes.reduce(
+      (box, node) => ({
+        minX: Math.min(box.minX, node.position.x),
+        minY: Math.min(box.minY, node.position.y),
+        maxX: Math.max(box.maxX, node.position.x + nodeWidth),
+        maxY: Math.max(box.maxY, node.position.y + node.height),
+      }),
+      {
+        minX: Number.POSITIVE_INFINITY,
+        minY: Number.POSITIVE_INFINITY,
+        maxX: Number.NEGATIVE_INFINITY,
+        maxY: Number.NEGATIVE_INFINITY,
+      }
+    );
+    const spanX = bounds.maxX - bounds.minX;
+    const spanY = bounds.maxY - bounds.minY;
+
+    hasFramedArrival.current = true;
+
+    if (spanX <= 0 || spanY <= 0) {
+      return;
+    }
+
+    // Never past 1: framing a short workflow by blowing it up would make the
+    // board look like a different product depending on what arrived on it.
+    const zoom = clampZoom(
+      Math.min(
+        1,
+        (width - framePadding * 2) / spanX,
+        (height - framePadding * 2) / spanY
+      )
+    );
+
+    setView({
+      x: (width - spanX * zoom) / 2 - bounds.minX * zoom,
+      y: (height - spanY * zoom) / 2 - bounds.minY * zoom,
+      zoom,
+    });
+  }, [canvasNodes, initialDraft.labels]);
   const canvasEdges = React.useMemo(
     () => createCanvasEdges(labels, classifierFilter),
     [classifierFilter, labels]

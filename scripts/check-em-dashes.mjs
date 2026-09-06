@@ -134,10 +134,15 @@ export function findEmDashes(contents, file = "") {
   return findings;
 }
 
+/**
+ * Deduplicated because `git ls-files` prints a conflicted path once per merge
+ * stage, which would otherwise report the same em dash three times mid-merge.
+ */
 function trackedFiles() {
-  return execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" })
+  const listed = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" })
     .split("\0")
     .filter(Boolean);
+  return [...new Set(listed)];
 }
 
 function readIfText(file) {
@@ -204,7 +209,11 @@ async function hook() {
   const file = toolInput.file_path ?? toolInput.notebook_path ?? "";
   const relative = file ? path.relative(process.cwd(), file) : "";
 
-  if (relative && isExcluded(relative)) {
+  // The rule is this repository's, so a scratch file or anything else outside
+  // it is not ours to refuse.
+  const outsideRepo = relative.startsWith("..") || path.isAbsolute(relative);
+
+  if (relative && (outsideRepo || isExcluded(relative))) {
     process.exit(0);
   }
 

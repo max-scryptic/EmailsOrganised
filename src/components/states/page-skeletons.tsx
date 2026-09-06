@@ -26,7 +26,7 @@ export function WorkflowsSkeleton() {
       actions={<ActionSkeletons count={1} />}
     >
       <div className="overflow-hidden rounded-md border">
-        <div className="grid grid-cols-[2fr_0.5fr_0.6fr_48px_48px] gap-4 border-b bg-muted/30 px-4 py-3">
+        <div className="grid grid-cols-[1fr_10rem_10rem_4rem] items-center gap-4 border-b bg-muted/30 px-4 py-3">
           {Array.from({ length: 3 }).map((_, index) => (
             <Skeleton key={index} className="h-4 w-full" />
           ))}
@@ -34,7 +34,7 @@ export function WorkflowsSkeleton() {
         {Array.from({ length: 3 }).map((_, rowIndex) => (
           <div
             key={rowIndex}
-            className="grid grid-cols-[2fr_0.5fr_0.6fr_48px_48px] items-start gap-4 border-b px-4 py-3 last:border-b-0"
+            className="grid grid-cols-[1fr_10rem_10rem_4rem] items-center gap-4 border-b px-4 py-3 last:border-b-0"
           >
             <div className="space-y-2">
               <Skeleton className="h-4 w-40 max-w-full" />
@@ -42,8 +42,7 @@ export function WorkflowsSkeleton() {
             </div>
             <Skeleton className="h-5 w-14" />
             <Skeleton className="h-4 w-24 max-w-full" />
-            <Skeleton className="size-4" />
-            <Skeleton className="size-8 rounded-md" />
+            <Skeleton className="size-9 justify-self-end rounded-md" />
           </div>
         ))}
       </div>

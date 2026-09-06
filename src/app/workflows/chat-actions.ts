@@ -30,6 +30,11 @@ export type WorkflowChatResult =
       draft: WorkflowDraft | null;
       /** Whether that draft is worth opening in the builder yet. */
       canOpen: boolean;
+      /**
+       * Whether this turn asked for example emails. The chat answers it with
+       * the example form instead of the message box.
+       */
+      needsExamples: boolean;
     }
   | { status: "error"; title: string; description: string };
 
@@ -64,6 +69,7 @@ export async function draftWorkflowFromChat(
     return {
       status: "success",
       reply: answer.reply,
+      needsExamples: answer.needsExamples,
       ...draftFromAnswer(answer.intent),
     };
   } catch (error) {

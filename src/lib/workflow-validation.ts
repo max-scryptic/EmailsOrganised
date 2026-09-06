@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { chatMessageMaxLength } from "@/lib/workflow-chat-examples";
 import {
   createWorkflowFilter,
   filterOperatorNames,
@@ -136,8 +137,9 @@ export const workflowIntentSchema = z.object({
 const workflowChatMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
   // Bounded because the whole history is posted on every turn, and it comes
-  // from the browser.
-  content: z.string().trim().min(1).max(4000),
+  // from the browser. The bound lives with the example composer, which is the
+  // one writer that can approach it.
+  content: z.string().trim().min(1).max(chatMessageMaxLength),
 });
 
 /**

@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Loader2, Trash2, TriangleAlert } from "lucide-react";
+import { Loader2, Trash2, TriangleAlert } from "lucide-react";
 import { deleteWorkflow } from "@/app/workflows/actions";
 import { useConfirmDialog } from "@/components/use-confirm-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -52,7 +52,7 @@ function WorkflowRow({
 
   return (
     <TableRow
-      className="group cursor-pointer"
+      className="cursor-pointer"
       onClick={(event) => {
         // The name is a real link, so let it handle its own click (and any
         // interactive control we add to a row later).
@@ -70,29 +70,28 @@ function WorkflowRow({
         router.push(href);
       }}
     >
-      <TableCell className="px-4 py-3 align-top">
+      <TableCell className="px-4 py-3">
         <Link
           href={href}
           className="rounded-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {workflow.draft.name}
         </Link>
-        <div className="text-xs text-muted-foreground">
-          {workflow.draft.ownerRole}
-        </div>
+        {workflow.draft.ownerRole ? (
+          <div className="text-xs text-muted-foreground">
+            {workflow.draft.ownerRole}
+          </div>
+        ) : null}
       </TableCell>
-      <TableCell className="px-4 py-3 align-top">
+      <TableCell className="px-4 py-3">
         <Badge variant={statusVariant[workflow.status]}>
           {workflowStatusLabels[workflow.status]}
         </Badge>
       </TableCell>
-      <TableCell className="px-4 py-3 align-top text-muted-foreground">
+      <TableCell className="px-4 py-3 text-muted-foreground">
         {updatedAtFormatter.format(new Date(workflow.updatedAt))}
       </TableCell>
-      <TableCell className="px-4 py-3 align-top">
-        <ChevronRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-      </TableCell>
-      <TableCell className="px-2 py-3 align-top">
+      <TableCell className="px-4 py-3 text-right">
         <Button
           type="button"
           variant="ghost"
@@ -163,12 +162,9 @@ export function WorkflowTable({ workflows }: { workflows: SavedWorkflow[] }) {
           <TableHeader>
             <TableRow className="bg-muted/30">
               <TableHead className="px-4">Workflow</TableHead>
-              <TableHead className="px-4">Status</TableHead>
-              <TableHead className="px-4">Last edited</TableHead>
-              <TableHead className="w-12 px-4">
-                <span className="sr-only">Open</span>
-              </TableHead>
-              <TableHead className="w-12 px-2">
+              <TableHead className="w-40 px-4">Status</TableHead>
+              <TableHead className="w-40 px-4">Last edited</TableHead>
+              <TableHead className="w-16 px-4">
                 <span className="sr-only">Actions</span>
               </TableHead>
             </TableRow>

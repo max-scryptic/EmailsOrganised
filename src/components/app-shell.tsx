@@ -31,7 +31,7 @@ type AppShellProps = {
   breadcrumbs?: BreadcrumbEntry[];
   /**
    * Drops the title/description/actions row so a page can render its own
-   * heading — an editable one, for example — as part of `children`.
+   * heading (an editable one, for example) as part of `children`.
    */
   hideHeading?: boolean;
   /**

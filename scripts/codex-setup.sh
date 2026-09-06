@@ -22,7 +22,7 @@ npm ci
 # back to the mock provider and route guarding is disabled. Seeding .env.local
 # from the
 # example is still worth doing so the real variable names are discoverable, and
-# it is safe — the example ships NEXT_PUBLIC_BILLING_PROVIDER=mock and empty
+# it is safe: the example ships NEXT_PUBLIC_BILLING_PROVIDER=mock and empty
 # Stripe keys, so nothing tries to reach the network.
 if [ ! -f .env.local ]; then
   echo "==> Seeding .env.local from .env.example"

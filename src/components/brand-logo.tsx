@@ -3,8 +3,8 @@ import { cn } from "@/lib/utils";
 
 /**
  * The EmailsOrganised mark: an orange tile with a white envelope. Drawn inline
- * rather than loaded from `/logo.svg` so it inherits the brand tokens — the
- * same orange `--primary` resolves to — and stays crisp at every size.
+ * rather than loaded from `/logo.svg` so it inherits the brand tokens (the
+ * same orange `--primary` resolves to) and stays crisp at every size.
  * `public/logo.svg` and `src/app/icon.svg` carry the same artwork for contexts
  * outside React.
  */

@@ -12,18 +12,24 @@ documents what came with the template and how to wire each piece up.
 
 `AGENTS.md` holds the repo conventions and is read by both Codex and Claude
 Code (`CLAUDE.md` just imports it). `scripts/codex-setup.sh` is the setup
-script for the Codex environment — it runs `npm ci` and seeds `.env.local`.
+script for the Codex environment: it runs `npm ci` and seeds `.env.local`.
+
+One convention there is a hard rule rather than a preference: **no em dashes
+anywhere**, in copy, comments, docs, or model prompts. `npm run lint` runs
+ESLint and then `scripts/check-em-dashes.mjs` over every tracked file, and a
+`PreToolUse` hook blocks an agent from writing one in the first place. See
+"No Em Dashes" in `AGENTS.md`.
 
 [Impeccable](https://impeccable.style) is installed at project scope, so
-cloning the repo is enough to get it — there is nothing to install for Claude
+cloning the repo is enough to get it; there is nothing to install for Claude
 Code. It adds design vocabulary and a detector that checks UI changes against
 this project's own design system:
 
-- `DESIGN.md` — the visual system: palette, type ramp, radius scale, elevation
-  rules, component specs, and the named rules worth citing.
-- `PRODUCT.md` — durable product truth: users, purpose, positioning, workflow
-  vocabulary, and what is deliberately undecided.
-- `.impeccable/design.json` — the machine-readable sidecar the detector and the
+- `DESIGN.md` holds the visual system: palette, type ramp, radius scale,
+  elevation rules, component specs, and the named rules worth citing.
+- `PRODUCT.md` holds durable product truth: users, purpose, positioning,
+  workflow vocabulary, and what is deliberately undecided.
+- `.impeccable/design.json` is the machine-readable sidecar the detector and the
   live panel read. Regenerated with `DESIGN.md`, never edited alone.
 - `npx impeccable detect src/` runs the detector by hand; it exits non-zero on
   findings. The same detector runs automatically after UI edits in Claude Code.
@@ -80,7 +86,7 @@ Sign-in is Google SSO through Supabase Auth, and it is the only way in. The
 template's password, reset, and verification screens have been removed;
 `next.config.ts` redirects their old paths to `/auth/sign-in`.
 
-The same consent grants mailbox access (`gmail.modify` — read, draft, send), so
+The same consent grants mailbox access (`gmail.modify`: read, draft, send), so
 one Google authorization covers both identifying the user and doing the work
 the product exists to do.
 
@@ -103,13 +109,13 @@ Setting up the Supabase project, the Google Cloud OAuth client, and the
 verification Google requires for Gmail scopes is documented in
 [`docs/google-sso-setup.md`](docs/google-sso-setup.md).
 
-Nothing applies `supabase/migrations/` for you — not the build, not the deploy.
+Nothing applies `supabase/migrations/` for you: not the build, not the deploy.
 A change that adds a column ships to production before the column exists there,
 and the page that selects it throws until someone runs the migration by hand.
 So when a pull request touches `supabase/migrations/`, apply it to the Supabase
 project as part of shipping it.
 
-With no `.env.local` the app still boots — Proxy stops guarding routes and
+With no `.env.local` the app still boots: Proxy stops guarding routes and
 `/auth/sign-in` renders a configuration notice instead of a broken button.
 
 ## Billing
@@ -118,9 +124,9 @@ Billing has two implementations behind one interface. Which one runs is decided
 by `NEXT_PUBLIC_BILLING_PROVIDER`, so a project turns real billing on by adding
 environment variables rather than by rewriting UI.
 
-- `mock` (default) — no keys, no network. `/plans` and `/settings` show their
+- `mock` (default): no keys, no network. `/plans` and `/settings` show their
   full loading, success, and error states out of the box.
-- `stripe` — Checkout, in-place subscription updates, the customer portal, and a
+- `stripe`: Checkout, in-place subscription updates, the customer portal, and a
   signature-verified webhook.
 
 ### Layout
@@ -169,7 +175,7 @@ Test cards live at [docs.stripe.com/testing](https://docs.stripe.com/testing);
 A customer with no subscription goes to hosted Checkout. A customer who already
 subscribes has their existing subscription item swapped in place, so an upgrade
 never bounces them through a second checkout. Both directions settle on the next
-invoice — an upgrade adds a charge for the remainder of the period, a downgrade
+invoice: an upgrade adds a charge for the remainder of the period, a downgrade
 adds a credit. To hold a downgrade until the period boundary instead, replace the
 `proration_behavior` call in `src/lib/billing/stripe/service.ts` with a
 [subscription schedule](https://docs.stripe.com/billing/subscriptions/subscription-schedules).
@@ -181,7 +187,7 @@ whether the plan really changed.
 ### The two seams to wire
 
 **Identity.** `resolveBillingIdentity()` in `src/lib/billing/customer.ts` returns
-the template user. Point it at your auth provider — with Supabase:
+the template user. Point it at your auth provider. With Supabase:
 
 ```ts
 const supabase = await createServerClient();
@@ -193,7 +199,7 @@ return { userId: data.user.id, email: data.user.email!, name: data.user.user_met
 **Persistence.** `billingStore` in `src/lib/billing/store.ts` is an in-memory map.
 It is enough to click through the whole flow locally, but it resets on restart
 and is not shared between serverless instances. Stripe stays the source of truth
-either way — a cold store falls back to looking the customer up in Stripe — but
+either way (a cold store falls back to looking the customer up in Stripe), but
 that costs an API call on every render, so give it a real table before launch:
 
 ```sql
@@ -222,7 +228,7 @@ create policy "own subscription" on billing_subscriptions
 ```
 
 Then implement `BillingStore` against those tables. Write with the service-role
-key from the webhook — it runs without a user session — and keep row-level
+key from the webhook (it runs without a user session) and keep row-level
 security on so the browser can only read its own row. Never let the client write
 these tables; the webhook is the only writer.
 
@@ -240,7 +246,7 @@ them, and `requestSalesContact` is where the CRM or scheduling handoff goes.
 
 - Replace the in-memory store and the template identity.
 - Confirm the webhook endpoint is registered in live mode with its own signing
-  secret — test and live secrets differ.
+  secret; test and live secrets differ.
 - Set `NEXT_PUBLIC_APP_URL` to the deployed origin, or Checkout will send
   customers back to `localhost`.
 - Decide what an unpaid account loses. `invoice.payment_failed` in the webhook is
@@ -267,20 +273,20 @@ npm run build
 
 ## Brand
 
-The product name lives in one place — `appConfig` in
-`src/lib/template-data.ts` — and every surface reads it from there: page
+The product name lives in one place, `appConfig` in
+`src/lib/template-data.ts`, and every surface reads it from there: page
 metadata, the sidebar, auth screens, empty and error copy, and the Stripe
 `appInfo` label. Rename the product by editing `appConfig`.
 
 The logo is an orange tile with a white envelope, drawn three times from the
 same geometry:
 
-- `src/components/brand-logo.tsx` — `BrandMark` and `BrandLockup` for product
-  UI. Both paint from the `--brand` / `--brand-foreground` tokens, so they
-  follow light and dark mode.
-- `src/app/icon.svg` — the browser tab icon, picked up by the Next.js `icon`
+- `src/components/brand-logo.tsx` holds `BrandMark` and `BrandLockup` for
+  product UI. Both paint from the `--brand` / `--brand-foreground` tokens, so
+  they follow light and dark mode.
+- `src/app/icon.svg` is the browser tab icon, picked up by the Next.js `icon`
   file convention.
-- `public/logo.svg` — the same artwork as a static asset for anything outside
+- `public/logo.svg` is the same artwork as a static asset for anything outside
   React (emails, docs, an OG image).
 
 Editing the mark means editing all three: the SVG files carry literal hex
@@ -290,7 +296,7 @@ because they render outside the token system.
 `--sidebar-primary` all resolve to it, so buttons, links, focus rings, badges,
 switches, and the chart placeholder carry the logo colour without any component
 naming it directly. Text on top of the orange uses `--primary-foreground`, a
-warm near-black — white on this orange is 2.1:1, dark text is 8.4:1. The
+warm near-black: white on this orange is 2.1:1, dark text is 8.4:1. The
 envelope inside the mark is the exception and stays white
 (`--brand-foreground`), where it is artwork rather than text.
 

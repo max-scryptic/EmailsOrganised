@@ -10,8 +10,8 @@ import { Button } from "@/components/ui/button";
  * Error boundary for every workflows route: the list, the detail board, and
  * the new-workflow flow.
  *
- * Without this, anything the loaders throw — a Supabase column the deployed
- * database does not have yet, a dropped connection — climbs to the root
+ * Without this, anything the loaders throw (a Supabase column the deployed
+ * database does not have yet, a dropped connection) climbs to the root
  * boundary in `src/app/error.tsx`, which replaces the entire app with a bare
  * "unexpected render failure" panel. That reads as the product being broken
  * rather than one surface failing to load, and it strips the sidebar the user

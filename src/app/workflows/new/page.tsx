@@ -14,8 +14,8 @@ export default function NewWorkflowPage() {
         { title: "Workflows", href: "/workflows" },
         { title: "New workflow" },
       ]}
-      // The chat and the builder each own their heading — the chat so it can
-      // explain itself, the builder so the name stays editable — and both fill
+      // The chat and the builder each own their heading (the chat so it can
+      // explain itself, the builder so the name stays editable) and both fill
       // everything under it.
       hideHeading
       fill

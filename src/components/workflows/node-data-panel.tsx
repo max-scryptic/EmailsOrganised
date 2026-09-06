@@ -240,7 +240,7 @@ function VariableRow({
   return (
     <button
       type="button"
-      // Keeps focus — and the caret — in the settings field the value is
+      // Keeps focus, and the caret, in the settings field the value is
       // being inserted into.
       onMouseDown={(event) => event.preventDefault()}
       onClick={onInsert}

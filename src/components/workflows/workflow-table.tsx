@@ -54,7 +54,7 @@ function WorkflowRow({
     <TableRow
       className="group cursor-pointer"
       onClick={(event) => {
-        // The name is a real link — let it handle its own click (and any
+        // The name is a real link, so let it handle its own click (and any
         // interactive control we add to a row later).
         if (event.target instanceof Element && event.target.closest("a, button, input, select, textarea, [role='button']")) {
           return;

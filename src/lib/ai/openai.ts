@@ -3,9 +3,9 @@ import "server-only";
 /**
  * The one place an OpenAI-compatible chat completion is posted from.
  *
- * Two features speak to a model — the classification behind a workflow node
+ * Two features speak to a model: the classification behind a workflow node
  * (`classify-email.ts`) and the chat that drafts a workflow
- * (`draft-workflow.ts`) — and they want the same things from the transport: the
+ * (`draft-workflow.ts`). They want the same things from the transport: the
  * configured gateway, a timeout, and error messages that name a bad key or a
  * rate limit precisely instead of flattening them into "something went wrong".
  * Only the request body and how the answer is read differ, so only that lives
@@ -28,7 +28,7 @@ export class ModelError extends Error {}
 export const isModelConfigured = Boolean(process.env.OPENAI_API_KEY);
 
 /**
- * `OPENAI_BASE_URL` points the call at an OpenAI-compatible gateway instead —
+ * `OPENAI_BASE_URL` points the call at an OpenAI-compatible gateway instead:
  * a proxy, a self-hosted endpoint, or a stub while developing.
  */
 function chatCompletionsEndpoint() {
@@ -86,8 +86,8 @@ export async function postChatCompletion(
 }
 
 /**
- * The API's own message is the most useful thing to show — it names a bad key,
- * an unknown model, or a rate limit precisely — so it is surfaced rather than
+ * The API's own message is the most useful thing to show. It names a bad key,
+ * an unknown model, or a rate limit precisely, so it is surfaced rather than
  * flattened into "something went wrong".
  */
 async function apiErrorMessage(response: Response) {

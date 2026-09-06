@@ -8,7 +8,7 @@ import { plans } from "@/lib/template-data";
  *
  * Returns either a Checkout URL to redirect to (customer has no subscription
  * yet) or an `applied` result (existing subscription swapped in place). The
- * client never decides which — it follows whatever comes back.
+ * client never decides which; it follows whatever comes back.
  */
 
 const requestSchema = z.object({ planId: z.string() });

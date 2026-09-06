@@ -12,7 +12,7 @@ export const IDENTITY_SCOPES = ["openid", "email", "profile"];
 
 /**
  * `gmail.modify` is the single scope that covers reading messages, creating and
- * updating drafts, and sending — everything except permanent deletion. Asking
+ * updating drafts, and sending: everything except permanent deletion. Asking
  * for it alone is narrower than combining gmail.readonly + compose + send.
  *
  * It is a RESTRICTED scope: the app stays capped at 100 test users until Google

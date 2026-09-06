@@ -23,12 +23,12 @@ type WorkflowRow = {
   /**
    * The filter on the wire from the trigger to the classification. Every other
    * wire's filter is stored on the action it feeds, so it rides inside
-   * `outcomes` — this is the one wire whose downstream node is a column.
+   * `outcomes`: this is the one wire whose downstream node is a column.
    */
   classifier_filter: unknown;
   /**
    * The classification node's output labels. The column is still called
-   * `outcomes` from when a classification was a node of its own — the shape it
+   * `outcomes` from when a classification was a node of its own; the shape it
    * holds is `ClassificationLabel[]`, and the mapping happens here and in
    * `saveWorkflow` so nothing else has to know the old name.
    */

@@ -8,7 +8,7 @@
         "role": "primary",
         "displayName": "Signal Orange",
         "canonical": "oklch(0.77 0.166 63)",
-        "description": "The brand orange, taken from the logo mark. Carries --primary, --ring and --sidebar-primary so the accent and the logo cannot drift apart. Primary action, active nav item, focus ring, live badge, selected node — and nowhere else.",
+        "description": "The brand orange, taken from the logo mark. Carries --primary, --ring and --sidebar-primary so the accent and the logo cannot drift apart. Primary action, active nav item, focus ring, live badge, selected node, and nowhere else.",
         "tonalRamp": [
           "oklch(0.2 0.05 63)",
           "oklch(0.31 0.08 63)",
@@ -104,7 +104,7 @@
         "role": "neutral",
         "displayName": "Ink Muted",
         "canonical": "oklch(0.556 0 0)",
-        "description": "Secondary text, descriptions, placeholders, inactive icons. The workhorse of the hierarchy — what would be a smaller size elsewhere is muted grey here.",
+        "description": "Secondary text, descriptions, placeholders, inactive icons. The workhorse of the hierarchy: what would be a smaller size elsewhere is muted grey here.",
         "tonalRamp": [
           "oklch(0.145 0 0)",
           "oklch(0.205 0 0)",
@@ -120,7 +120,7 @@
         "role": "neutral",
         "displayName": "Hairline",
         "canonical": "oklch(0.922 0 0)",
-        "description": "Borders, dividers and input strokes. In dark mode it becomes oklch(1 0 0 / 10%) — a translucent white rather than a fixed grey.",
+        "description": "Borders, dividers and input strokes. In dark mode it becomes oklch(1 0 0 / 10%), a translucent white rather than a fixed grey.",
         "tonalRamp": [
           "oklch(0.145 0 0)",
           "oklch(0.269 0 0)",
@@ -136,7 +136,7 @@
         "role": "neutral",
         "displayName": "Quiet Fill",
         "canonical": "oklch(0.965 0 0)",
-        "description": "The secondary, muted and accent surface — hover fills, secondary buttons, table zebra. All three roles share one value on purpose: the system has one step of quietness, not three.",
+        "description": "The secondary, muted and accent surface: hover fills, secondary buttons, table zebra. All three roles share one value on purpose: the system has one step of quietness, not three.",
         "tonalRamp": [
           "oklch(0.145 0 0)",
           "oklch(0.205 0 0)",
@@ -152,7 +152,7 @@
         "role": "tertiary",
         "displayName": "Danger",
         "canonical": "oklch(0.577 0.245 27.325)",
-        "description": "Destructive actions and validation errors. Almost never a solid fill — destructive buttons and badges are a 10% tint with Danger-coloured text, so the loudest colour stays quiet until it is pressed.",
+        "description": "Destructive actions and validation errors. Almost never a solid fill: destructive buttons and badges are a 10% tint with Danger-coloured text, so the loudest colour stays quiet until it is pressed.",
         "tonalRamp": [
           "oklch(0.2 0.07 27)",
           "oklch(0.3 0.12 27)",
@@ -184,7 +184,7 @@
         "role": "tertiary",
         "displayName": "Caution",
         "canonical": "oklch(0.74 0.15 75)",
-        "description": "A warning that is not yet an error. Sits close to Signal Orange in hue — keep them apart on the same screen or the accent stops reading as the accent.",
+        "description": "A warning that is not yet an error. Sits close to Signal Orange in hue, so keep them apart on the same screen or the accent stops reading as the accent.",
         "tonalRamp": [
           "oklch(0.22 0.05 75)",
           "oklch(0.33 0.08 75)",
@@ -216,7 +216,7 @@
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Badges, table headers, helper text, metadata. The floor of the scale — nothing goes smaller."
+        "purpose": "Badges, table headers, helper text, metadata. The floor of the scale; nothing goes smaller."
       },
       "control-sm": {
         "displayName": "Control (sm)",
@@ -227,7 +227,7 @@
       {
         "name": "resting-node",
         "value": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
-        "purpose": "A workflow node sitting on the canvas — just enough to lift it off the grid."
+        "purpose": "A workflow node sitting on the canvas: just enough to lift it off the grid."
       },
       {
         "name": "selected-node",
@@ -301,7 +301,7 @@
       "name": "Destructive Button",
       "kind": "button",
       "refersTo": "button-destructive",
-      "description": "Tinted, not solid — the loudest colour in the system stays quiet until it is pressed.",
+      "description": "Tinted, not solid: the loudest colour in the system stays quiet until it is pressed.",
       "html": "<button class=\"ds-btn-destructive\">Delete workflow</button>",
       "css": ".ds-btn-destructive { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--radius-lg, 2px); background: color-mix(in oklch, var(--destructive, oklch(0.577 0.245 27.325)) 10%, transparent); color: var(--destructive, oklch(0.577 0.245 27.325)); font: 500 0.875rem/1.25rem ui-sans-serif, system-ui, sans-serif; white-space: nowrap; cursor: pointer; transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-destructive:hover { background: color-mix(in oklch, var(--destructive, oklch(0.577 0.245 27.325)) 20%, transparent); } .ds-btn-destructive:focus-visible { outline: none; border-color: color-mix(in oklch, var(--destructive, oklch(0.577 0.245 27.325)) 40%, transparent); box-shadow: 0 0 0 3px color-mix(in oklch, var(--destructive, oklch(0.577 0.245 27.325)) 20%, transparent); }"
     },
@@ -348,13 +348,13 @@
   ],
   "narrative": {
     "northStar": "The Quiet Workbench",
-    "overview": "EmailsOrganised looks like a workbench someone keeps tidy: a dense surface of tools laid out exactly where they were left, in a grey so even it disappears, with one warm orange reserved for the things you can act on. Nothing decorates. Corners are cut almost square, separation is drawn with hairlines rather than shadow, and controls sit at 32px because a person configuring triage rules is scanning many of them at once, not admiring one.\n\nThe system is built for reading structure. A workflow is a trigger, a set of outcomes, and the actions under each one — and the interface's whole job is to make that shape legible at a glance. Density is therefore a feature, not a compromise: tighter rows mean more of the structure is on screen at once. Weight does the work that size would do in a marketing layout; the type scale is narrow, and hierarchy comes from 500/600 weight and muted grey, not from jumps between display sizes.\n\nColour is rationed. Grey is not a background the brand sits on top of — grey is the system, and Signal Orange is an event inside it. That is why the accent survives: it appears on the primary action, the live state, the selected node, and essentially nowhere else. A screen where the orange has spread across headings, icons, and decorative fills has broken the system even if every token is technically correct.",
+    "overview": "EmailsOrganised looks like a workbench someone keeps tidy: a dense surface of tools laid out exactly where they were left, in a grey so even it disappears, with one warm orange reserved for the things you can act on. Nothing decorates. Corners are cut almost square, separation is drawn with hairlines rather than shadow, and controls sit at 32px because a person configuring triage rules is scanning many of them at once, not admiring one.\n\nThe system is built for reading structure. A workflow is a trigger, a set of outcomes, and the actions under each one, and the interface's whole job is to make that shape legible at a glance. Density is therefore a feature, not a compromise: tighter rows mean more of the structure is on screen at once. Weight does the work that size would do in a marketing layout; the type scale is narrow, and hierarchy comes from 500/600 weight and muted grey, not from jumps between display sizes.\n\nColour is rationed. Grey is not a background the brand sits on top of: grey is the system, and Signal Orange is an event inside it. That is why the accent survives: it appears on the primary action, the live state, the selected node, and essentially nowhere else. A screen where the orange has spread across headings, icons, and decorative fills has broken the system even if every token is technically correct.",
     "keyCharacteristics": [
-      "Near-square corners (2px base radius) — crisp, drafted, not friendly-round",
+      "Near-square corners (2px base radius): crisp, drafted, not friendly-round",
       "Achromatic greys throughout; one chromatic accent, used sparingly",
       "Hairline rings and borders instead of shadows for separation",
       "32px control height as the default rhythm; 14px body text",
-      "Full light/dark parity — every colour is defined in both themes",
+      "Full light/dark parity: every colour is defined in both themes",
       "OKLCH throughout, so lightness edits stay perceptually honest"
     ],
     "rules": [
@@ -385,7 +385,7 @@
       },
       {
         "name": "The One Column Rule",
-        "body": "Product views are a single centred column of stacked sections. Multi-column dashboards are not part of this system — the workflow canvas is the one surface allowed its own spatial model.",
+        "body": "Product views are a single centred column of stacked sections. Multi-column dashboards are not part of this system; the workflow canvas is the one surface allowed its own spatial model.",
         "section": "layout"
       },
       {
@@ -417,7 +417,7 @@
     "donts": [
       "Don't put a raw hex value in product UI.",
       "Don't put dark text on Signal Orange, in either theme.",
-      "Don't spread Signal Orange across headings, icons, or decorative fills — one primary action per view, plus true live states.",
+      "Don't spread Signal Orange across headings, icons, or decorative fills: one primary action per view, plus true live states.",
       "Don't use shadow for separation outside the workflow canvas.",
       "Don't hard-code rounded-full or rounded-2xl in product UI; the radius scale is derived from --radius and avatars and canvas affordances are the only circles.",
       "Don't introduce a display typeface, a gradient, or a glassmorphic panel. The system is one system font, flat fills, and hairlines.",

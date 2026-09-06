@@ -111,7 +111,7 @@ on conflict (id) do nothing;
 -- ---------------------------------------------------------------------------
 --
 -- Google refresh tokens. Supabase returns provider_refresh_token exactly once,
--- in the OAuth callback, and does not persist it — so this table is the only
+-- in the OAuth callback, and does not persist it, so this table is the only
 -- copy, and losing a row means sending the user back through consent.
 --
 -- RLS is enabled with NO policies and privileges are revoked from anon and

@@ -17,7 +17,7 @@ let client: Stripe | null = null;
 export function getStripeClient(): Stripe {
   if (!client) {
     // The pinned API version ships with the SDK, so it is deliberately not set
-    // here — upgrading `stripe` upgrades the API version in one place.
+    // here: upgrading `stripe` upgrades the API version in one place.
     client = new Stripe(requireSecretKey(), {
       appInfo: { name: appConfig.name },
     });

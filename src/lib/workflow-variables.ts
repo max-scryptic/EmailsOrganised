@@ -2,7 +2,7 @@ import { actionLabels, type WorkflowActionType } from "@/lib/workflow-data";
 
 /**
  * One value a node hands to the nodes after it. `token` is what gets typed into
- * a text field — the builder inserts it wrapped in `{{ }}` — and `example` is
+ * a text field (the builder inserts it wrapped in `{{ }}`), and `example` is
  * what that value looked like for a real email, so the field reads as something
  * concrete rather than a name.
  */
@@ -39,7 +39,7 @@ export function variableExpression(token: string) {
 
 /**
  * Everything the mailbox watcher pulls back for a message. These mirror the
- * fields of a Gmail `users.messages.get` response — the watcher retrieves the
+ * fields of a Gmail `users.messages.get` response: the watcher retrieves the
  * message, and every one of these values travels down the workflow with it.
  */
 const emailFields = [
@@ -83,7 +83,7 @@ const emailFields = [
     token: "email.snippet",
     label: "Snippet",
     description: "The short preview Gmail returns with the message.",
-    example: "Just checking in on invoice 1024 — it was due last Friday…",
+    example: "Just checking in on invoice 1024. It was due last Friday…",
   },
   {
     token: "email.body.text",
@@ -116,8 +116,8 @@ const emailFields = [
     example: "true",
   },
   // Attachments describe the files; they never carry them. A variable is text
-  // that gets typed into a field, so the bytes stay behind an explicit fetch —
-  // `fetchAttachmentBytes` in `src/lib/gmail/messages.ts` — and an action takes
+  // that gets typed into a field, so the bytes stay behind an explicit fetch
+  // (`fetchAttachmentBytes` in `src/lib/gmail/messages.ts`), and an action takes
   // the file itself by being told to, not by interpolating it.
   {
     token: "email.hasAttachments",
@@ -264,7 +264,7 @@ function actionFields(
         token: `${namespace}.body`,
         label: "Draft body",
         description: "The reply the model wrote.",
-        example: "Hi Ada,\n\nThanks for the nudge — payment went out…",
+        example: "Hi Ada,\n\nThanks for the nudge. Payment went out…",
       },
       {
         token: `${namespace}.attachments`,
@@ -312,7 +312,7 @@ function actionFields(
  * The outputs of every node in one chain, keyed by node id.
  *
  * Two actions of the same type in the same chain would otherwise publish the
- * same tokens, so the second one on is numbered — `draft`, then `draft2`. The
+ * same tokens, so the second one on is numbered: `draft`, then `draft2`. The
  * numbering follows the chain, which is also the order the nodes run in.
  */
 export function chainOutputFields(chain: VariableChainNode[]) {

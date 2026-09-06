@@ -1,6 +1,6 @@
 ---
 name: EmailsOrganised
-description: Inbox triage you can read — dense, calm product UI with one signal colour.
+description: Inbox triage you can read: dense, calm product UI with one signal colour.
 colors:
   signal-orange: "oklch(0.77 0.166 63)"
   signal-orange-dark: "oklch(0.8 0.163 63)"
@@ -124,14 +124,14 @@ shadow, and controls sit at 32px because a person configuring triage rules is
 scanning many of them at once, not admiring one.
 
 The system is built for reading structure. A workflow is a trigger, a set of
-outcomes, and the actions under each one — and the interface's whole job is to
+outcomes, and the actions under each one, and the interface's whole job is to
 make that shape legible at a glance. Density is therefore a feature, not a
 compromise: tighter rows mean more of the structure is on screen at once. Weight
 does the work that size would do in a marketing layout; the type scale is
 narrow, and hierarchy comes from 500/600 weight and muted grey, not from jumps
 between display sizes.
 
-Colour is rationed. Grey is not a background the brand sits on top of — grey is
+Colour is rationed. Grey is not a background the brand sits on top of: grey is
 the system, and Signal Orange is an event inside it. That is why the accent
 survives: it appears on the primary action, the live state, the selected node,
 and essentially nowhere else. A screen where the orange has spread across
@@ -140,11 +140,11 @@ is technically correct.
 
 **Key Characteristics:**
 
-- Near-square corners (2px base radius) — crisp, drafted, not friendly-round
+- Near-square corners (2px base radius): crisp, drafted, not friendly-round
 - Achromatic greys throughout; one chromatic accent, used sparingly
 - Hairline rings and borders instead of shadows for separation
 - 32px control height as the default rhythm; 14px body text
-- Full light/dark parity — every colour is defined in both themes
+- Full light/dark parity: every colour is defined in both themes
 - OKLCH throughout, so lightness edits stay perceptually honest
 
 ## Colors
@@ -172,16 +172,16 @@ something.
   can be pure white and still separate.
 - **Surface** (`oklch(1 0 0)`): cards, popovers, inputs, and the sidebar. Pure
   white in light mode; `oklch(0.205 0 0)` in dark.
-- **Ink** (`oklch(0.145 0 0)`): primary text. Also the dark-mode page ground —
+- **Ink** (`oklch(0.145 0 0)`): primary text. Also the dark-mode page ground;
   the two themes are a straight inversion of the same two values.
 - **Ink Muted** (`oklch(0.556 0 0)` light, `oklch(0.708 0 0)` dark): secondary
   text, descriptions, placeholders, and inactive icons. This is the workhorse of
-  the hierarchy — most of what would be a smaller size elsewhere is muted grey
+  the hierarchy: most of what would be a smaller size elsewhere is muted grey
   here instead.
 - **Hairline** (`oklch(0.922 0 0)` light, `oklch(1 0 0 / 10%)` dark): borders,
   dividers, and input strokes.
 - **Quiet Fill** (`oklch(0.965 0 0)` light, `oklch(0.269 0 0)` dark): the
-  secondary/muted/accent surface — hover fills, secondary buttons, table zebra.
+  secondary/muted/accent surface: hover fills, secondary buttons, table zebra.
   All three roles share one value on purpose; the system has one step of
   quietness, not three.
 
@@ -195,7 +195,7 @@ something.
 - **Affirm** (`oklch(0.63 0.17 152)` light, `oklch(0.72 0.18 151)` dark): a
   completed or successful state.
 - **Caution** (`oklch(0.74 0.15 75)` light, `oklch(0.78 0.16 77)` dark): a
-  warning that is not yet an error. It sits close to Signal Orange in hue —
+  warning that is not yet an error. It sits close to Signal Orange in hue, so
   keep them apart on the same screen, or the accent stops reading as the accent.
 
 ### Named Rules
@@ -215,7 +215,7 @@ colour is added to `src/app/globals.css` first, in OKLCH, in both `:root` and
 ## Typography
 
 **Display Font:** system UI sans (`ui-sans-serif, system-ui, sans-serif`)
-**Body Font:** the same stack — one family throughout
+**Body Font:** the same stack, one family throughout
 **Label/Mono Font:** `ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas`
 for values that must align or be copied
 
@@ -223,7 +223,7 @@ for values that must align or be copied
 the user's machine and the most familiar shape in their OS, and this is an
 operator's tool where legibility beats voice. Personality lives in the colour
 and the spacing, not the letterforms. `--font-heading` exists as a separate
-token and currently resolves to the same stack — the seam for a display face is
+token and currently resolves to the same stack; the seam for a display face is
 open, unused, and should stay unused unless someone decides otherwise.
 
 ### Hierarchy
@@ -233,14 +233,14 @@ open, unused, and should stay unused unless someone decides otherwise.
 - **Headline** (600, 1.5rem/24px): page titles at mobile width, legal document
   titles, the workflow name in the builder header.
 - **Title** (500–600, 1.125rem/18px): card titles, section headings, plan names.
-- **Body** (400, 0.875rem/14px): the default. Nearly everything — table cells,
+- **Body** (400, 0.875rem/14px): the default. Nearly everything: table cells,
   form values, descriptions, canvas node text. Inputs render at 1rem below `md`
   to stop iOS zooming on focus, then drop to 0.875rem.
 - **Label** (500, 0.75rem/12px): badges, table headers, helper text, metadata.
 - **Control (sm)** (500, 0.8rem/12.8px): the one size that sits between Body and
   Label, used only by the 28px `sm` button so a compact control reads slightly
   smaller than body text without dropping to badge size. It is a control step,
-  not a text step — do not use it for prose.
+  not a text step; do not use it for prose.
 
 ### Named Rules
 
@@ -262,7 +262,7 @@ mode that drops the max-width and tightens to `gap-3` (12px) so the workflow
 canvas can claim the whole viewport.
 
 Spacing runs on Tailwind's 4px base. The values actually in use are 4, 8, 12,
-16, and 24px — cards set their internal padding through a `--card-spacing`
+16, and 24px. Cards set their internal padding through a `--card-spacing`
 custom property (16px default, 12px at `size="sm"`) so header, content, and
 footer stay in step without each restating the number.
 
@@ -273,7 +273,7 @@ sheet below `md`; the topbar search appears at `lg`; page titles step up a size
 at `sm`.
 
 **The One Column Rule.** Product views are a single centred column of stacked
-sections. Multi-column dashboards are not part of this system — the workflow
+sections. Multi-column dashboards are not part of this system; the workflow
 canvas is the one surface allowed its own spatial model.
 
 ## Elevation & Depth
@@ -281,8 +281,8 @@ canvas is the one surface allowed its own spatial model.
 Flat by default. Separation comes from a hairline: cards use `ring-1
 ring-foreground/10`, inputs and outline buttons use a 1px border in the
 hairline grey, and the sidebar is divided from content by a border rather than
-a drop shadow. Depth in the resting UI is conveyed by surface value alone —
-Paper behind, Surface in front — which is why the two are only 1.5% apart in
+a drop shadow. Depth in the resting UI is conveyed by surface value alone
+(Paper behind, Surface in front), which is why the two are only 1.5% apart in
 lightness and still read as layered.
 
 Shadow is reserved for the workflow canvas, where it means one specific thing:
@@ -291,7 +291,7 @@ add-node button, and selected nodes are the only places it appears.
 
 ### Shadow Vocabulary
 
-- **Resting node** (`shadow-sm`): a node sitting on the canvas — just enough to
+- **Resting node** (`shadow-sm`): a node sitting on the canvas: just enough to
   lift it off the grid.
 - **Selected node** (`shadow-md` + `ring-2 ring-primary/20`): selection is the
   ring; the shadow only supports it.
@@ -326,7 +326,7 @@ Form language:
   a field sitting side by side line up exactly.
 - Small controls clamp their radius (`rounded-[min(var(--radius-md),10px)]`) so
   shrinking a control never makes it proportionally rounder.
-- Badges use the largest step (`rounded-4xl`, 5.2px) — noticeably softer than
+- Badges use the largest step (`rounded-4xl`, 5.2px): noticeably softer than
   their neighbours, never a pill.
 - The two genuinely circular things in the product are the avatar and the
   canvas' add-node button. Circles mean "this is an object, not a container".
@@ -350,7 +350,7 @@ Compact and quiet; the primary is the only one that raises its voice.
   rather than an opacity change.
 - **Ghost:** transparent, hover to Quiet Fill. The default for icon buttons and
   anything in a toolbar.
-- **Destructive:** `destructive/10` fill with Danger text — tinted, not solid.
+- **Destructive:** `destructive/10` fill with Danger text: tinted, not solid.
 - **Hover / Focus:** all transitions are `transition-all` with no duration
   override (150ms). Focus is a 3px `ring-ring/50` plus a border shift to the
   ring colour, never an outline removal without a replacement. Pressing shifts
@@ -361,7 +361,7 @@ Compact and quiet; the primary is the only one that raises its voice.
 - **Style:** Surface fill, hairline border, 2px radius, 32px tall, 10px
   horizontal padding. Dark mode fills at `input/30` instead of a flat surface.
 - **Focus:** border shifts to the ring colour, plus a 3px `ring-ring/50` halo.
-- **Error:** `aria-invalid` drives it — Danger border and a Danger-tinted ring.
+- **Error:** `aria-invalid` drives it: Danger border and a Danger-tinted ring.
   Errors are announced by state, not by a class the author remembers to add.
 - **Disabled:** 50% opacity, `not-allowed` cursor, muted fill.
 
@@ -369,7 +369,7 @@ Compact and quiet; the primary is the only one that raises its voice.
 
 - **Corner Style:** 2.8px (`rounded-xl`).
 - **Background:** Surface, on the Paper page ground.
-- **Shadow Strategy:** none — `ring-1 ring-foreground/10` (see Elevation).
+- **Shadow Strategy:** none; `ring-1 ring-foreground/10` (see Elevation).
 - **Internal Padding:** 16px via `--card-spacing`, 12px at `size="sm"`; header,
   content, and footer all read the same property.
 - Images bleed to the card's edge and inherit its corner rounding.
@@ -400,14 +400,14 @@ positioned Surface cards with a hairline border, `rounded-md` (1.6px) and
 dragged. Selection is `border-primary` + `ring-2 ring-primary/20` +
 `shadow-md`. An empty canvas offers a single node wearing the breathing Signal
 Glow halo. Connector handles are 4px dots that grow to 24px and fill with Signal
-Orange on hover or when open. Everything that floats — toolbar, add button,
-editor popovers — uses the shadow ladder in Elevation and enters with
+Orange on hover or when open. Everything that floats (toolbar, add button,
+editor popovers) uses the shadow ladder in Elevation and enters with
 `animate-in fade-in-0 zoom-in-95` over 150ms.
 
 **A node states its identity, not its configuration.** 252×60px, 12px
 horizontal padding: a 36px tinted icon tile, one line of 14px medium-weight
 title, and nothing else. The width is set by the longest node name sitting
-beside the status badge a test run puts there — a node whose name truncates to
+beside the status badge a test run puts there: a node whose name truncates to
 fit its own state has stopped stating its identity. Settings, summaries, and
 counts belong in the node's
 editor popover, which is where they can be changed. A node missing something it
@@ -415,15 +415,15 @@ cannot run without carries a single 14px Caution triangle at its right edge;
 what is missing is named in the node's accessible label and fixed in its panel.
 
 **The classification node is the one node that grows.** Below its title it
-carries a 26px row per output label — the label name in 12px muted type, right
-aligned, with that branch's connector dot on the node's edge — and 10px of
+carries a 26px row per output label (the label name in 12px muted type, right
+aligned, with that branch's connector dot on the node's edge) and 10px of
 padding under the last one. Edges leave from those dots rather than from the
 middle of the node, so the fan-out reads as one outlet per answer. With no
 outputs the node still shows one row, reading "No outputs yet", so an unfinished
 classification never looks finished.
 
 **Edges are square, not curved.** A 2px wire runs 18px straight out of its
-outlet, turns at a right angle, and runs straight into the inlet — never a
+outlet, turns at a right angle, and runs straight into the inlet, never a
 bezier. The board is a grid and the corners of everything on it are cut, so a
 wire that only travels along the grid's axes is the one that belongs on it, and
 a fan of them stays traceable back to the outlet each left. A target sitting
@@ -431,11 +431,11 @@ beside or behind its source gets the same treatment: the wire leaves forwards,
 drops into a 34px lane below both nodes, and comes back to the inlet from the
 left rather than reversing through the node it just left.
 
-**A wire says whether it stops anything.** Half way along its run — measured
-along the wire itself, so a turning wire's marker still sits on it — an edge
+**A wire says whether it stops anything.** Half way along its run (measured
+along the wire itself, so a turning wire's marker still sits on it), an edge
 carries that wire's filter. With no rule on it, it is a 16px hairline circle
 that grows to 24px and fills with Signal Orange on hover: the connector
-handle's vocabulary, because it is the same kind of thing — an affordance, not
+handle's vocabulary, because it is the same kind of thing: an affordance, not
 an object. Once a rule is set it becomes a 20px chip on the Surface fill, a
 12px funnel glyph then the filter's name in 12px medium, capped at 112px and
 truncated, because a route that stops some mail and not other mail cannot be
@@ -469,7 +469,7 @@ strike glyph on the one that stopped it.
 
 - **Don't** put a raw hex value in product UI.
 - **Don't** put dark text on Signal Orange, in either theme.
-- **Don't** spread Signal Orange across headings, icons, or decorative fills —
+- **Don't** spread Signal Orange across headings, icons, or decorative fills:
   one primary action per view, plus true live states.
 - **Don't** use shadow for separation outside the workflow canvas.
 - **Don't** hard-code `rounded-full` or `rounded-2xl` in product UI; the radius

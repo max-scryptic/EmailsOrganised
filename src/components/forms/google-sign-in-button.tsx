@@ -5,7 +5,7 @@ import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 
 /** Google's mark, from the official branding guidelines. Fixed brand colors are
- * required here — the semantic tokens in globals.css must not be substituted. */
+ * required here: the semantic tokens in globals.css must not be substituted. */
 function GoogleMark({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 18 18" aria-hidden="true">

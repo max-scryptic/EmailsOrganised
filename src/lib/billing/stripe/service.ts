@@ -39,7 +39,7 @@ function planName(planId: PlanId) {
 /**
  * Stripe's search query language quotes values with single quotes and has no
  * documented escape, so ids that could break out of the quoting are not
- * searched for — they fall through to the create path instead.
+ * searched for; they fall through to the create path instead.
  */
 const SEARCHABLE_USER_ID = /^[A-Za-z0-9_.:@|-]+$/;
 
@@ -213,7 +213,7 @@ export async function createPortalSession(): Promise<PortalResponse> {
 /**
  * The subscription to render.
  *
- * Reads the local store first — that is the point of keeping one — and falls
+ * Reads the local store first (that is the point of keeping one) and falls
  * back to Stripe when the store is cold, which the in-memory default is after
  * every restart. It never creates a customer: a read should not have side
  * effects in Stripe.

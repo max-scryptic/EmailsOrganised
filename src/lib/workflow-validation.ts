@@ -17,7 +17,7 @@ export const workflowIdSchema = z.uuid();
 const filterConditionSchema = z.object({
   id: z.string().min(1),
   // Both sides are templates, and a half-written condition is a normal state
-  // for a draft — `isConditionComplete` is what decides whether a run reads it.
+  // for a draft; `isConditionComplete` is what decides whether a run reads it.
   left: z.string(),
   operator: z.enum(filterOperatorNames),
   right: z.string(),
@@ -25,7 +25,7 @@ const filterConditionSchema = z.object({
 
 /**
  * A wire's filter. Every field is defaulted so rows written before wires could
- * carry one — where the key is simply absent — read back as an empty filter
+ * carry one, where the key is simply absent, read back as an empty filter
  * rather than failing the whole workflow.
  */
 export const workflowFilterSchema = z
@@ -67,7 +67,7 @@ export const classificationLabelSchema = z.object({
 });
 
 export const workflowDraftSchema = z.object({
-  // Blank is valid — `saveWorkflow` fills it with the next "New Workflow N".
+  // Blank is valid: `saveWorkflow` fills it with the next "New Workflow N".
   name: z.string().trim(),
   ownerRole: z.string(),
   trigger: z.string(),
@@ -101,7 +101,7 @@ export const saveWorkflowInputSchema = workflowDraftSchema.extend({
 export type SaveWorkflowInput = z.infer<typeof saveWorkflowInputSchema>;
 
 /**
- * One action as the workflow chat describes it — only the settings a spoken
+ * One action as the workflow chat describes it: only the settings a spoken
  * description can decide. Every field is defaulted because a half-understood
  * workflow is the normal state mid-conversation, and a missing `note` should
  * not throw away the turn.
@@ -123,8 +123,8 @@ export const classificationLabelIntentSchema = z.object({
 
 /**
  * The whole of what the chat's model call is allowed to describe. It is
- * deliberately narrower than `workflowDraftSchema` — no ids, no filters, no
- * action defaults — because those are decided in
+ * deliberately narrower than `workflowDraftSchema` (no ids, no filters, no
+ * action defaults) because those are decided in
  * `src/lib/workflow-intent.ts`, not by a model.
  */
 export const workflowIntentSchema = z.object({
@@ -142,7 +142,7 @@ const workflowChatMessageSchema = z.object({
 
 /**
  * What the chat page sends on each turn: the conversation so far, oldest
- * first. The history is capped rather than trimmed silently — a conversation
+ * first. The history is capped rather than trimmed silently: a conversation
  * this long has stopped being a setup chat.
  */
 export const workflowChatInputSchema = z.object({
@@ -183,7 +183,7 @@ export type DebugClassifyInput = z.infer<typeof debugClassifySchema>;
 
 /**
  * What the panel sends to pull one attachment's bytes out of Gmail: the message
- * it is on, and whichever handle that attachment has — `attachmentId` for a
+ * it is on, and whichever handle that attachment has: `attachmentId` for a
  * body Gmail stored separately, `partId` for one that came inline. The bounds
  * are Gmail's own: an id is an opaque token, a part id is a dotted path.
  */

@@ -6,7 +6,7 @@ import { refreshSession, withAuthCookies } from "@/lib/supabase/proxy-session";
  * Proxy (Next.js 16's rename of Middleware) does two jobs here:
  *
  * 1. Refresh the Supabase session on every request so the access token stays
- *    current — Server Components cannot write cookies, so it has to happen here.
+ *    current; Server Components cannot write cookies, so it has to happen here.
  * 2. An optimistic redirect for signed-out visitors. It is optimistic on
  *    purpose: Proxy runs on prefetches too, so it only reads the session and
  *    never queries the database. Real authorization belongs in the Data Access

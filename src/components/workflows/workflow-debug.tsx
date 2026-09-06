@@ -129,7 +129,7 @@ export function useWorkflowDebug(draft: WorkflowDraft) {
   const isRunning = session.phase === "running";
   const isClassifying = session.phase === "classifying";
   const isDebugging = session.phase !== "off";
-  /** True from pressing Test until an email arrives — the watcher is armed. */
+  /** True from pressing Test until an email arrives: the watcher is armed. */
   const isListening =
     session.phase === "starting" || session.phase === "listening";
   const listeningSince =
@@ -251,13 +251,13 @@ export function useWorkflowDebug(draft: WorkflowDraft) {
       );
       // The filter on the wire into the classification decides whether the
       // model is asked at all. Evaluating it here rather than inside the run is
-      // what makes a test spend nothing on mail that wire would have stopped —
+      // what makes a test spend nothing on mail that wire would have stopped,
       // which is most of the reason to put a filter there.
       const reachesClassifier = evaluateFilter(
         current.classifierFilter,
         new Map(Object.entries(emailVariableValues(emailToClassify)))
       ).passed;
-      // Nothing to ask is not a failure — the classification is simply not
+      // Nothing to ask is not a failure: the classification is simply not
       // finished being built, and the run says so on its own step.
       const result =
         reachesClassifier && current.classifierPrompt.trim() && labels.length > 0
@@ -408,7 +408,7 @@ export function useWorkflowDebug(draft: WorkflowDraft) {
 /**
  * The one modal in debug mode, and only for the states that are a decision:
  * the mailbox cannot be watched, so the user reconnects, retries, or falls back
- * to the sample email. Listening itself is not modal — it happens on the board,
+ * to the sample email. Listening itself is not modal: it happens on the board,
  * on the node that is doing the listening.
  */
 export function WorkflowDebugDialog({ debug }: { debug: WorkflowDebug }) {
@@ -549,7 +549,7 @@ export function WorkflowDebugBar({ debug }: { debug: WorkflowDebug }) {
       ) : null}
       {atEnd ? (
         // The end of one run is where you want the next email, not the end of
-        // testing — so listening again is one click, not Exit and Test again.
+        // testing, so listening again is one click, not Exit and Test again.
         <Button type="button" variant="outline" size="sm" onClick={debug.start}>
           <Mail className="size-3.5" />
           Listen for another email
@@ -577,8 +577,8 @@ function DebugBarShell({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Waiting for mail. The board keeps the detail — the trigger node is wearing
- * the live state — so this stays the status line and the way out of it.
+ * Waiting for mail. The board keeps the detail (the trigger node is wearing
+ * the live state), so this stays the status line and the way out of it.
  */
 function DebugListeningBar({
   debug,
@@ -617,7 +617,7 @@ function DebugListeningBar({
         <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
         <p className="min-w-0 flex-1 text-xs text-muted-foreground">
           {mailbox
-            ? "Send yourself an email. The first one to arrive starts the run — anything already in the inbox is ignored."
+            ? "Send yourself an email. The first one to arrive starts the run. Anything already in the inbox is ignored."
             : "One moment."}
         </p>
         {mailbox ? (
@@ -636,7 +636,7 @@ function DebugListeningBar({
 
 /**
  * What the current node did with this email, floating beside that node the same
- * way the settings inspector does — so the run is read on the board, at the
+ * way the settings inspector does, so the run is read on the board, at the
  * node it is talking about.
  */
 export function WorkflowDebugStepPanel({
@@ -780,7 +780,7 @@ function DebugSection({
 
 /**
  * One setting, shown as what was typed and what it became. The template line
- * only appears when it differs — a field with no variables in it is already
+ * only appears when it differs: a field with no variables in it is already
  * saying everything it has to say.
  */
 function SettingRow({ setting }: { setting: DebugSetting }) {
@@ -845,8 +845,8 @@ function FilterChecks({ result }: { result: FilterResult }) {
         result.conditions.length === 1
           ? "Condition"
           : result.match === "all"
-            ? "Conditions — all have to hold"
-            : "Conditions — any one has to hold"
+            ? "Conditions: all have to hold"
+            : "Conditions: any one has to hold"
       }
     >
       {result.conditions.map((condition) => (
@@ -909,8 +909,8 @@ function conditionReading(condition: FilterConditionResult) {
 /**
  * The files on the email, and the one place a test run reaches for their bytes.
  *
- * The trigger step describes attachments as metadata — that is all a variable
- * can carry — so this is where a user answers the question the metadata raises:
+ * The trigger step describes attachments as metadata (that is all a variable
+ * can carry), so this is where a user answers the question the metadata raises:
  * is this actually the invoice? Fetching pulls the file out of Gmail and hands
  * it over, which is a read, and the same call a live run makes when an action
  * takes the file with it.

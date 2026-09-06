@@ -1,7 +1,7 @@
 /**
  * Client-safe billing configuration.
  *
- * Only `NEXT_PUBLIC_*` values belong here — this module is imported by client
+ * Only `NEXT_PUBLIC_*` values belong here: this module is imported by client
  * components. Secret keys and price IDs live in `src/lib/billing/stripe/env.ts`,
  * which is server-only.
  */

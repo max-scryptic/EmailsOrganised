@@ -12,12 +12,12 @@ import {
  *
  * The user writes the prompt and names the output labels; this turns the two
  * into a single cheap GPT call whose answer *cannot* be anything but one of
- * those labels. The forcing is not a plea in the prompt — it is the JSON schema
+ * those labels. The forcing is not a plea in the prompt: it is the JSON schema
  * the response is decoded against, where `label` is an enum of exactly the
  * labels the workflow declares. A model that wants to answer "Billing" when the
  * workflow only offers Sales / FAQ / Important is not able to.
  *
- * The transport — endpoint, timeout, error wording — lives in `openai.ts`,
+ * The transport (endpoint, timeout, error wording) lives in `openai.ts`,
  * shared with the chat that drafts a workflow. What is owned here is the call
  * itself: the schema that closes the answer set, and how it is read back.
  */
@@ -110,8 +110,9 @@ function systemPrompt(labels: string[]) {
     "You classify a single email for an inbox triage workflow.",
     "Follow the user's instructions below to decide which one of these labels the email belongs to:",
     labels.map((label) => `- ${label}`).join("\n"),
-    "Pick exactly one label, even when the fit is imperfect — say so in `reasoning` and lower `confidence` instead of refusing.",
+    "Pick exactly one label, even when the fit is imperfect; say so in `reasoning` and lower `confidence` instead of refusing.",
     "`confidence` is a number from 0 to 1. `reasoning` is one short sentence.",
+    "Never use an em dash in `reasoning`. It is shown in the product, and the product does not use them. Use a comma, a colon, a semicolon, or parentheses.",
   ].join("\n\n");
 }
 
@@ -132,7 +133,7 @@ function userPrompt(prompt: string, email: ClassificationEmail) {
 /**
  * Reads the one answer out of the response. Structured outputs make the shape
  * a near-certainty, but a refusal still comes back in place of content, and a
- * label outside the set would be a silent branch that never fires — so both
+ * label outside the set would be a silent branch that never fires, so both
  * are checked rather than assumed.
  */
 function readClassification(

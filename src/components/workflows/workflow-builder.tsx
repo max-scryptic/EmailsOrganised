@@ -118,10 +118,10 @@ const canvasWidth = 1520;
 const canvasHeight = 980;
 /**
  * A node says what it is and nothing else, so it is sized for one line of text
- * beside one icon — wide enough that a node's name still fits whole beside the
- * status marker a test run puts there. Everything a node used to summarise on the board — the
- * prompt, the counts, the readiness badge — lives in its settings panel, which
- * is where it can be acted on.
+ * beside one icon, wide enough that a node's name still fits whole beside the
+ * status marker a test run puts there. Everything a node used to summarise on
+ * the board (the prompt, the counts, the readiness badge) lives in its settings
+ * panel, which is where it can be acted on.
  */
 const nodeWidth = 252;
 const nodeBaseHeight = 60;
@@ -188,8 +188,8 @@ const autoPlaceStep = 96;
 /**
  * Where the fixed spine sits before anyone drags it. The two share a y so the
  * trigger's outlet and the classifier's inlet are level and the wire between
- * them is one straight run — the same alignment `branchActionPosition` gives
- * every auto-placed action — and they sit `autoPlaceGap` apart, so that run is
+ * them is one straight run (the same alignment `branchActionPosition` gives
+ * every auto-placed action), and they sit `autoPlaceGap` apart, so that run is
  * long enough to carry a filter chip.
  */
 const defaultTriggerPosition = { x: 96, y: 300 };
@@ -204,8 +204,8 @@ type CanvasBranch = {
 };
 
 /**
- * How a node reads during a test: the trigger while it waits for mail, then —
- * once a run starts — the node the run is on, the ones it has been through, the
+ * How a node reads during a test: the trigger while it waits for mail, then,
+ * once a run starts, the node the run is on, the ones it has been through, the
  * ones still to come, and the ones this email never reaches.
  */
 type DebugNodeState = "listening" | "active" | "passed" | "ahead" | "muted";
@@ -255,7 +255,7 @@ type FlowCanvasNode = {
 
 /**
  * Which wire a filter sits on, named by the node the wire feeds. Every node has
- * exactly one node before it, so naming the downstream end names the wire — and
+ * exactly one node before it, so naming the downstream end names the wire, and
  * it is also where the filter is stored on the draft.
  */
 type FilterTarget =
@@ -306,7 +306,7 @@ type DragState =
 
 /**
  * The node whose settings the board's inspector is showing. `null` is a board
- * with nothing selected — workflow-level fields live in the page heading now,
+ * with nothing selected: workflow-level fields live in the page heading now,
  * not in a panel.
  */
 type SelectedModule =
@@ -401,7 +401,7 @@ export function WorkflowBuilder({
     [measureInspector]
   );
   const [workflowName, setWorkflowName] = React.useState(initialDraft.name);
-  // No longer edited in the builder header — kept so saving a draft round-trips
+  // No longer edited in the builder header, but kept so saving a draft round-trips
   // whatever owner the workflow already has.
   const ownerRole = initialDraft.ownerRole;
   const [trigger, setTrigger] = React.useState(initialDraft.trigger);
@@ -419,7 +419,7 @@ export function WorkflowBuilder({
   const [view, setView] = React.useState<CanvasView>({ x: 8, y: 8, zoom: 1 });
   /**
    * True only while the board is being dragged. The grab hand belongs to the
-   * drag, not to the board sitting there — idle, the pointer stays an arrow.
+   * drag, not to the board sitting there: idle, the pointer stays an arrow.
    */
   const [isPanning, setIsPanning] = React.useState(false);
   const [connectingFrom, setConnectingFrom] =
@@ -490,8 +490,8 @@ export function WorkflowBuilder({
   );
   /**
    * A workflow built node by node is already sitting where its author left it,
-   * so the board opens where it always has. One that arrived whole — drafted in
-   * the chat and handed over — has never been on screen, and at 100% a chain of
+   * so the board opens where it always has. One that arrived whole (drafted in
+   * the chat and handed over) has never been on screen, and at 100% a chain of
    * four nodes runs off the right edge. That one gets framed once, on arrival.
    */
   const hasFramedArrival = React.useRef(false);
@@ -588,7 +588,7 @@ export function WorkflowBuilder({
     [canvasEdges, canvasNodes]
   );
   // Each node has exactly one node feeding it, so the run that reaches the
-  // selected node — and with it the data that node can read — is the path back
+  // selected node, and with it the data that node can read, is the path back
   // up the edges to the trigger.
   const parentByNode = React.useMemo(() => {
     const parents = new Map<string, string>();
@@ -618,7 +618,7 @@ export function WorkflowBuilder({
     [canvasNodeMap, dataAnchorNode, parentByNode]
   );
   // Everything the source node has produced by then is material a filter can
-  // read — including the source node's own outputs, which for a node's own
+  // read, including the source node's own outputs, which for a node's own
   // settings would be values it has not made yet.
   const upstreamData = selectedEdge
     ? [...nodeData.upstream, ...(nodeData.own ? [nodeData.own] : [])]
@@ -673,7 +673,7 @@ export function WorkflowBuilder({
     : null;
 
   // The step panel floats beside whatever the run is on, exactly the way the
-  // settings inspector floats beside the node you are editing — and a filter
+  // settings inspector floats beside the node you are editing, and a filter
   // step is on a wire, which is why both read the same anchor map.
   const debugAnchor = debug.step
     ? panelAnchors.get(debug.step.nodeId) ?? null
@@ -695,7 +695,7 @@ export function WorkflowBuilder({
     : null;
 
   // A name is optional, so the only thing worth saying beside Save is what an
-  // unnamed workflow will end up called — or when the last save landed.
+  // unnamed workflow will end up called, or when the last save landed.
   const saveHint = !workflowName.trim()
     ? "Unnamed workflows are numbered for you."
     : lastSavedAt
@@ -729,7 +729,7 @@ export function WorkflowBuilder({
    *
    * Listening natively rather than through `onWheel` because React attaches
    * wheel listeners passively, and both gestures have to call
-   * `preventDefault()` — the pinch to stop the browser zooming the page, the
+   * `preventDefault()`: the pinch to stop the browser zooming the page, the
    * scroll to stop it rubber-banding.
    */
   React.useEffect(() => {
@@ -743,7 +743,7 @@ export function WorkflowBuilder({
     const handleWheel = (event: WheelEvent) => {
       const target = event.target;
 
-      // The floating panels scroll their own content — the board must not
+      // The floating panels scroll their own content, so the board must not
       // steal the gesture out from under them.
       if (
         target instanceof Element &&
@@ -824,7 +824,7 @@ export function WorkflowBuilder({
     setConnectMenu(null);
     setSelectedModule((current) => {
       // The branch takes its actions with it, and with them the wires into
-      // those actions — so a filter panel open on one of them goes too.
+      // those actions, so a filter panel open on one of them goes too.
       if (current?.type === "action" && current.labelId === labelId) {
         return null;
       }
@@ -941,7 +941,7 @@ export function WorkflowBuilder({
   }
 
   /**
-   * Edits the filter on one wire, wherever that wire keeps it — on the action
+   * Edits the filter on one wire, wherever that wire keeps it: on the action
    * it feeds, or on the draft for the one wire into the classification.
    */
   function updateFilter(
@@ -1211,7 +1211,7 @@ export function WorkflowBuilder({
   }
 
   /**
-   * Slides the board just far enough to bring a node — or a wire's filter —
+   * Slides the board just far enough to bring a node, or a wire's filter,
    * into view, leaving room on the right for the panel that opens beside it.
    */
   function revealAnchor(anchor: PanelAnchor) {
@@ -1265,8 +1265,8 @@ export function WorkflowBuilder({
 
   const debugNodeId = debug.isRunning ? debug.step?.nodeId ?? null : null;
 
-  // Stepping the run slides the board to whatever the step belongs to — a node,
-  // or the wire a filter guards — so the panel is never explaining something
+  // Stepping the run slides the board to whatever the step belongs to (a node,
+  // or the wire a filter guards), so the panel is never explaining something
   // that is off screen.
   React.useEffect(() => {
     if (!debugNodeId) {
@@ -1312,7 +1312,7 @@ export function WorkflowBuilder({
     const index = debug.run.steps.findIndex((item) => item.nodeId === nodeId);
 
     if (index === -1) {
-      // This email never reaches the node — a branch it did not match, or an
+      // This email never reaches the node: a branch it did not match, or an
       // action under one.
       return "muted";
     }
@@ -1458,7 +1458,7 @@ export function WorkflowBuilder({
       return;
     }
 
-    // During a test a node is not something you open — while a run is stepping
+    // During a test a node is not something you open; while a run is stepping
     // it is a step to jump to, if this email went through it at all.
     if (debug.isDebugging) {
       if (debug.isRunning) {
@@ -1522,7 +1522,7 @@ export function WorkflowBuilder({
 
     if (!drag.moved) {
       if (Math.hypot(deltaX, deltaY) < nodeDragThreshold) {
-        // Still within the wobble a click carries — leave the node alone.
+        // Still within the wobble a click carries, so leave the node alone.
         return;
       }
 
@@ -1557,7 +1557,7 @@ export function WorkflowBuilder({
   /**
    * Redraws the edges that touch the dragged node, and slides each one's filter
    * marker back to the middle of the wire. The node itself is moved on the DOM
-   * during a drag, so these are too — committing every frame to React state
+   * during a drag, so these are too; committing every frame to React state
    * instead would re-render the whole board on each pointer move.
    */
   function syncEdgesToPosition(nodeId: string, position: CanvasNodePosition) {
@@ -1593,7 +1593,7 @@ export function WorkflowBuilder({
 
   /**
    * Keeps the floating inspector glued to what it belongs to while a node is
-   * dragged — the node itself, or, for a wire's filter, the middle of a wire
+   * dragged: the node itself, or, for a wire's filter, the middle of a wire
    * that moves when either end does.
    */
   function syncInspectorToPosition(
@@ -1817,7 +1817,7 @@ export function WorkflowBuilder({
             isPanning && "cursor-grabbing"
           )}
           style={{
-            // The grid is the board's ruler, so it takes the zoom with it —
+            // The grid is the board's ruler, so it takes the zoom with it;
             // otherwise the nodes grow and the squares under them do not.
             backgroundSize: `${canvasGridSize * view.zoom}px ${
               canvasGridSize * view.zoom
@@ -2106,7 +2106,7 @@ function formatWorkflowTimestamp(value: string) {
 
 /**
  * The board's zoom readout, in the corner opposite the add-node button. The
- * gesture is the primary control — pinch the trackpad — so these are a small
+ * gesture is the primary control (pinch the trackpad), so these are a small
  * floating toolbar rather than anything that competes with the board.
  *
  * The percentage doubles as the reset: clicking it puts the board back to 100%.
@@ -2231,7 +2231,7 @@ function NodePalette({
           <p className="px-1 pt-2 text-xs text-muted-foreground">
             {canAddAction
               ? "Click to drop it on the nearest branch, or drag it where you want it."
-              : "Open the classification node and add an output first — actions run on a branch."}
+              : "Open the classification node and add an output first: actions run on a branch."}
           </p>
         </div>
       ) : null}
@@ -2395,8 +2395,8 @@ function NodeConnectMenu({
  * popover rather than docking to the side of the page.
  *
  * Two columns under one header: the values earlier steps produced on the left,
- * everything about the selected node — its settings, then what it outputs in
- * turn — on the right. Reading left to right is the shape of the work: take a
+ * everything about the selected node (its settings, then what it outputs in
+ * turn) on the right. Reading left to right is the shape of the work: take a
  * value from what came before, put it into this step.
  */
 function NodeInspector({
@@ -2424,7 +2424,7 @@ function NodeInspector({
   canDelete: boolean;
   /** What the footer's destructive button says, e.g. "Delete node". */
   deleteLabel: string;
-  /** The line beside it — the keyboard shortcut, or what removal leaves behind. */
+  /** The line beside it: the keyboard shortcut, or what removal leaves behind. */
   deleteHint: string;
   /** The upstream data column, or null for a node with nothing before it. */
   dataPanel: React.ReactNode;
@@ -2540,7 +2540,7 @@ function CanvasNode({
   const isInitialNode = node.kind === "trigger";
   // Only an action can be followed by another node from the node's own edge.
   // The classification branches out from its rows instead, and the trigger's
-  // one link — to the classification — is fixed.
+  // one link, to the classification, is fixed.
   const showNodeHandle = canAddNext && node.kind === "action";
 
   return (
@@ -2567,7 +2567,7 @@ function CanvasNode({
         "transition-[background-color,border-color,box-shadow,color]",
         "select-none",
         // The trigger's idle glow animates box-shadow, which would outrank the
-        // drag ring below — so it steps aside while the node is being dragged.
+        // drag ring below, so it steps aside while the node is being dragged.
         // The halo also steps aside for a test run, where the lit node is
         // whichever step the run is on. The glow alone marks the node out; it
         // keeps the same neutral border as its neighbours.
@@ -2588,7 +2588,7 @@ function CanvasNode({
         // Set on the DOM by the drag handlers, not by React. A dragged node
         // lifts off the board: brand ring, deeper shadow, and above its
         // neighbours so it never slides underneath one. The hand appears with
-        // it — the attribute is only set once a press clears the drag
+        // it: the attribute is only set once a press clears the drag
         // threshold, so a plain click never changes the cursor.
         "data-[dragging=true]:z-20 data-[dragging=true]:cursor-grabbing data-[dragging=true]:border-primary data-[dragging=true]:bg-primary/5 data-[dragging=true]:shadow-lg data-[dragging=true]:ring-2 data-[dragging=true]:ring-primary/35"
       )}
@@ -2671,7 +2671,7 @@ function CanvasNode({
             </div>
           ) : null}
           {node.branches.map((branch, index) => {
-            // While a run is on, the branch it took is the only one in focus —
+            // While a run is on, the branch it took is the only one in focus;
             // the rest are paths this email was never going to follow.
             const receded =
               followedBranchId !== undefined &&
@@ -2731,7 +2731,7 @@ const debugBadge = {
 /**
  * The filter on one wire, drawn at the middle of that wire.
  *
- * A wire with no filter is a hairline dot that only names itself on hover — the
+ * A wire with no filter is a hairline dot that only names itself on hover, the
  * same vocabulary as a connector handle, because it is the same kind of thing:
  * an affordance on the board rather than an object on it. Once a wire has a
  * rule it becomes a chip carrying that rule's name, because a route that stops
@@ -2800,7 +2800,7 @@ function WireFilterMarker({
             : "size-4 rounded-full text-muted-foreground hover:size-6 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-md",
           !set &&
             "focus-visible:size-6 focus-visible:border-primary focus-visible:bg-primary focus-visible:text-primary-foreground",
-          // A disabled filter is still on the board — it just is not doing
+          // A disabled filter is still on the board; it just is not doing
           // anything, and reads as a rule set aside rather than a rule missing.
           set && !filter.enabled && "border-dashed text-muted-foreground",
           selected && "border-primary ring-2 ring-primary/20",
@@ -2848,14 +2848,14 @@ function WireFilterMarker({
 /** What a wire's marker says it does, for its tooltip and its label. */
 function filterSummaryLabel(filter: WorkflowFilter) {
   if (!filter.enabled) {
-    return "Turned off — every email passes this wire.";
+    return "Turned off. Every email passes this wire.";
   }
 
   const usable = usableFilterConditions(filter);
   const joiner = filter.match === "all" ? " and " : " or ";
 
   return usable.length === 0
-    ? "No finished condition yet — every email passes this wire."
+    ? "No finished condition yet. Every email passes this wire."
     : `Continues when ${usable.map(conditionSummary).join(joiner)}.`;
 }
 
@@ -2985,7 +2985,7 @@ function edgeKey(edge: CanvasEdge) {
  *
  * Edges are orthogonal: a run out of the outlet, one vertical step, a run into
  * the inlet. Right angles rather than a curve, because the board is a grid and
- * a wire that only travels along it is easier to trace back to its outlet —
+ * a wire that only travels along it is easier to trace back to its outlet,
  * the same reason the radius scale keeps corners cut rather than round.
  *
  * An edge leaving a classification branch starts at that branch's row rather
@@ -3035,7 +3035,7 @@ function edgePoints(
   } else {
     // The target sits beside or behind the source, so there is no room to turn
     // between them. Leave the outlet forwards anyway, drop into a clear lane
-    // under both nodes, and come back to the inlet from the left — a wire that
+    // under both nodes, and come back to the inlet from the left; a wire that
     // reversed on the spot would run back through the node it just left.
     const laneY =
       Math.max(
@@ -3117,7 +3117,7 @@ function edgeEndpoints(
  * run.
  *
  * Not the halfway point of the path. Wires are square now, and half way along a
- * branch's path lands on its vertical drop — where a wide chip lies across the
+ * branch's path lands on its vertical drop, where a wide chip lies across the
  * neighbouring branches' lanes and stops saying which wire it belongs to. Every
  * wire's horizontal runs are at its own outlet or inlet height, and no two
  * wires share those, so the longest one is the length of wire a chip can sit
@@ -3136,7 +3136,7 @@ function edgeMarkerPoint(
     .sort(
       (a, b) => Math.abs(b.end.x - b.start.x) - Math.abs(a.end.x - a.start.x)
     );
-  // No horizontal run at all is not a shape `edgePoints` can produce — a wire's
+  // No horizontal run at all is not a shape `edgePoints` can produce: a wire's
   // two ends are on node edges, which never share an x.
   const longest = runs[0];
 
@@ -3195,7 +3195,7 @@ function branchAnchorY(index: number) {
 }
 
 function classifierNodeHeight(branchCount: number) {
-  // An empty classification still shows one row — the "no outputs yet" line —
+  // An empty classification still shows one row (the "no outputs yet" line),
   // so the node never collapses to something that looks finished.
   return (
     nodeBaseHeight +
@@ -3316,7 +3316,7 @@ function createCanvasEdges(
   labels.forEach((label, branchIndex) => {
     label.actions.forEach((action, actionIndex) => {
       // Each wire carries the filter of the node it feeds, which is the node it
-      // arrives at — so an action's filter travels with the action, however the
+      // arrives at, so an action's filter travels with the action, however the
       // board is rewired around it.
       const wire = {
         target: {
@@ -3516,7 +3516,7 @@ function clampZoom(zoom: number) {
 
 /**
  * Scales the board around a point given in board-container pixels, so whatever
- * sits under that point — the pinching fingers, or the middle of the view —
+ * sits under that point (the pinching fingers, or the middle of the view)
  * stays exactly where it was while everything else moves away from it.
  */
 function zoomView(
@@ -3557,7 +3557,7 @@ function wheelZoomFactor(deltaY: number) {
 
 /**
  * Only the nodes a workflow can live without can be deleted from the board. An
- * output is not one of them — it is a setting of the classification node, and
+ * output is not one of them: it is a setting of the classification node, and
  * it is removed where it is named.
  */
 function canDeleteModule(module: SelectedModule) {
@@ -3595,7 +3595,7 @@ function floatingPanelPosition({
   panelHeight: number;
 }): CanvasNodePosition {
   // The panel floats over the board rather than inside it, so it is never
-  // scaled — only the node it points at is, and that is what has to be
+  // scaled; only the node it points at is, and that is what has to be
   // converted from board pixels to the ones the panel is placed in.
   const nodeLeft = anchor.position.x * view.zoom + view.x;
   const nodeTop = anchor.position.y * view.zoom + view.y;
@@ -3778,7 +3778,7 @@ function TriggerSettings({
  * The two halves of one decision: what the model is asked, and what it is
  * allowed to answer.
  *
- * The outputs are not a hint to the model — they are the answer set the call is
+ * The outputs are not a hint to the model: they are the answer set the call is
  * decoded against, so a workflow with Sales / FAQ / Important gets back one of
  * those three and never a fourth thing. Each one is also a branch on the board,
  * which is why adding an output changes the shape of the node behind this
@@ -3888,7 +3888,7 @@ function duplicateLabelIds(labels: ClassificationLabel[]) {
 
 /**
  * One classification run against a made-up email. The prompt is a piece of
- * writing, and writing is checked by reading what it did — not by saving the
+ * writing, and writing is checked by reading what it did, not by saving the
  * workflow and waiting for real mail to arrive.
  */
 function ClassificationTest({
@@ -4016,7 +4016,7 @@ function ClassificationTest({
 /**
  * A wire's filter: the rule an email has to meet to travel that wire at all.
  *
- * It reads as one sentence with a gap in it — continue when *these* hold — so
+ * It reads as one sentence with a gap in it (continue when *these* hold), so
  * the conditions are the body of the panel and everything else (a name for the
  * board, the case rule, the on switch) sits around them.
  */
@@ -4029,7 +4029,7 @@ function FilterSettings({
   filter: WorkflowFilter;
   /** The node the wire leaves, so the panel can say what it is guarding. */
   fromTitle: string;
-  /** The node the wire feeds — the one an email is stopped short of. */
+  /** The node the wire feeds: the one an email is stopped short of. */
   toTitle: string;
   onChange: (updater: (filter: WorkflowFilter) => WorkflowFilter) => void;
 }) {
@@ -4289,7 +4289,7 @@ function ActionSettings({
               note: current.note,
               signature: current.signature,
               // The filter belongs to the wire, not to what the node does with
-              // what reaches it — swapping the action must not clear it.
+              // what reaches it, so swapping the action must not clear it.
               filter: current.filter,
             }))
           }

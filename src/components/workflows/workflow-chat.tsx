@@ -28,7 +28,7 @@ import { generatedConfidenceThreshold } from "@/lib/workflow-intent";
  * The chat is a drafting surface, not a replacement for the board: everything
  * it understands is shown as it goes, and the conversation ends by handing a
  * whole draft to the builder. The user never has to take the assistant's word
- * for what it built — they read it on the canvas and change it there.
+ * for what it built: they read it on the canvas and change it there.
  */
 
 type ChatMessage = {
@@ -47,7 +47,7 @@ type ChatError = { title: string; description: string };
 const greeting =
   "Tell me what you would like to happen to your email. Something like " +
   "“forward all sales enquiries to sales@mycompany.com” is plenty to start " +
-  "with — I will ask about the details.";
+  "with. I will ask about the details.";
 
 export function WorkflowChat({
   onOpenEditor,
@@ -79,14 +79,14 @@ export function WorkflowChat({
   const [isPending, startTransition] = React.useTransition();
   /**
    * Which composer the card is showing. The assistant opens the example form by
-   * asking for examples, and the user can open or leave it at any time — a
+   * asking for examples, and the user can open or leave it at any time: a
    * question about an address is not answered with a subject and a body.
    */
   const [composer, setComposer] = React.useState<"message" | "examples">(
     "message"
   );
   // Once opened the form stays mounted, hidden, so half-typed examples survive
-  // a trip back to the message box — the same reason the two phases of
+  // a trip back to the message box, the same reason the two phases of
   // `new-workflow-flow.tsx` are tabs rather than a one-way door.
   const [examplesMounted, setExamplesMounted] = React.useState(false);
   /** Keys the form, so sending a set of examples leaves an empty one behind. */
@@ -100,7 +100,7 @@ export function WorkflowChat({
   const transcriptRef = React.useRef<HTMLDivElement>(null);
 
   // A new turn is only useful if it is on screen, and the pending indicator
-  // sits below the last message — so this follows the thinking state too.
+  // sits below the last message, so this follows the thinking state too.
   React.useEffect(() => {
     const transcript = transcriptRef.current;
 
@@ -201,7 +201,7 @@ export function WorkflowChat({
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {/* Before there is a board, the second way out of the chat is to
               skip it and start from a blank one. Once there is, that offer is
-              gone — the board is the work, and the button that sits here goes
+              gone: the board is the work, and the button that sits here goes
               back to it. */}
           {onReturnToEditor ? (
             <Button type="button" variant="outline" onClick={onReturnToEditor}>
@@ -367,7 +367,7 @@ function Message({ message }: { message: ChatMessage }) {
         className={cn(
           "max-w-[85%] text-sm whitespace-pre-wrap",
           // The user's own words get a quiet fill so the transcript reads as a
-          // back-and-forth. Neither side is accented — the orange is spent on
+          // back-and-forth. Neither side is accented: the orange is spent on
           // the step the page wants next, not on decorating speech.
           isUser
             ? "rounded-lg bg-muted px-3 py-2"
@@ -392,7 +392,7 @@ function Thinking() {
 /**
  * The workflow as it currently stands, in the same vocabulary the board uses.
  *
- * This is not a second builder — nothing here is editable. It exists so the
+ * This is not a second builder: nothing here is editable. It exists so the
  * user can see the shape being assembled while they talk, and so "Open in the
  * editor" is never a surprise.
  */
@@ -431,7 +431,7 @@ function DraftPreview({ draft }: { draft: WorkflowDraft }) {
               </Badge>
               {label.actions.length === 0 ? (
                 <p className="text-muted-foreground">
-                  Nothing happens — the email is left alone.
+                  Nothing happens. The email is left alone.
                 </p>
               ) : (
                 <ul className="flex flex-col gap-1">

@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/server";
  * Storage and refresh for Google mailbox tokens.
  *
  * Supabase hands back `provider_token` and `provider_refresh_token` exactly
- * once — in the session returned by `exchangeCodeForSession`. It does not
+ * once, in the session returned by `exchangeCodeForSession`. It does not
  * persist them and will not return them again on later reads, so if the
  * callback does not capture the refresh token here, the only way to recover it
  * is to send the user back through consent.
@@ -113,7 +113,7 @@ export async function storeGoogleCredentials({
  * Returns a valid Google access token for a user, refreshing it if needed.
  *
  * Returns null when the mailbox is not connected or Google has revoked the
- * grant — callers should route the user back through consent rather than retry.
+ * grant; callers should route the user back through consent rather than retry.
  */
 export async function getGoogleAccessToken(
   userId: string,

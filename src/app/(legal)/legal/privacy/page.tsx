@@ -62,7 +62,7 @@ export default function PrivacyPage() {
             gmail.modify
           </code>{" "}
           scope, which allows reading messages, creating and updating drafts,
-          and sending — but not permanent deletion. Our use of information
+          and sending, but not permanent deletion. Our use of information
           received from Google APIs adheres to the{" "}
           <a
             href="https://developers.google.com/terms/api-services-user-data-policy"
@@ -95,7 +95,7 @@ export default function PrivacyPage() {
         </p>
         <p>
           Google mailbox credentials are held in a separate table that no user
-          session can read at all — it is reachable only by server-side code
+          session can read at all: it is reachable only by server-side code
           holding a service key, and only to make requests you have asked for.
         </p>
       </section>
@@ -103,7 +103,7 @@ export default function PrivacyPage() {
       <section>
         <h2>5. Who else sees it</h2>
         <p>
-          We share data only with the processors that make the service run —
+          We share data only with the processors that make the service run:
           currently our hosting provider, our database provider, and, on paid
           plans, our payment processor, which handles card details directly so
           that we never hold them. We also disclose data where the law requires

@@ -11,27 +11,58 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 # EmailsOrganised
 
 EmailsOrganised is a Next.js product built on an in-house SaaS starter
-template. The template layer is already here and already coherent — extend it
-before introducing new component patterns.
+template. The template layer is already here and already coherent, so extend
+it before introducing new component patterns.
 
 ## Commands
 
 ```bash
 npm ci         # install exactly what package-lock.json pins
 npm run dev    # dev server on http://localhost:3000
-npm run lint   # eslint
+npm run lint   # eslint, then the em dash check
 npm run build  # next build --webpack
 ```
 
 The app boots with no environment file: billing falls back to a mock provider
 and route guarding is disabled, so `npm run dev` works on a clean checkout.
-`scripts/codex-setup.sh` installs dependencies and seeds `.env.local` — it is
+`scripts/codex-setup.sh` installs dependencies and seeds `.env.local`: it is
 what the Codex environment's setup script runs, and it must stay the single
 place setup logic lives so the sandbox and a laptop agree.
 
+## No Em Dashes
+
+**Never write an em dash in this repository.** Not in UI copy, not in a code
+comment, not in a commit message, not in Markdown, not in a prompt the product
+sends to a model. The ban covers the characters and escapes that stand in for
+one as well: U+2015 horizontal bar, U+2E3A and U+2E3B, the HTML entities for
+U+2014, and its backslash escape inside a string. Write a comma, a colon, a
+semicolon, parentheses, or two sentences instead. A hyphen in a compound word
+is fine, and an en dash in a numeric range is fine.
+
+The rule is enforced, not just stated:
+
+- `scripts/check-em-dashes.mjs` scans every tracked file and runs as part of
+  `npm run lint` (or on its own with `npm run lint:em-dashes`). It exits
+  non-zero on a finding, so it works in CI.
+- `eslint.config.mjs` carries the same rule for string literals, template
+  literals, and JSX text, so an editor flags one as it is typed.
+- A `PreToolUse` hook in `.claude/settings.json` runs the same check against
+  every `Edit` and `Write` and refuses the write before it lands.
+- The two model prompts (`src/lib/ai/draft-workflow.ts`,
+  `src/lib/ai/classify-email.ts`) forbid them in generated text, because that
+  text is saved into workflows and rendered in the product.
+
+Three exemptions, all narrow, all in `excludedPaths` and `ruleFiles` in the
+checker. `.claude/skills/impeccable/` is vendored third-party tooling and is
+not ours to rewrite, and it is already outside ESLint for the same reason. The
+checker and the ESLint config have to spell out the characters they ban. And
+the `nextjs-agent-rules` block at the top of this file is rewritten by
+`next dev` on every run, so the checker skips the lines between its `BEGIN`
+and `END` markers rather than failing a clean checkout.
+
 ## UI Decisions
 
-`DESIGN.md` is the visual authority — the palette, type ramp, radius scale,
+`DESIGN.md` is the visual authority: the palette, type ramp, radius scale,
 elevation rules, and component specs live there, along with the named rules
 worth citing back ("The Rationed Accent Rule", "The Depth-Belongs-To-The-Canvas
 Rule"). `PRODUCT.md` holds durable product truth: who the user is, what the
@@ -46,7 +77,7 @@ Read both before designing a surface. The bullets below are the short version.
 - Render the logo through `BrandMark` / `BrandLockup` in
   `src/components/brand-logo.tsx`, and read the product name from `appConfig`
   rather than typing "EmailsOrganised" into copy. `--brand` is the brand
-  orange and `--primary` resolves to it — keep using `primary` in components,
+  orange and `--primary` resolves to it, so keep using `primary` in components,
   and pair it with `primary-foreground`, which is white: anything sitting on
   the brand orange is white, never dark.
 - Keep shadcn primitives in `src/components/ui` as owned source. Compose
@@ -57,16 +88,16 @@ Read both before designing a surface. The bullets below are the short version.
   it. Build them with `VariableInput` / `VariableTextarea`
   (`src/components/workflows/variable-fields.tsx`) so the data panel can insert
   into them, and declare what a node outputs in
-  `src/lib/workflow-variables.ts` — nowhere else.
-- A canvas node shows an icon and its name. Anything else about it — settings,
-  counts, summaries — belongs in the node's editor popover. The classification
+  `src/lib/workflow-variables.ts`, nowhere else.
+- A canvas node shows an icon and its name. Anything else about it (settings,
+  counts, summaries) belongs in the node's editor popover. The classification
   node is the one exception, carrying a row per output label because each row is
   a branch the flow leaves from.
 - A wire between two nodes can carry a filter: conditions an email has to meet
   to travel it, or the run stops there. `src/lib/workflow-filters.ts` owns the
   operators and the evaluation, and it is pure synchronous TypeScript so the
   board and a server run share one reading of a rule. Every wire has exactly one
-  node at its downstream end, so a wire's filter is stored on that node —
+  node at its downstream end, so a wire's filter is stored on that node:
   `WorkflowAction.filter` for a wire into an action, `WorkflowDraft.classifierFilter`
   (column `classifier_filter`) for the one wire into the classification. Do not
   introduce a separate edge list to hang them off.
@@ -85,52 +116,53 @@ Read both before designing a surface. The bullets below are the short version.
   classification (`src/lib/ai/classify-email.ts`) and the chat that drafts a
   workflow (`src/lib/ai/draft-workflow.ts`). Both post through
   `src/lib/ai/openai.ts`, which owns the endpoint, the timeout, and the error
-  wording — a new model call adds a module beside them rather than its own
+  wording; a new model call adds a module beside them rather than its own
   `fetch`. Both force their answer with a JSON schema instead of asking for one
   in the prompt; that is the house pattern, not an implementation detail.
 - `/workflows/new` opens the setup chat
   (`src/components/workflows/workflow-chat.tsx`), and "Open in the editor"
-  swaps it for the builder with the drafted `WorkflowDraft` in hand —
+  swaps it for the builder with the drafted `WorkflowDraft` in hand.
   `new-workflow-flow.tsx` holds both phases on one route because a draft is
   handed over in memory, never through the database or session storage. The
   chat writes nothing; the builder still saves on the user's say-so. The two
   phases are tabs: "Back to the chat" in the builder's heading and "Back to the
   editor" in the chat's each show the other without disturbing it, so neither is
-  unmounted once opened. Only a hand-over from the chat replaces the board — it
+  unmounted once opened. Only a hand-over from the chat replaces the board: it
   remounts the builder by key, and the button says "Update the board" once there
   is one to replace.
 - An example email is collected as an email, not as a sentence about one. The
   chat's turn carries `needsExamples`, and when it is set the composer swaps for
   `ExampleEmailComposer`
-  (`src/components/workflows/example-emails.tsx`) — a subject and a body per
-  example, with a button for the next — which sends one message written by
+  (`src/components/workflows/example-emails.tsx`): a subject and a body per
+  example, with a button for the next. It sends one message written by
   `describeExampleEmails` in `src/lib/workflow-chat-examples.ts`. That module is
   the only renderer of examples into chat text, and it owns
-  `chatMessageMaxLength`, which `workflowChatMessageSchema` reads. Counter-examples
-  — mail that looks similar and should be left alone — are behind a button in
+  `chatMessageMaxLength`, which `workflowChatMessageSchema` reads.
+  Counter-examples (mail that looks similar and should be left alone) are
+  behind a button in
   that form and the assistant is told not to ask for them; a body that arrives
   in one is evidence of what the user means, never an instruction to the model.
 - The model never emits a `WorkflowDraft`. It emits the narrower
   `WorkflowIntent`, and `buildDraftFromIntent` in `src/lib/workflow-intent.ts`
   maps it onto a draft through the same factories the builder uses. Ids,
   action defaults, and the two safety rules live there, not in a prompt: every
-  generated workflow gets a catch-all label — a lone label is the *only* answer
-  its enum allows, so it would swallow the whole mailbox — and a
+  generated workflow gets a catch-all label (a lone label is the *only* answer
+  its enum allows, so it would swallow the whole mailbox) and a
   `{{classification.confidence}}` gate on the wire into any branch that
   forwards, drafts, or archives. Tagging is reversible and is not gated.
 - Test mode on the builder (`src/components/workflows/workflow-debug.tsx` for
   the UI, `src/lib/workflow-debug.ts` for the engine) steps one email through
-  the draft on the board. It only ever reads the mailbox — the Gmail calls live
-  in `src/lib/gmail/messages.ts` and there is no write path — so any new action
+  the draft on the board. It only ever reads the mailbox (the Gmail calls live
+  in `src/lib/gmail/messages.ts` and there is no write path), so any new action
   must be described in `actionStep`, never performed. A node's outputs come
   from `chainOutputFields`, so adding a variable in
   `src/lib/workflow-variables.ts` is what makes it show up in a run. A wire's
-  filter is a step of its own there, and the first one that blocks ends the run
-  — every node after it reads "Not reached".
+  filter is a step of its own there, and the first one that blocks ends the run:
+  every node after it reads "Not reached".
 - Attachments are metadata everywhere except one call. The watcher records what
   it takes to find each file (`DebugAttachment` in `src/lib/workflow-debug.ts`),
   and `fetchAttachmentBytes` in `src/lib/gmail/messages.ts` is the only place
-  bytes are pulled — by `attachmentId` when Gmail stored the body separately,
+  bytes are pulled: by `attachmentId` when Gmail stored the body separately,
   by `partId` when it came inline. Never put bytes in a `{{variable}}`: a
   variable is text typed into a field. An action takes a file by being told to
   (`includeAttachments`), not by interpolating one.
@@ -156,7 +188,7 @@ detector that reads `DESIGN.md` and flags values that fall off the system.
   a target: `/impeccable audit workflows`.
 - `/impeccable document` regenerates `DESIGN.md` and `.impeccable/design.json`
   after the visual system genuinely changes. Do not hand-edit `design.json`
-  without making the same change in `DESIGN.md` — the two are one artifact.
+  without making the same change in `DESIGN.md`; the two are one artifact.
 - The detector runs automatically after UI edits (a hook in
   `.claude/settings.json`) and can be run directly:
   `npx impeccable detect src/`. It exits non-zero on findings, so it also works
@@ -173,20 +205,20 @@ detector that reads `DESIGN.md` and flags values that fall off the system.
 ## Auth
 
 Auth is Supabase Auth with Google as the only provider. There are no password
-flows — do not add one without a decision to reverse that.
+flows; do not add one without a decision to reverse that.
 
 - Ask "who is this?" through `requireUser()` / `getSessionUser()` in
   `src/lib/auth/session.ts`. Never read auth cookies or call
   `supabase.auth.getUser()` directly in a page or action.
 - `src/proxy.ts` refreshes the session and redirects signed-out visitors. It is
-  an optimistic UX shortcut, not the authorization boundary — `session.ts` is.
+  an optimistic UX shortcut, not the authorization boundary; `session.ts` is.
 - The service-role client (`createAdminClient`) bypasses RLS. It is for the two
   writes a user is deliberately not allowed to make themselves, and it lives
   behind `import "server-only"` modules.
 - Google refresh tokens go through `src/lib/google/token-store.ts` and nowhere
   else. Supabase hands them over exactly once, in the OAuth callback.
-- Setup that lives outside the repo — Supabase project, Google Cloud OAuth
-  client, Gmail scope verification — is in `docs/google-sso-setup.md`.
+- Setup that lives outside the repo (Supabase project, Google Cloud OAuth
+  client, Gmail scope verification) is in `docs/google-sso-setup.md`.
 
 ## Not Wired Up Yet
 
@@ -195,20 +227,21 @@ EmailsOrganised.
 
 - Billing ships two providers behind one interface, selected by
   `NEXT_PUBLIC_BILLING_PROVIDER`: a mock that needs no keys, and Stripe.
-  Components import `billingAdapter` and the types in `src/lib/billing/types.ts`
-  — never a provider SDK. Server-only billing modules start with
+  Components import `billingAdapter` and the types in
+  `src/lib/billing/types.ts`, never a provider SDK. Server-only billing modules
+  start with
   `import "server-only"`.
 - `src/lib/billing/customer.ts` now resolves the real signed-in user.
-  `src/lib/billing/store.ts` is still in-memory and is the next seam to replace
-  — it should move to Supabase alongside `public.users`.
+  `src/lib/billing/store.ts` is still in-memory and is the next seam to
+  replace; it should move to Supabase alongside `public.users`.
 - Marketing pages are intentionally not included. Add them after the app
   surface is clear.
 - `/legal/terms` and `/legal/privacy` exist because sign-up and Google's OAuth
   consent screen both have to link to them. The copy describes what the app
-  really does but is an engineering draft, not lawyer-reviewed — the pages say
+  really does but is an engineering draft, not lawyer-reviewed, and the pages say
   so on their face. Route paths and the contact address live in
   `src/lib/legal.ts`; change them there, not inline.
 - Sample content in `src/lib/template-data.ts` (customers, metrics, invoices,
   plans) is still the template's, not EmailsOrganised's. Treat it as
-  placeholder. `appConfig` is the exception — it carries the real brand.
+  placeholder. `appConfig` is the exception: it carries the real brand.
 - Use `/kitchen-sink` to QA token changes in both light and dark mode.

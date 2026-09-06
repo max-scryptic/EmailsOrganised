@@ -27,7 +27,7 @@ export function assertSupabaseConfigured() {
   if (!isSupabaseConfigured) {
     throw new Error(
       "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and " +
-        "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY in .env.local — see " +
+        "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY in .env.local. See " +
         "docs/google-sso-setup.md.",
     );
   }

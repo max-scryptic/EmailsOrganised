@@ -18,7 +18,7 @@ import { appConfig } from "@/lib/template-data";
 export type AuthMode = "sign-in" | "sign-up";
 
 /**
- * Sign-in and sign-up run the exact same Google OAuth call — with a single
+ * Sign-in and sign-up run the exact same Google OAuth call: with a single
  * provider and no password flows there is nothing to branch on server-side.
  * They stay two routes because visitors look for two different words, so the
  * only real difference is copy plus the consent notice, which belongs on the

@@ -11,7 +11,7 @@ type SidebarState = {
  * Holds the expanded/collapsed state of the app sidebar.
  *
  * Every page renders its own `AppShell`, so the `SidebarProvider` inside it is
- * unmounted and remounted on each navigation and cannot own this state — it
+ * unmounted and remounted on each navigation and cannot own this state: it
  * would snap back to the default on every route change. This provider lives in
  * the root layout, which survives client-side navigation, so the state carries
  * across page transitions. The initial value comes from the `sidebar_state`
@@ -38,8 +38,8 @@ export function SidebarStateProvider({
 }
 
 /**
- * Returns `null` when no provider is above — an `AppShell` rendered outside the
- * root layout then falls back to the primitive's own uncontrolled state.
+ * Returns `null` when no provider is above. An `AppShell` rendered outside
+ * the root layout then falls back to the primitive's own uncontrolled state.
  */
 export function useSidebarState() {
   return useContext(SidebarStateContext);

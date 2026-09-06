@@ -21,7 +21,7 @@ import {
  * An example is a real message, so it is collected as one: a subject and a
  * body, with a button to add the next. Typing "an example is: Subject: …" into
  * a chat box works, but it asks the person to invent a format and asks the
- * model to guess where one example stopped and the next began — the form ends
+ * model to guess where one example stopped and the next began. The form ends
  * both guesses, and `describeExampleEmails` is the single rendering everyone
  * downstream reads.
  *
@@ -43,7 +43,7 @@ export function ExampleEmailComposer({
   disabled: boolean;
   /**
    * Whether sending these examples is the page's next step. It is not once
-   * there is a workflow to open — the accent belongs to that button instead,
+   * there is a workflow to open: the accent belongs to that button instead,
    * and this one steps back to an outline.
    */
   accented: boolean;
@@ -132,7 +132,7 @@ export function ExampleEmailComposer({
 
       {tooLong ? (
         <p className="text-xs text-destructive">
-          That is more text than one message can carry. Shorten the bodies —
+          That is more text than one message can carry. Shorten the bodies;
           the first few lines of an email are usually enough to tell it apart.
         </p>
       ) : null}
@@ -168,7 +168,7 @@ export function ExampleEmailComposer({
 
 /**
  * One list of examples and the button that grows it. Both lists are the same
- * thing said about different mail, so they are the same component — only the
+ * thing said about different mail, so they are the same component; only the
  * words on the rows change.
  */
 function ExampleGroup({

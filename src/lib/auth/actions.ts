@@ -12,7 +12,7 @@ import { createClient } from "@/lib/supabase/server";
  *
  * Running the exchange server-side keeps the PKCE verifier in an httpOnly
  * cookie. `access_type=offline` with `prompt=consent` is what makes Google
- * return a refresh token — without both, repeat sign-ins return an access token
+ * return a refresh token; without both, repeat sign-ins return an access token
  * only and background mailbox access breaks the moment the user closes the tab.
  */
 export async function signInWithGoogle(formData: FormData) {
@@ -21,7 +21,7 @@ export async function signInWithGoogle(formData: FormData) {
   // A clean checkout runs with no Supabase config (see supabase/config.ts), and
   // `createClient` throws there. An uncaught throw in a Server Action reaches
   // the root error boundary, so the whole app would fall over on a button the
-  // sign-in card already warns about — say so on the sign-in error page instead.
+  // sign-in card already warns about, so say so on the sign-in error page instead.
   if (!isSupabaseConfigured) {
     redirect(
       `/auth/auth-code-error?reason=${encodeURIComponent(
@@ -59,8 +59,8 @@ export async function signInWithGoogle(formData: FormData) {
 /**
  * Ends the session and returns the visitor to sign-in.
  *
- * With no Supabase config there is no session to end — the shell is rendering
- * the placeholder user from `getSessionUser` — so logging out is just the
+ * With no Supabase config there is no session to end (the shell is rendering
+ * the placeholder user from `getSessionUser`), so logging out is just the
  * redirect. Guarding here matters because `createClient` throws when it is
  * unconfigured, and an uncaught throw in a Server Action takes the whole app to
  * the root error boundary rather than signing anyone out.

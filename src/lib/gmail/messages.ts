@@ -8,7 +8,7 @@ import type { DebugAttachment, DebugEmail } from "@/lib/workflow-debug";
  *
  * Reading only: nothing in this module writes to a mailbox. Access tokens come
  * from `@/lib/google/token-store`, which is the only place they are stored or
- * refreshed. Fetching an attachment's bytes is a read like any other — it is
+ * refreshed. Fetching an attachment's bytes is a read like any other: it is
  * `users.messages.attachments.get`, not a change to the message.
  */
 
@@ -89,7 +89,7 @@ export async function getMailboxAddress(accessToken: string) {
  * Ids of inbox messages that arrived after `sinceMs`, newest first.
  *
  * Gmail's `after:` filter is only accurate to the day in some accounts, so the
- * precise cut is made against `internalDate` when each message is fetched — see
+ * precise cut is made against `internalDate` when each message is fetched. See
  * `fetchNewInboxMessage`.
  */
 async function listRecentInboxMessageIds(accessToken: string, sinceMs: number) {
@@ -274,8 +274,8 @@ function parseAddress(value: string) {
 
 /**
  * The first part of the wanted type, walking the MIME tree. Multipart messages
- * nest — `multipart/mixed` around a `multipart/alternative` around the two
- * bodies — so this cannot just read `payload.parts`.
+ * nest (`multipart/mixed` around a `multipart/alternative` around the two
+ * bodies), so this cannot just read `payload.parts`.
  */
 function findBody(part: GmailPart | undefined, mimeType: string): string {
   if (!part) {
@@ -303,7 +303,7 @@ function findBody(part: GmailPart | undefined, mimeType: string): string {
  * for its bytes later.
  *
  * A named part is an attachment: that is the same test the names-only version
- * of this used, so an inline signature image is still counted — it is just
+ * of this used, so an inline signature image is still counted; it is just
  * marked, because the panel showing three attachments when the user sent one
  * is a question rather than a bug.
  */

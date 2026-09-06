@@ -8,7 +8,7 @@
  *
  * The branch, by contrast, is real. It comes from the same model call the
  * workflow runs on, made on the server before this is called and handed in as
- * `classification` — which is what keeps this module plain synchronous
+ * `classification`, which is what keeps this module plain synchronous
  * TypeScript that the board can run in the browser on the unsaved draft, so a
  * workflow can be tested before it is ever saved. A run with no answer (no API
  * key, or the call failed) still steps; the user picks the branch instead.
@@ -43,8 +43,8 @@ import {
  *
  * The bytes are deliberately not here. A run is built in the browser and a
  * mailbox attachment can be tens of megabytes, so the watcher carries what it
- * takes to *find* the file — `attachmentId` when Gmail stored the body
- * separately, `partId` when the bytes came inline in the message — and the
+ * takes to *find* the file (`attachmentId` when Gmail stored the body
+ * separately, `partId` when the bytes came inline in the message), and the
  * fetch happens on the server, once, when something actually needs the file.
  */
 export type DebugAttachment = {
@@ -115,7 +115,7 @@ export type DebugValue = {
   label: string;
   value: string;
   /**
-   * Set when only a live run can produce the value — model-written text, or an
+   * Set when only a live run can produce the value: model-written text, or an
    * id Gmail assigns when the action really happens.
    */
   pending?: boolean;
@@ -143,7 +143,7 @@ export type DebugStep = {
   /** The board node this step is running, so the canvas can follow along. */
   nodeId: string;
   kind: DebugStepKind;
-  /** "Trigger", "Filter", "Classification", "Action" — matches the inspector. */
+  /** "Trigger", "Filter", "Classification", "Action". Matches the inspector. */
   kindLabel: string;
   title: string;
   /** One line: what this node did with this email. */
@@ -160,7 +160,7 @@ export type DebugStep = {
 
 /**
  * The step a wire's filter runs as. It is not a node, so it gets an id of its
- * own — namespaced by the node the wire feeds, which is where the filter is
+ * own, namespaced by the node the wire feeds, which is where the filter is
  * stored and which is what the board draws the wire into.
  */
 export function filterStepNodeId(targetNodeId: string) {
@@ -190,7 +190,7 @@ const byteUnits = ["B", "KB", "MB", "GB"];
 /**
  * A byte count as a person reads it. Fixed to en-US decimals rather than the
  * viewer's locale, because this string is rendered on the server for the run's
- * summaries and again in the browser for the panel — the two have to match.
+ * summaries and again in the browser for the panel, and the two have to match.
  */
 export function formatBytes(bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0) {
@@ -274,7 +274,7 @@ function describeBranches({
 
 /**
  * The label the model answered with, as one of the draft's outputs. Matched by
- * name because the name is what the model was given — and it can miss when the
+ * name because the name is what the model was given, and it can miss when the
  * board was edited after the call was made.
  */
 function labelForAnswer(
@@ -325,7 +325,7 @@ export function buildDebugRun({
     followedLabelId: followedLabel?.id ?? null,
   });
 
-  // The nodes this run touches, in order — the same chain the inspector uses to
+  // The nodes this run touches, in order: the same chain the inspector uses to
   // work out which variables a node can read, so the tokens agree.
   const chain: VariableChainNode[] = [
     { id: "trigger", kind: "trigger" },
@@ -393,7 +393,7 @@ export function buildDebugRun({
   /**
    * Runs the filter on the wire into `targetNodeId`, if it has one. Returns
    * false when the email was stopped there, which is the caller's cue to end
-   * the run — a blocked wire is not a failure, it is the wire doing its job.
+   * the run. A blocked wire is not a failure, it is the wire doing its job.
    */
   function passesWire(targetNodeId: string, filter: WorkflowFilter) {
     if (!isFilterActive(filter)) {
@@ -437,7 +437,7 @@ export function buildDebugRun({
   });
 
   // The wires are checked in the order the email travels them, and the first
-  // one that blocks ends the run — everything past it is a node this email
+  // one that blocks ends the run: everything past it is a node this email
   // never reaches.
   let blockedAtNodeId: string | null = null;
 
@@ -596,12 +596,12 @@ function classificationSummary({
   }
 
   if (!pickedLabel) {
-    // The answer no longer names an output — the board was edited after the
+    // The answer no longer names an output: the board was edited after the
     // call, which is worth saying rather than showing an empty branch.
     return `The model answered “${classification.label}”, which is no longer one of this classification's outputs.`;
   }
 
-  return `The model answered “${classification.label}” — ${confidence}.`;
+  return `The model answered “${classification.label}” (${confidence}).`;
 }
 
 function runEndNote({
@@ -633,7 +633,7 @@ function runEndNote({
   }
 
   if (followedLabel.actions.length === 0) {
-    return "The branch ends here — no actions are attached to this output.";
+    return "The branch ends here: no actions are attached to this output.";
   }
 
   return null;
@@ -764,7 +764,7 @@ function actionStep({
  *
  * "Would carry" is the whole answer here: a test run never fetches the bytes,
  * because it never sends anything to put them in. What it reports is which
- * files a live run would pull — the same list a live send would ask
+ * files a live run would pull, the same list a live send would ask
  * `fetchAttachmentBytes` for, one file at a time.
  */
 function carriedAttachments(action: WorkflowAction, email: DebugEmail) {
@@ -776,7 +776,7 @@ function carriedAttachments(action: WorkflowAction, email: DebugEmail) {
 
   if (email.attachments.length === 0) {
     return {
-      setting: attachmentSetting("On — this email has none"),
+      setting: attachmentSetting("On, but this email has none"),
       names: "",
       clause: "",
     };
@@ -838,7 +838,7 @@ function mapValues<T, R>(
 }
 
 /**
- * The email debug mode falls back to when there is no mailbox to listen to —
+ * The email debug mode falls back to when there is no mailbox to listen to:
  * on a clean checkout, or before Google consent. Its values are the same ones
  * the variable panel shows as examples, so the two surfaces agree.
  */
@@ -855,13 +855,13 @@ export function sampleDebugEmail(
     cc: "finance@yourcompany.com",
     replyTo: "ada+billing@example.com",
     snippet:
-      "Just checking in on invoice 1024 — it was due last Friday and I have not seen the payment land yet.",
+      "Just checking in on invoice 1024. It was due last Friday and I have not seen the payment land yet.",
     bodyText:
-      "Hi there,\n\nJust checking in on invoice 1024 — it was due last Friday " +
+      "Hi there,\n\nJust checking in on invoice 1024. It was due last Friday " +
       "and I have not seen the payment land yet. Could you confirm when it " +
       "went out?\n\nThanks,\nAda",
     bodyHtml:
-      "<p>Hi there,</p><p>Just checking in on invoice 1024 — it was due last " +
+      "<p>Hi there,</p><p>Just checking in on invoice 1024. It was due last " +
       "Friday and I have not seen the payment land yet.</p><p>Thanks,<br>Ada</p>",
     receivedAt: new Date().toISOString(),
     labels: ["INBOX", "IMPORTANT"],

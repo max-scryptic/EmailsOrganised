@@ -2,14 +2,14 @@
  * Example emails, as the setup chat collects them.
  *
  * The chat asks for examples of the mail a workflow is meant to catch, and the
- * person answers in a form — a subject and a body per email — rather than by
+ * person answers in a form (a subject and a body per email) rather than by
  * describing them in a sentence. This module owns the two things both ends of
  * that exchange need: what one example is, and how a set of them is written
  * into the single chat message the model reads. Pure and synchronous, so the
  * transcript, the message posted to the server, and the model all read one
  * rendering of the same examples.
  *
- * Counter-examples — mail that looks similar and should be left alone — are the
+ * Counter-examples (mail that looks similar and should be left alone) are the
  * same shape and are deliberately a second, optional list. The assistant does
  * not ask for them; they are here only when the person chose to add some.
  */
@@ -22,8 +22,8 @@ export type ExampleEmail = {
 
 /**
  * How long one chat message may be. The example composer is the only writer
- * that can realistically approach it — a pasted email body is longer than
- * anything anyone types by hand — so the limit lives beside the thing that has
+ * that can realistically approach it (a pasted email body is longer than
+ * anything anyone types by hand), so the limit lives beside the thing that has
  * to respect it, and `workflowChatMessageSchema` reads it from here rather than
  * restating the number.
  */
@@ -83,7 +83,7 @@ function describeGroup(
  * The examples as one message in the user's voice.
  *
  * Empty rows are dropped rather than sent as blanks, and a group nobody filled
- * in leaves no trace — which is how an unopened counter-example section stays
+ * in leaves no trace, which is how an unopened counter-example section stays
  * invisible to the model instead of arriving as an empty heading it has to
  * interpret.
  */

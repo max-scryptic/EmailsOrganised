@@ -21,7 +21,7 @@ type InlineEditableTextProps = {
 };
 
 /**
- * Text that reads as plain copy until you click it — or its pencil — and then
+ * Text that reads as plain copy until you click it, or its pencil, and then
  * edits in place. Enter or blur commits, Escape discards.
  */
 export function InlineEditableText({

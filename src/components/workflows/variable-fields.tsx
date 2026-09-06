@@ -50,7 +50,7 @@ export function VariableInsertProvider({
     setTargets((current) => {
       const index = current.findIndex((entry) => entry.id === target.id);
 
-      // Re-registering — a renamed label, say — must not reshuffle the order,
+      // Re-registering (a renamed label, say) must not reshuffle the order,
       // because the first field is the fallback target.
       if (index === -1) {
         return [...current, target];
@@ -169,7 +169,7 @@ function useVariableField<
   const register = context?.register;
   const release = context?.release;
 
-  // Registering on mount — not on first focus — is what gives the data panel a
+  // Registering on mount, not on first focus, is what gives the data panel a
   // target from the moment the node opens.
   React.useEffect(() => {
     register?.({ id: fieldId, label, insert });
@@ -177,7 +177,7 @@ function useVariableField<
 
   // Releasing is strictly an unmount concern, kept apart from the registration
   // above so a changed label re-registers without losing the field's place in
-  // the order — the first field is the standing target.
+  // the order: the first field is the standing target.
   React.useEffect(() => {
     if (!release) {
       return;

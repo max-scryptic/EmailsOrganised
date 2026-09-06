@@ -14,8 +14,8 @@ export type WorkflowAction = {
   type: WorkflowActionType;
   /**
    * The filter on the wire feeding this action. Every wire has exactly one
-   * node at its downstream end, so a wire's filter is stored on that node —
-   * see `src/lib/workflow-filters.ts`.
+   * node at its downstream end, so a wire's filter is stored on that node.
+   * See `src/lib/workflow-filters.ts`.
    */
   filter: WorkflowFilter;
   labelName: string;
@@ -26,7 +26,7 @@ export type WorkflowAction = {
   includeOriginalThread: boolean;
   /**
    * Whether the action takes the email's files with it. Only forwarding and
-   * drafting a reply can — tagging and archiving leave the message where its
+   * drafting a reply can; tagging and archiving leave the message where its
    * attachments already are.
    */
   includeAttachments: boolean;
@@ -37,8 +37,8 @@ export type WorkflowAction = {
 };
 
 /**
- * One answer the classification step is allowed to give — "Sales", "FAQ",
- * "Important" — and the actions that run when it gives it.
+ * One answer the classification step is allowed to give ("Sales", "FAQ",
+ * "Important"), and the actions that run when it gives it.
  *
  * The name is not decoration: it is handed to the model as the only set of
  * answers it may return, and it is the branch the actions hang off on the
@@ -153,7 +153,7 @@ export function usableClassificationLabels(labels: ClassificationLabel[]) {
 export const defaultWorkflowTrigger = "Email arrives in primary inbox";
 
 /**
- * Workflows saved without a name are numbered from this prefix — the first is
+ * Workflows saved without a name are numbered from this prefix: the first is
  * "New Workflow 1", the next "New Workflow 2", and so on per user.
  */
 export const defaultWorkflowNamePrefix = "New Workflow";

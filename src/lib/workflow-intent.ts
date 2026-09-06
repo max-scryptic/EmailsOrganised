@@ -16,8 +16,8 @@ import { variableExpression } from "@/lib/workflow-variables";
  * What the chat's model call is allowed to describe, and the pure mapping from
  * it onto a real `WorkflowDraft`.
  *
- * The model never emits a `WorkflowDraft`. It emits this — a narrow shape with
- * no ids, no filters, and no action defaults — and `buildDraftFromIntent` turns
+ * The model never emits a `WorkflowDraft`. It emits this (a narrow shape with
+ * no ids, no filters, and no action defaults), and `buildDraftFromIntent` turns
  * it into a draft through the same factories the builder uses. That split is
  * the whole safety story: a confused generation comes back as a workflow that
  * says the wrong thing, never as one that is structurally invalid, carries a
@@ -40,7 +40,7 @@ export type ClassificationLabelIntent = {
   name: string;
   /**
    * True for the branch that exists so the classification has somewhere to put
-   * everything else. A catch-all takes no actions and no confidence gate — it
+   * everything else. A catch-all takes no actions and no confidence gate: it
    * is where a run is meant to stop.
    */
   isCatchAll: boolean;
@@ -60,7 +60,7 @@ export type WorkflowIntent = {
  * This is set here rather than by the model: a threshold is a product decision
  * about how much of a mistake the user can tolerate, and it should not drift
  * from one generated workflow to the next. The user can still see it on the
- * wire and change it — that is the point of putting it on the canvas instead of
+ * wire and change it, which is the point of putting it on the canvas instead of
  * burying it in the prompt.
  */
 export const generatedConfidenceThreshold = 0.75;
@@ -75,7 +75,7 @@ const confidenceFilterName = "Only when the classification is sure";
 const defaultCatchAllName = "Other";
 
 /**
- * Actions that reach outside the app — mail leaves the mailbox, a draft appears
+ * Actions that reach outside the app: mail leaves the mailbox, a draft appears
  * in it, or a message disappears from the inbox. These are the ones worth
  * gating on confidence; tagging is reversible and internal, so a wrong tag
  * costs the user nothing but a filter click.
@@ -94,7 +94,7 @@ function isOutwardFacing(actions: { type: WorkflowActionType }[]) {
  * The gate that stops a branch acting on a guess.
  *
  * It reads `{{classification.confidence}}`, which the classification node
- * publishes for exactly this — see `classifierFields` in
+ * publishes for exactly this. See `classifierFields` in
  * `src/lib/workflow-variables.ts` and the operator note in
  * `src/lib/workflow-filters.ts`.
  */
@@ -117,7 +117,7 @@ function confidenceFilter() {
  *
  * The catch-all is not decoration. A classification's labels are the enum its
  * answer is decoded against (`src/lib/ai/classify-email.ts`), so a workflow
- * offering one label can only ever answer with that label — every email would
+ * offering one label can only ever answer with that label; every email would
  * take the branch, whatever the prompt says. Appending somewhere for "not this"
  * to go is what makes the classification a decision instead of a formality.
  */
@@ -168,7 +168,7 @@ function buildActions(label: ClassificationLabelIntent) {
       note: action.note.trim(),
       draftInstructions: action.draftInstructions.trim(),
       // The gate goes on the wire into the branch's *first* action, because a
-      // filter that blocks ends the run — everything downstream reads "Not
+      // filter that blocks ends the run: everything downstream reads "Not
       // reached". Gating the forward alone would still let a tag run on a
       // guess.
       filter: gated && index === 0 ? confidenceFilter() : createWorkflowFilter(),

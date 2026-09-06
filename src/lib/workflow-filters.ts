@@ -2,8 +2,8 @@
  * Filters on the wires between nodes.
  *
  * A node decides what happens; a wire decides whether it happens at all. A
- * filter sits on the wire feeding a node — "only classify mail from this
- * domain", "only forward when there is an attachment" — and either lets the
+ * filter sits on the wire feeding a node ("only classify mail from this
+ * domain", "only forward when there is an attachment"), and either lets the
  * email through or stops the run there.
  *
  * Every wire on the board has exactly one node at its downstream end, so a
@@ -178,7 +178,7 @@ export const filterOperatorGroups: FilterOperatorGroup[] = [
 
 /**
  * One comparison. `left` is nearly always a `{{variable}}` from an earlier
- * step and `right` is what it is measured against — both are templates, so a
+ * step and `right` is what it is measured against; both are templates, so a
  * condition can compare two values from the run against each other.
  */
 export type FilterCondition = {
@@ -194,7 +194,7 @@ export type WorkflowFilter = {
    * filter is taken out of the way without being rewritten later.
    */
   enabled: boolean;
-  /** Shown on the wire. Blank is fine — the marker falls back to its icon. */
+  /** Shown on the wire. Blank is fine: the marker falls back to its icon. */
   name: string;
   match: FilterMatch;
   /** Off by default: mailbox rules are written the way people type, not case. */
@@ -230,7 +230,7 @@ export function createWorkflowFilter(
 /**
  * A condition is complete when it has something to compare and, unless the
  * operator asks about one value alone, something to compare it with. An
- * incomplete condition is never evaluated — half a rule is not a rule, and
+ * incomplete condition is never evaluated: half a rule is not a rule, and
  * blocking mail on one would be the worst possible reading of a blank field.
  */
 export function isConditionComplete(condition: FilterCondition) {
@@ -527,7 +527,7 @@ function readNumber(value: string) {
 
 /**
  * The `{{email.isUnread}}` family arrive as `"true"` / `"false"`, but a person
- * writing a rule may well have typed "yes" — so both read, and anything else
+ * writing a rule may well have typed "yes", so both read, and anything else
  * is neither.
  */
 function readBoolean(value: string) {

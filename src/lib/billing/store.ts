@@ -12,7 +12,7 @@ import type { BillingSubscription } from "@/lib/billing/types";
  * The shipped implementation is an in-memory map. It is enough to click through
  * the whole flow locally and it keeps the template dependency-free, but it
  * resets on every server restart and is not shared between serverless
- * instances. Replace it with a real table before launch — see the Supabase
+ * instances. Replace it with a real table before launch. See the Supabase
  * sketch in the README.
  */
 

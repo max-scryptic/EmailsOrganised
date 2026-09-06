@@ -8,7 +8,7 @@ import type { BillingErrorResponse } from "@/lib/billing/types";
  * One place that decides what a failed billing call looks like to the browser.
  *
  * Configuration mistakes are the most common failure while wiring a new
- * project up, so their message is passed through verbatim — it names the
+ * project up, so their message is passed through verbatim: it names the
  * missing environment variable. Everything else is logged and generalised so
  * Stripe internals never reach the client.
  */

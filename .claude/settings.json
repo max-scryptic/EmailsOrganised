@@ -1,6 +1,19 @@
 {
-  "description": "Impeccable design detector: immediate-tier checks after Edit/Write on UI files, full-rule deep pass on Stop.",
+  "description": "Em dash ban enforced before every Edit/Write. Impeccable design detector: immediate-tier checks after Edit/Write on UI files, full-rule deep pass on Stop.",
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/check-em-dashes.mjs\" --hook",
+            "timeout": 5,
+            "statusMessage": "Checking for em dashes"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",

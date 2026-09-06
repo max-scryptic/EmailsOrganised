@@ -58,7 +58,7 @@ export type BillingSubscription = {
   subscriptionId: string | null;
 };
 
-/** A customer with no subscription yet — the safe default for a fresh account. */
+/** A customer with no subscription yet: the safe default for a fresh account. */
 export const emptySubscription: BillingSubscription = {
   planId: null,
   status: "none",

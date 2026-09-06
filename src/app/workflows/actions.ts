@@ -45,9 +45,9 @@ type WorkflowMutationRow = {
   owner_role: string;
   trigger: string;
   classifier_prompt: string;
-  /** Trigger → classification wire filter — see the note on `WorkflowRow`. */
+  /** Trigger → classification wire filter. See the note on `WorkflowRow`. */
   classifier_filter: unknown;
-  /** Classification output labels — see the note on `WorkflowRow`. */
+  /** Classification output labels. See the note on `WorkflowRow`. */
   outcomes: unknown;
   created_at: string;
   updated_at: string;
@@ -79,7 +79,7 @@ export async function saveWorkflow(
   const user = await requireUser();
   const supabase = await createClient();
   // Naming a workflow is optional, so an unnamed one is numbered here rather
-  // than in the builder — only the database knows what the user already has.
+  // than in the builder: only the database knows what the user already has.
   const name =
     parsed.data.name ||
     (await nextDefaultWorkflowName(supabase, user.id, parsed.data.id));

@@ -117,8 +117,8 @@ export default function TermsPage() {
           You may stop using {appConfig.name} and delete your account at any
           time. We may suspend or end your access if you materially breach these
           terms, or if we stop offering the service. Sections that by their
-          nature should survive termination — your content rights, disclaimers,
-          liability limits — do survive it.
+          nature should survive termination (your content rights, disclaimers,
+          liability limits) do survive it.
         </p>
       </section>
 

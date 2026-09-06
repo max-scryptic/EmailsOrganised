@@ -8,7 +8,7 @@ web
 
 ## Users
 
-The primary user is an individual professional working their own Gmail inbox —
+The primary user is an individual professional working their own Gmail inbox:
 a founder, consultant, or salesperson whose mail volume has outgrown manual
 sorting. They are not an administrator configuring software for other people:
 they build workflows for themselves, and they are the same person who later
@@ -23,7 +23,7 @@ showing up.
 EmailsOrganised turns inbox triage into workflows the user builds and can see.
 A workflow starts from a trigger (by default, mail arriving in the primary
 inbox), classifies each message with a prompt the user writes against output
-labels the user names, and runs the actions on the branch the answer lands in —
+labels the user names, and runs the actions on the branch the answer lands in:
 forward, draft a reply, tag, or archive.
 
 Success is a user who trusts what the workflow did without re-reading the
@@ -32,15 +32,15 @@ inbox to check.
 ## Positioning
 
 Triage rules are a **visible workflow canvas**, not a hidden list of filters.
-The user reads their own triage logic as a structure — trigger, classification
-outputs, actions — and edits it in place. Competing inbox tools bury the same behaviour
+The user reads their own triage logic as a structure (trigger, classification
+outputs, actions) and edits it in place. Competing inbox tools bury the same behaviour
 in a settings list or behind an opaque model; the mechanism here is that the
 logic is legible and directly manipulable.
 
 ## Operating Context
 
 - Google is the only way in. One consent covers identity and mailbox access
-  (`gmail.modify` — read, draft, send), so authorising the product and granting
+  (`gmail.modify`: read, draft, send), so authorising the product and granting
   it the ability to do its job are a single step for the user.
 - Work happens in the browser alongside Gmail, not instead of it. Actions land
   back in the user's real mailbox.
@@ -48,7 +48,7 @@ logic is legible and directly manipulable.
   classification prompt and the names of its outputs are written by the user,
   not picked from a fixed taxonomy.
 - The classification is one cheap GPT call per message. The user's output labels
-  are not a suggestion to the model — they are the enum its answer is decoded
+  are not a suggestion to the model: they are the enum its answer is decoded
   against, so a workflow offering Sales / FAQ / Important can only ever be
   handed one of those three.
 - A workflow has a lifecycle the user controls: `draft`, `live`, `paused`.
@@ -63,13 +63,13 @@ Confirmed and implemented:
   **classification** (its **prompt** and its **outputs**), **branch**,
   **action**, and the four action labels "Forward email", "Draft reply", "Tag
   email", "Archive". Status labels are "Live", "Paused", "Draft". An output is a
-  setting of the classification node, not a node of its own — it is named in
+  setting of the classification node, not a node of its own: it is named in
   that node's panel and appears on the board as a branch.
 - Classification runs through OpenAI, keyed by `OPENAI_API_KEY` and modelled by
   `OPENAI_CLASSIFIER_MODEL` (default `gpt-4o-mini`). The classification panel
   can run one against a sample email.
-- `/workflows/new` opens a chat that drafts the workflow from a description —
-  "forward all sales enquiries to sales@example.com" — asking for examples and
+- `/workflows/new` opens a chat that drafts the workflow from a description
+  ("forward all sales enquiries to sales@example.com"), asking for examples and
   counter-examples, showing what it has understood as it goes, and handing the
   finished draft to the builder. It shares `OPENAI_API_KEY`, is modelled by
   `OPENAI_CHAT_MODEL`, and falls back to opening the blank board when no key is
@@ -84,12 +84,12 @@ Confirmed and implemented:
   the connected mailbox (Gmail read only), and the first message to arrive
   after that starts a run the user steps through node by node, seeing each
   node's settings with `{{variables}}` resolved and the values it passes on. A
-  test never writes to the mailbox — actions are described, not performed. The
+  test never writes to the mailbox: actions are described, not performed. The
   branch is picked by the same model call the workflow runs on, and the user can
   follow any other branch on demand to test it. A sample email stands in when no
   mailbox is connected; with no API key the run still steps, and says the branch
   is the user's choice rather than the model's.
-- Actions carry their own settings — forward target, subject prefix, note,
+- Actions carry their own settings: forward target, subject prefix, note,
   signature, include original thread, mark handled, draft instructions, draft
   tone, and an approval requirement on generated drafts.
 - Google SSO through Supabase Auth. There are no password flows, and adding one
@@ -97,7 +97,7 @@ Confirmed and implemented:
 - Settings and plans surfaces exist; billing runs through a swappable adapter
   with a keyless mock as the default.
 
-Explicitly undecided — future work must not present these as settled:
+Explicitly undecided (future work must not present these as settled):
 
 - Whether the product ever serves shared or team mailboxes. Today it is
   single-user, and nothing in the UI should imply team seats.
@@ -125,7 +125,7 @@ Explicitly undecided — future work must not present these as settled:
   does but are an engineering draft, not lawyer-reviewed, and say so on their
   face.
 
-Absent — future work must not fabricate these:
+Absent (future work must not fabricate these):
 
 - No customers, testimonials, case studies, press, usage numbers, or
   benchmarks exist. The customers, metrics, and invoices in
@@ -142,7 +142,7 @@ Absent — future work must not fabricate these:
    its outputs are the user's own words. Do not replace that expressiveness with
    fixed categories.
 4. **Automation is reversible and inspectable.** Draft, pause, approval before
-   sending — the user stays able to stop and check.
+   sending: the user stays able to stop and check.
 5. **One consent, honestly scoped.** The product asks for mailbox access once
    and should never make that feel larger or vaguer than it is.
 

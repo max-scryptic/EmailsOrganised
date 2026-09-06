@@ -264,8 +264,9 @@ export type DebugClassifyResult =
   | { status: "error"; description: string };
 
 /**
- * Asks the model which branch this email takes — the same call the workflow
- * runs on, so a test shows the real answer rather than an approximation of it.
+ * Asks the model which branch this email takes, with the same call the
+ * workflow runs on, so a test shows the real answer rather than an
+ * approximation of it.
  *
  * A failure is returned rather than thrown: a run with no answer still steps,
  * and the panel lets the user pick a branch by hand instead.
@@ -291,7 +292,7 @@ export async function classifyDebugEmail(
   try {
     const classification = await classifyEmail({
       // The prompt is written against the values the trigger produced, and the
-      // run has them — so the model reads what the workflow would really send.
+      // run has them, so the model reads what the workflow would really send.
       prompt: applyVariables(prompt, email),
       labels,
       email: {

@@ -4,7 +4,7 @@ import type { BillingSubscription, SubscriptionStatus } from "@/lib/billing/type
  * Presentation helpers shared by `/plans` and `/settings`.
  *
  * The formatter pins locale and time zone so a date rendered on the server
- * matches the one React renders in the browser — an unpinned `toLocaleString`
+ * matches the one React renders in the browser; an unpinned `toLocaleString`
  * is a classic hydration mismatch.
  */
 

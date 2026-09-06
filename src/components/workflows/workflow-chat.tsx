@@ -1,13 +1,21 @@
 "use client";
 
 import * as React from "react";
-import { ArrowRight, Loader2, PenLine, ShieldCheck, Send } from "lucide-react";
+import {
+  ArrowRight,
+  Loader2,
+  Mails,
+  PenLine,
+  ShieldCheck,
+  Send,
+} from "lucide-react";
 import { draftWorkflowFromChat } from "@/app/workflows/chat-actions";
 import { ErrorState } from "@/components/states/error-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { ExampleEmailComposer } from "@/components/workflows/example-emails";
 import { cn } from "@/lib/utils";
 import { actionLabels, type WorkflowDraft } from "@/lib/workflow-data";
 import { isFilterActive } from "@/lib/workflow-filters";
@@ -69,6 +77,25 @@ export function WorkflowChat({
   const [canOpen, setCanOpen] = React.useState(false);
   const [error, setError] = React.useState<ChatError | null>(null);
   const [isPending, startTransition] = React.useTransition();
+  /**
+   * Which composer the card is showing. The assistant opens the example form by
+   * asking for examples, and the user can open or leave it at any time — a
+   * question about an address is not answered with a subject and a body.
+   */
+  const [composer, setComposer] = React.useState<"message" | "examples">(
+    "message"
+  );
+  // Once opened the form stays mounted, hidden, so half-typed examples survive
+  // a trip back to the message box — the same reason the two phases of
+  // `new-workflow-flow.tsx` are tabs rather than a one-way door.
+  const [examplesMounted, setExamplesMounted] = React.useState(false);
+  /** Keys the form, so sending a set of examples leaves an empty one behind. */
+  const [exampleSession, setExampleSession] = React.useState(0);
+
+  const openExamples = React.useCallback(() => {
+    setExamplesMounted(true);
+    setComposer("examples");
+  }, []);
 
   const transcriptRef = React.useRef<HTMLDivElement>(null);
 
@@ -106,27 +133,58 @@ export function WorkflowChat({
         // matches what the user was just told.
         setDraft(result.draft);
         setCanOpen(result.canOpen);
+
+        // The assistant asking for examples is what puts the form up; every
+        // other kind of question is answered in prose.
+        if (result.needsExamples) {
+          openExamples();
+        } else {
+          setComposer("message");
+        }
       });
     },
-    [nextId]
+    [nextId, openExamples]
+  );
+
+  /** Adds one turn from the user and asks for the next. */
+  const sendMessage = React.useCallback(
+    (content: string) => {
+      const trimmed = content.trim();
+
+      if (!trimmed || isPending) {
+        return false;
+      }
+
+      const history: ChatMessage[] = [
+        ...messages,
+        { id: nextId(), role: "user", content: trimmed },
+      ];
+
+      setMessages(history);
+      send(history);
+
+      return true;
+    },
+    [isPending, messages, nextId, send]
   );
 
   const submit = React.useCallback(() => {
-    const content = input.trim();
-
-    if (!content || isPending) {
-      return;
+    if (sendMessage(input)) {
+      setInput("");
     }
+  }, [input, sendMessage]);
 
-    const history: ChatMessage[] = [
-      ...messages,
-      { id: nextId(), role: "user", content },
-    ];
-
-    setMessages(history);
-    setInput("");
-    send(history);
-  }, [input, isPending, messages, nextId, send]);
+  const submitExamples = React.useCallback(
+    (message: string) => {
+      if (sendMessage(message)) {
+        // The examples are in the transcript now, so the form starts over
+        // rather than holding a set that has already been sent.
+        setExampleSession((session) => session + 1);
+        setComposer("message");
+      }
+    },
+    [sendMessage]
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -207,41 +265,74 @@ export function WorkflowChat({
           ) : null}
 
           <div className="border-t p-3">
-            <div className="flex items-end gap-2">
-              <Textarea
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={(event) => {
-                  // Enter sends, because this is a conversation and not a form.
-                  // Shift+Enter is still there for anyone pasting an example
-                  // email across several lines.
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    event.preventDefault();
-                    submit();
-                  }
-                }}
-                placeholder="Forward every sales enquiry to sales@mycompany.com"
-                aria-label="Describe your workflow"
-                rows={2}
-                className="max-h-40 min-h-16 resize-none"
-              />
+            {examplesMounted ? (
+              <div className={cn(composer !== "examples" && "hidden")}>
+                <ExampleEmailComposer
+                  key={exampleSession}
+                  disabled={isPending}
+                  accented={!canOpen}
+                  onSend={submitExamples}
+                  onWriteInstead={() => setComposer("message")}
+                />
+              </div>
+            ) : null}
+
+            <div
+              className={cn(
+                "flex flex-col gap-2",
+                composer === "examples" && "hidden"
+              )}
+            >
+              <div className="flex items-end gap-2">
+                <Textarea
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    // Enter sends, because this is a conversation and not a
+                    // form. Shift+Enter is still there for a message that runs
+                    // to several lines.
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      submit();
+                    }
+                  }}
+                  placeholder="Forward every sales enquiry to sales@mycompany.com"
+                  aria-label="Describe your workflow"
+                  rows={2}
+                  className="max-h-40 min-h-16 resize-none"
+                />
+                <Button
+                  type="button"
+                  // The accent belongs to whichever step is next. Until there is
+                  // a workflow to open, that is sending the next message; once
+                  // there is, the accent moves to "Open in the editor" and this
+                  // steps back to an outline.
+                  variant={canOpen ? "outline" : "default"}
+                  size="icon"
+                  disabled={!input.trim() || isPending}
+                  onClick={submit}
+                  aria-label="Send message"
+                >
+                  {isPending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Send className="size-4" />
+                  )}
+                </Button>
+              </div>
+
+              {/* Examples are worth more than a description of them, so the
+                  form is one press away whether or not the assistant asked. */}
               <Button
                 type="button"
-                // The accent belongs to whichever step is next. Until there is
-                // a workflow to open, that is sending the next message; once
-                // there is, the accent moves to "Open in the editor" and this
-                // steps back to an outline.
-                variant={canOpen ? "outline" : "default"}
-                size="icon"
-                disabled={!input.trim() || isPending}
-                onClick={submit}
-                aria-label="Send message"
+                variant="ghost"
+                size="sm"
+                className="self-start"
+                disabled={isPending}
+                onClick={openExamples}
               >
-                {isPending ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Send className="size-4" />
-                )}
+                <Mails />
+                Add example emails
               </Button>
             </div>
           </div>

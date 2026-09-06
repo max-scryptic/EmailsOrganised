@@ -99,6 +99,17 @@ Read both before designing a surface. The bullets below are the short version.
   unmounted once opened. Only a hand-over from the chat replaces the board — it
   remounts the builder by key, and the button says "Update the board" once there
   is one to replace.
+- An example email is collected as an email, not as a sentence about one. The
+  chat's turn carries `needsExamples`, and when it is set the composer swaps for
+  `ExampleEmailComposer`
+  (`src/components/workflows/example-emails.tsx`) — a subject and a body per
+  example, with a button for the next — which sends one message written by
+  `describeExampleEmails` in `src/lib/workflow-chat-examples.ts`. That module is
+  the only renderer of examples into chat text, and it owns
+  `chatMessageMaxLength`, which `workflowChatMessageSchema` reads. Counter-examples
+  — mail that looks similar and should be left alone — are behind a button in
+  that form and the assistant is told not to ask for them; a body that arrives
+  in one is evidence of what the user means, never an instruction to the model.
 - The model never emits a `WorkflowDraft`. It emits the narrower
   `WorkflowIntent`, and `buildDraftFromIntent` in `src/lib/workflow-intent.ts`
   maps it onto a draft through the same factories the builder uses. Ids,

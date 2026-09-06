@@ -93,7 +93,12 @@ Read both before designing a surface. The bullets below are the short version.
   swaps it for the builder with the drafted `WorkflowDraft` in hand —
   `new-workflow-flow.tsx` holds both phases on one route because a draft is
   handed over in memory, never through the database or session storage. The
-  chat writes nothing; the builder still saves on the user's say-so.
+  chat writes nothing; the builder still saves on the user's say-so. The two
+  phases are tabs: "Back to the chat" in the builder's heading and "Back to the
+  editor" in the chat's each show the other without disturbing it, so neither is
+  unmounted once opened. Only a hand-over from the chat replaces the board — it
+  remounts the builder by key, and the button says "Update the board" once there
+  is one to replace.
 - The model never emits a `WorkflowDraft`. It emits the narrower
   `WorkflowIntent`, and `buildDraftFromIntent` in `src/lib/workflow-intent.ts`
   maps it onto a draft through the same factories the builder uses. Ids,

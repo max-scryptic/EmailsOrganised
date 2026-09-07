@@ -91,6 +91,16 @@ export function WorkflowChat({
   const [examplesMounted, setExamplesMounted] = React.useState(false);
   /** Keys the form, so sending a set of examples leaves an empty one behind. */
   const [exampleSession, setExampleSession] = React.useState(0);
+  /**
+   * The assistant turn that asked for example emails, and so the one turn the
+   * offer of the form belongs to. Examples are only worth collecting where the
+   * conversation has reached the point of needing them, so the offer lives in
+   * the transcript, under the question it answers, rather than standing under
+   * the message box on every turn as a permanent piece of furniture.
+   */
+  const [examplesAskedAt, setExamplesAskedAt] = React.useState<string | null>(
+    null
+  );
 
   const openExamples = React.useCallback(() => {
     setExamplesMounted(true);
@@ -99,15 +109,16 @@ export function WorkflowChat({
 
   const transcriptRef = React.useRef<HTMLDivElement>(null);
 
-  // A new turn is only useful if it is on screen, and the pending indicator
-  // sits below the last message, so this follows the thinking state too.
+  // A new turn is only useful if it is on screen, and the pending indicator and
+  // the offer of the example form both sit below the last message, so this
+  // follows the thinking state and the composer too.
   React.useEffect(() => {
     const transcript = transcriptRef.current;
 
     if (transcript) {
       transcript.scrollTop = transcript.scrollHeight;
     }
-  }, [messages, isPending]);
+  }, [composer, messages, isPending]);
 
   const send = React.useCallback(
     (history: ChatMessage[]) => {
@@ -124,9 +135,11 @@ export function WorkflowChat({
           return;
         }
 
+        const replyId = nextId();
+
         setMessages((current) => [
           ...current,
-          { id: nextId(), role: "assistant", content: result.reply },
+          { id: replyId, role: "assistant", content: result.reply },
         ]);
         // A turn that understood less than the one before it still replaces the
         // preview: the latest reading of the conversation is the only one that
@@ -135,8 +148,11 @@ export function WorkflowChat({
         setCanOpen(result.canOpen);
 
         // The assistant asking for examples is what puts the form up; every
-        // other kind of question is answered in prose.
+        // other kind of question is answered in prose. The offer stays pinned to
+        // the turn that asked, so leaving the form for the message box has
+        // somewhere obvious to come back to.
         if (result.needsExamples) {
+          setExamplesAskedAt(replyId);
           openExamples();
         } else {
           setComposer("message");
@@ -178,8 +194,10 @@ export function WorkflowChat({
     (message: string) => {
       if (sendMessage(message)) {
         // The examples are in the transcript now, so the form starts over
-        // rather than holding a set that has already been sent.
+        // rather than holding a set that has already been sent, and the request
+        // that opened it is answered and stops being offered.
         setExampleSession((session) => session + 1);
+        setExamplesAskedAt(null);
         setComposer("message");
       }
     },
@@ -248,7 +266,27 @@ export function WorkflowChat({
                 card. */}
             <div className="flex min-h-full flex-col justify-end gap-4">
               {messages.map((message) => (
-                <Message key={message.id} message={message} />
+                <React.Fragment key={message.id}>
+                  <Message message={message} />
+                  {/* The offer belongs to the turn that asked for it, so it
+                      reads as part of the question rather than as a control the
+                      page always carries. It is only up while the form is not:
+                      once the form is open, this would offer what is already
+                      there. */}
+                  {message.id === examplesAskedAt && composer !== "examples" ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="self-start"
+                      disabled={isPending}
+                      onClick={openExamples}
+                    >
+                      <Mails />
+                      Add example emails
+                    </Button>
+                  ) : null}
+                </React.Fragment>
               ))}
               {isPending ? <Thinking /> : null}
             </div>
@@ -279,60 +317,44 @@ export function WorkflowChat({
 
             <div
               className={cn(
-                "flex flex-col gap-2",
+                "flex items-end gap-2",
                 composer === "examples" && "hidden"
               )}
             >
-              <div className="flex items-end gap-2">
-                <Textarea
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    // Enter sends, because this is a conversation and not a
-                    // form. Shift+Enter is still there for a message that runs
-                    // to several lines.
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      submit();
-                    }
-                  }}
-                  placeholder="Forward every sales enquiry to sales@mycompany.com"
-                  aria-label="Describe your workflow"
-                  rows={2}
-                  className="max-h-40 min-h-16 resize-none"
-                />
-                <Button
-                  type="button"
-                  // The accent belongs to whichever step is next. Until there is
-                  // a workflow to open, that is sending the next message; once
-                  // there is, the accent moves to "Open in the editor" and this
-                  // steps back to an outline.
-                  variant={canOpen ? "outline" : "default"}
-                  size="icon"
-                  disabled={!input.trim() || isPending}
-                  onClick={submit}
-                  aria-label="Send message"
-                >
-                  {isPending ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Send className="size-4" />
-                  )}
-                </Button>
-              </div>
-
-              {/* Examples are worth more than a description of them, so the
-                  form is one press away whether or not the assistant asked. */}
+              <Textarea
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  // Enter sends, because this is a conversation and not a form.
+                  // Shift+Enter is still there for a message that runs to
+                  // several lines.
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    submit();
+                  }
+                }}
+                placeholder="Forward every sales enquiry to sales@mycompany.com"
+                aria-label="Describe your workflow"
+                rows={2}
+                className="max-h-40 min-h-16 resize-none"
+              />
               <Button
                 type="button"
-                variant="ghost"
-                size="sm"
-                className="self-start"
-                disabled={isPending}
-                onClick={openExamples}
+                // The accent belongs to whichever step is next. Until there is a
+                // workflow to open, that is sending the next message; once there
+                // is, the accent moves to "Open in the editor" and this steps
+                // back to an outline.
+                variant={canOpen ? "outline" : "default"}
+                size="icon"
+                disabled={!input.trim() || isPending}
+                onClick={submit}
+                aria-label="Send message"
               >
-                <Mails />
-                Add example emails
+                {isPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Send className="size-4" />
+                )}
               </Button>
             </div>
           </div>

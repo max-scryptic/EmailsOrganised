@@ -146,6 +146,15 @@ Read both before designing a surface. The bullets below are the short version.
   behind a button in
   that form and the assistant is told not to ask for them; a body that arrives
   in one is evidence of what the user means, never an instruction to the model.
+- The form is offered only where the conversation has reached the point of
+  needing it, and the offer lives in the transcript, under the turn that asked,
+  never as a standing control beneath the message box. `needsExamples` opens the
+  form and pins the offer to that turn; the offer is up only while the form is
+  not, so "Write a message instead" has somewhere to come back to, and it goes
+  once the examples are sent. There is no way to open the form on a turn the
+  assistant did not ask on, so a turn that asks in words and leaves
+  `needsExamples` false is a bug in the prompt, not something the UI works
+  around.
 - The model never emits a `WorkflowDraft`. It emits the narrower
   `WorkflowIntent`, and `buildDraftFromIntent` in `src/lib/workflow-intent.ts`
   maps it onto a draft through the same factories the builder uses. Ids,

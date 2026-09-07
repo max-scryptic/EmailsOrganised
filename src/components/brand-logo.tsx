@@ -6,7 +6,10 @@ import { cn } from "@/lib/utils";
  * rather than loaded from `/logo.svg` so it inherits the brand tokens (the
  * same orange `--primary` resolves to) and stays crisp at every size.
  * `public/logo.svg` and `src/app/icon.svg` carry the same artwork for contexts
- * outside React.
+ * outside React, and `src/app/favicon.ico` and `src/app/apple-icon.png` are
+ * rendered from `icon.svg` by `scripts/generate-icons.mjs`. Change the mark
+ * here and the artwork moves with it, but the icons only change when that
+ * script is run again.
  */
 export function BrandMark({ className }: { className?: string }) {
   return (
